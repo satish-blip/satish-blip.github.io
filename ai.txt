@@ -1,0 +1,13 @@
+# ai.txt for satish-blip.github.io
+# All rights reserved (see /LICENSE). No permission is given to use any part of this site
+# (text, code, data, images, design) for training, fine-tuning, evaluating or grounding AI models,
+# or for generating copies or derivatives of it.
+User-Agent: *
+Disallow: /
+Disallow: *.html
+Disallow: *.js
+Disallow: *.css
+Disallow: *.json
+Disallow: *.csv
+Disallow: *.png
+Disallow: *.svg

@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head>
+<head><meta name="robots" content="noai, noimageai"><meta name="copyright" content="(c) Satish Thuwal. All rights reserved.">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Neural Networks and XOR</title>
@@ -260,7 +260,7 @@ $('#run').onclick=()=>{ if(S.timer){ stop(); return; } $('#run').textContent='Pa
 $('#step').onclick=()=>{ stop(); trainK(10); drawP(true); };
 $('#reset').onclick=build;
 ML.datasetPicker('dsPick',S.ds,id=>{ S.ds=id; loadData(); build(); });
-['layers','width'].forEach(id=>ML.bindRange(id,build)); $('#act').onchange=build;
+['layers','width'].forEach(id=>ML.bindRange(id,build)); $('#act').onchange=build; $('#opt').onchange=build;
 ML.bindRange('lr',()=>{},v=>Math.pow(10,v).toPrecision(2)); ML.bindRange('l2',()=>{},v=>v<=-5?'off':Math.pow(10,v).toPrecision(2)); ML.bindRange('l1',()=>{},v=>v<=-5?'off':Math.pow(10,v).toPrecision(2));
 nP.onResize=drawN; mP.onResize=drawMorph; pP.onResize=pL.onResize=()=>S.net&&drawP(true);
 ML.onTheme(()=>{ drawN(); drawHand(); drawMorph(); drawP(true); });

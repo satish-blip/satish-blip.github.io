@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head>
+<head><meta name="robots" content="noai, noimageai"><meta name="copyright" content="(c) Satish Thuwal. All rights reserved.">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LayoutLMv2</title>
@@ -351,7 +351,7 @@ function drawEx(){ const d=DOCS.get(exK), seq=exOrder==='row'?d.words:DOCS.colum
   const typ=l=>l==='O'?null:l.slice(2), wrong=i=>typ(pred[i])!==d.words[i].type;
   mount('#exDoc',d,{ fill:i=>typ(pred[i])?[DOCS.TYPE_COL[typ(pred[i])],.35]:null, outline:i=>wrong(i)?'c4':null });
   const ent=d.words.filter(w=>w.type).length, ok=d.words.filter((w,i)=>w.type&&!wrong(i)).length, fp=d.words.filter((w,i)=>!w.type&&typ(pred[i])).length;
-  $('#exStats').innerHTML=`<div class="stat c5"><b>${ok} / ${ent}</b><span>field words tagged right</span></div><div class="stat c4"><b>${fp}</b><span>false alarms</span></div><div class="stat c1"><b>${Math.round(100*ok/ent)}%</b><span>recall</span></div>`;
+  $('#exStats').innerHTML=`<div class="stat c5"><b>${ok} / ${ent}</b><span>field words tagged right</span></div><div class="stat c4"><b>${fp}</b><span>false alarms</span></div><div class="stat c1"><b>${Math.round(100*ok/ent)}%</b><span>recall</span></div>`+(exOrder==='row'?'<p class="hint" style="margin:6px 0 0;flex-basis:100%">Read line by line, both models tag this document the same way. Switch to “Column by column” to see the text-only model break.</p>':'');
   $('#exToks').innerHTML='<p class="hint" style="margin:6px 0 4px">Tokens in OCR order, with the predicted tag:</p><div class="chips2">'+seq.map(w=>{ const l=pred[w.i], t=typ(l); return `<span class="tok" style="background:${t?'color-mix(in srgb,'+TCOL(t)+' 28%,transparent)':'var(--soft)'};${wrong(w.i)?'border-color:var(--c4)':''}">${esc(w.text)}<small>${l}</small></span>`; }).join('')+'</div>'; }
 ML.bindSeg('exKey',v=>{ exK=v; drawEx(); }); ML.bindSeg('exModel',v=>{ exModel=v; drawEx(); }); ML.bindSeg('exOrder',v=>{ exOrder=v; drawEx(); });
 function all(){ drawPage(); drawAtt(); drawPt(); drawEx(); }
