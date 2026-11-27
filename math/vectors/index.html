@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vectors and dot products, explained interactively</title>
+<meta name="description" content="What a vector is, how to add and scale vectors, why the dot product equals |a||b|cos θ, norms and distances, cosine similarity, and where dot products appear in machine learning, with draggable diagrams.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-math">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Mathematical concepts &middot; Linear algebra</p>
+  <h1>Vectors and the <span class="grad">dot product</span></h1>
+  <p class="lede">Almost every model on this site starts by turning an example into a list of numbers and then taking a dot product with a list of weights. This page builds that one operation from scratch: what it computes, why it measures angle, and why that makes it the workhorse of machine learning.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#arrows">1 · Lists that are arrows</a><a href="#dot">2 · The dot product</a><a href="#norms">3 · Length: norms</a><a href="#cosine">4 · Cosine similarity</a><a href="#basis">5 · Span and basis</a><a href="#ml">6 · Where it shows up in ML</a><a href="#py">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a vector, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>Suppose we want to predict the price of a house. The first thing any learning algorithm needs is a way to write the house down. A natural choice is a short list of measurements: living area 2,104 square feet, 3 bedrooms. That list, \(x=(2104,\,3)\), is a <a class="term" data-t="vector">vector</a>.</p>
+      <p>The same list can be read in two ways. As <b>data</b>, it is a row in a spreadsheet. As <b>geometry</b>, it is an arrow from the origin to the point \((2104, 3)\). Switching freely between the two views is the whole trick of linear algebra: algebra tells us how to compute, geometry tells us what the computation means.</p>
+      <h3>How it works</h3>
+      <ol class="steps2"><li>Write each example as a vector of features \(x\in\mathbb R^d\).</li><li>Add vectors and multiply them by numbers, component by component.</li><li>Compare two vectors with the dot product \(a\cdot b=\sum_j a_jb_j\).</li><li>Read the result geometrically: it is large when the arrows point the same way, zero when they are perpendicular.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Pushing a shopping trolley with a sloped handle. Only the part of your push that points along the aisle moves the trolley forward; the part pressing down is wasted. The dot product measures exactly that useful part: how much of one arrow lies along another.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Scoring: a linear model is one dot product</li><li>Similarity: cosine similarity for text and images</li><li>Cheap: \(d\) multiplications and \(d-1\) additions</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Scale: a long vector gets a big dot product even if the angle is poor</li><li>Units: features on different scales dominate unless you standardise</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="vector">Vector</a><a class="term" data-t="dot-product">Dot product</a><a class="term" data-t="norm">Norm</a><a class="term" data-t="projection">Projection</a><a class="term" data-t="orthogonal">Orthogonal</a><a class="term" data-t="cosine">Cosine similarity</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="arrows" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Lists of numbers that are also arrows</h2>
+    <p class="sub">Drag the tips of \(a\) (purple) and \(b\) (teal). The dashed arrows show \(a+b\) and \(c\,a\).</p>
+    <div class="plot sq" id="pA"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <h3>Notation</h3>
+      <p>We write a vector with \(d\) components as a column, \(x=\begin{bmatrix}x_1\\ \vdots\\ x_d\end{bmatrix}\in\mathbb R^d\). The subscript \(j\) picks a component; it is not a power. When we have many examples we will index them with a superscript, \(x^{(i)}\), so \(x^{(i)}_j\) is feature \(j\) of example \(i\).</p>
+      <h3>Two operations</h3>
+      <p>Both are done one component at a time:</p>
+      <div class="mathbox c1">$$a+b=\begin{bmatrix}a_1+b_1\\ \vdots\\ a_d+b_d\end{bmatrix},\qquad c\,a=\begin{bmatrix}c\,a_1\\ \vdots\\ c\,a_d\end{bmatrix}.$$</div>
+      <p>Geometrically, \(a+b\) means "walk along \(a\), then along \(b\)": the diagonal of the parallelogram the two arrows make. Multiplying by \(c\) stretches the arrow by \(c\), and flips it when \(c&lt;0\).</p>
+      <div class="ctl"><label for="cS"><span>Scale \(c\)</span><output id="cSOut"></output></label><input type="range" id="cS" min="-2" max="2" step="0.1" value="1.5"></div>
+      <div class="texout" id="addTex"></div>
+      <p class="hint">Everything else in linear algebra is built from these two moves. A combination \(c_1a+c_2b\) is called a <b>linear combination</b>; the set of all of them is the <a class="term" data-t="span">span</a> of \(a\) and \(b\). In 2-D, two arrows that do not lie on one line span the whole plane.</p>
+<details class="deeper"><summary>Going deeper: what makes something a vector space</summary><div><p>Mathematicians define vectors by what you can do with them rather than by what they look like. A <b>vector space</b> is any set where addition and scaling behave as you would expect: addition is commutative and associative, there is a zero vector, every vector has a negative, and scaling distributes, \(c(a+b)=ca+cb\) and \((c+k)a=ca+ka\). Lists of numbers satisfy these rules, but so do polynomials, functions and matrices, which is why the same ideas apply to all of them.</p>
+<p>Vectors \(v_1,\dots,v_k\) are <b>linearly independent</b> if the only combination giving zero is the trivial one: \(\sum c_iv_i=0\Rightarrow c_i=0\) for all \(i\). A <b>basis</b> is an independent set that spans the space, and every basis of the same space has the same number of vectors: the <b>dimension</b>. In a basis each vector has exactly one list of coordinates, which is what lets us write \(x=(x_1,\dots,x_d)\) in the first place.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<section id="dot" class="card">
+  <h2><span class="num">2</span>The dot product</h2>
+  <p class="sub">How do we measure whether two vectors "agree"? The answer is one formula that has both an algebraic and a geometric reading.</p>
+  <div class="grid2">
+    <div class="prose">
+      <p>Here is the definition, which is just "multiply matching components and add":</p>
+      <div class="mathbox c1">$$a\cdot b \;=\; a^\top b \;=\; \sum_{j=1}^{d}a_j b_j .$$</div>
+      <p>Written this way, it is not obvious why this number should have anything to do with angles. Let us show that it does. Take the triangle with sides \(a\), \(b\) and \(a-b\), and let \(\theta\) be the angle between \(a\) and \(b\).</p>
+      <ol class="derive">
+        <li><div class="eq">\(\|a-b\|^2=\|a\|^2+\|b\|^2-2\|a\|\|b\|\cos\theta\)</div><div class="why">The law of cosines from school geometry, applied to our triangle.</div></li>
+        <li><div class="eq">\(\|a-b\|^2=\sum_j(a_j-b_j)^2=\sum_j a_j^2+\sum_j b_j^2-2\sum_j a_jb_j\)</div><div class="why">The same length, computed from components instead (Pythagoras in \(d\) dimensions).</div></li>
+        <li><div class="eq">\(\|a\|^2+\|b\|^2-2\,a\cdot b=\|a\|^2+\|b\|^2-2\|a\|\|b\|\cos\theta\)</div><div class="why">Both lines equal \(\|a-b\|^2\), so set them equal; \(\sum_j a_j^2=\|a\|^2\).</div></li>
+        <li><div class="eq">\(\boxed{a\cdot b=\|a\|\,\|b\|\cos\theta}\)</div><div class="why">Cancel the common terms and divide by \(-2\).</div></li>
+      </ol>
+      <p>So the dot product is the product of the two lengths, discounted by how far apart the arrows point. Three cases follow at once:</p>
+      <ul><li>\(\theta&lt;90^\circ\): \(\cos\theta&gt;0\), the dot product is <b>positive</b> (the vectors agree).</li><li>\(\theta=90^\circ\): it is exactly <b>zero</b>; we call the vectors <a class="term" data-t="orthogonal">orthogonal</a>.</li><li>\(\theta&gt;90^\circ\): it is <b>negative</b> (they disagree).</li></ul>
+      <div class="algo"><h5 class="algo-h">Algorithm: dot product, length and angle</h5><ol><li><span class="kw">input</span> vectors \(a, b\) of length \(d\)</li><li>s \(\leftarrow 0\); na \(\leftarrow 0\); nb \(\leftarrow 0\)</li><li><span class="kw">for</span> \(j = 1\) <span class="kw">to</span> \(d\) <span class="kw">do</span></li><li class="i1">s \(\leftarrow\) s \(+ a_j b_j\) <span class="cm">dot product</span></li><li class="i1">na \(\leftarrow\) na \(+ a_j^2\); nb \(\leftarrow\) nb \(+ b_j^2\)</li><li>\(\|a\| \leftarrow \sqrt{\text{na}}\), \(\|b\| \leftarrow \sqrt{\text{nb}}\)</li><li>\(\cos\theta \leftarrow s / (\|a\|\,\|b\|)\) <span class="cm">undefined if either vector is 0</span></li><li><span class="kw">return</span> \(s\), \(\theta = \arccos(\cos\theta)\)</li></ol></div>
+<p>There is a second, very useful reading. \(\|b\|\cos\theta\) is the length of the shadow that \(b\) casts on the line through \(a\). So \(a\cdot b=\|a\|\times(\text{shadow of } b \text{ on } a)\). When \(a\) has length 1, the dot product <i>is</i> the shadow. That is the idea behind <a href="../projections/">projections</a>.</p>
+<details class="deeper"><summary>Going deeper: Cauchy–Schwarz, and why "angle" makes sense in 100 dimensions</summary><div><p>In 2-D or 3-D we can see the angle. In \(\mathbb R^{100}\) we cannot, so we <i>define</i> \(\cos\theta=\frac{a\cdot b}{\|a\|\|b\|}\). For that to be a cosine it must lie in \([-1,1]\). That is the <b>Cauchy–Schwarz inequality</b>:</p>
+$$|a\cdot b|\le\|a\|\,\|b\| .$$
+<p><b>Proof.</b> For any real \(t\), \(0\le\|a-tb\|^2=\|a\|^2-2t\,a\cdot b+t^2\|b\|^2\). A quadratic in \(t\) that is never negative has at most one real root, so its discriminant is \(\le0\): \(4(a\cdot b)^2-4\|a\|^2\|b\|^2\le0\). Take square roots. Equality holds exactly when \(a-tb=0\) for some \(t\), that is, when the vectors are parallel. \(\square\)</p>
+<p>The dot product is one example of an <b>inner product</b>: any rule \(\langle a,b\rangle\) that is symmetric, linear in each argument and has \(\langle a,a\rangle&gt;0\) for \(a\ne0\). For example \(\langle a,b\rangle_M=a^\top Mb\) with \(M\) symmetric positive definite. The Mahalanobis distance used in <a href="../../ml/lda-gda/">GDA</a> is the length from \(M=\Sigma^{-1}\). Cauchy–Schwarz holds for all of them with the same proof.</p></div></details>
+    </div>
+    <div>
+      <div class="plot sq" id="pD"></div>
+      <div class="stats" id="dStats" style="margin-top:10px"></div>
+      <div class="texout" id="dTex"></div>
+      <div class="note" id="dNote"></div>
+      <div class="row" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"><button class="btn" data-p="same">Same direction</button><button class="btn" data-p="perp">Perpendicular</button><button class="btn" data-p="opp">Opposite</button><button class="btn" data-p="long">Long but at 80°</button></div>
+    </div>
+  </div>
+</section>
+
+<section id="norms" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Length: norms</h2>
+    <p class="sub">Drag the point. The shape drawn through it is every point with the same \(p\)-norm.</p>
+    <div class="plot sq" id="pN"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The length of a vector came out of the derivation above as \(\|a\|=\sqrt{a\cdot a}\). That is the familiar straight-line length, the <b>L2 <a class="term" data-t="norm">norm</a></b>. It is not the only sensible way to measure size. The general family is</p>
+      <div class="mathbox c3">$$\|x\|_p=\Big(\sum_{j}|x_j|^p\Big)^{1/p},\qquad \|x\|_1=\sum_j|x_j|,\quad \|x\|_\infty=\max_j|x_j|.$$</div>
+      <p>The L1 norm is the "taxi-cab" distance: how far you walk on a grid of streets. The L∞ norm only looks at the largest component. Move the slider and watch the set of points with norm 1 (the <b>unit ball</b>) change from a diamond to a circle to a square.</p>
+      <div class="ctl"><label for="pp"><span>\(p\)</span><output id="ppOut"></output></label><input type="range" id="pp" min="1" max="8.5" step="0.1" value="2"></div>
+      <div class="stats" id="nStats"></div>
+      <p class="hint">Why care? The <a href="../../ml/regularisation/">lasso</a> penalises \(\|w\|_1\) and ridge penalises \(\|w\|_2^2\). The diamond has corners on the axes, which is why L1 drives weights exactly to zero. The distance between two points is the norm of their difference, \(\|a-b\|\), which is what k-nearest-neighbours and k-means use.</p>
+<details class="deeper"><summary>Going deeper: what counts as a norm</summary><div><p>A function \(\|\cdot\|\) is a norm if (1) \(\|x\|\ge0\) with equality only at \(x=0\), (2) \(\|cx\|=|c|\,\|x\|\), and (3) the <b>triangle inequality</b> \(\|a+b\|\le\|a\|+\|b\|\) holds. For \(p\ge1\) the \(p\)-norm satisfies all three. For \(p&lt;1\) the triangle inequality fails: the "unit ball" caves inwards and is no longer convex. That is why \(p=1\) is the smallest \(p\) that still gives a convex penalty, and so the natural convex stand-in for counting non-zero weights.</p>
+<p>In finite dimensions all norms are equivalent up to constants, for example \(\|x\|_\infty\le\|x\|_2\le\|x\|_1\le\sqrt d\,\|x\|_2\). The constant \(\sqrt d\) grows with dimension, which is one face of the curse of dimensionality. <b>Hölder's inequality</b> generalises Cauchy–Schwarz: \(|a\cdot b|\le\|a\|_p\|b\|_q\) whenever \(\tfrac1p+\tfrac1q=1\). The pair \((1,\infty)\) is the one behind the lasso's optimality conditions.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<section id="cosine" class="card">
+  <h2><span class="num">4</span>Cosine similarity: angle without length</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>The dot product mixes two things: how long the vectors are and how well they line up. Often we only care about the second. If we count words in documents, a long article about football will have a larger dot product with everything than a short one, simply because it has more words. Dividing out the lengths removes that effect:</p>
+      <div class="mathbox c2">$$\cos\theta=\frac{a\cdot b}{\|a\|\,\|b\|}\in[-1,1].$$</div>
+      <p>This is <a class="term" data-t="cosine">cosine similarity</a>. It is 1 when the vectors point the same way, 0 when they share nothing, and \(-1\) when they point in opposite directions. Edit the word counts on the right: doubling every count in a document changes its dot products but leaves its cosines unchanged.</p>
+      <p class="hint">Word vectors, sentence embeddings and <a href="../../dl/nlp/rag/#retrieval">dense retrieval</a> all rank results by cosine similarity, or by the dot product of vectors that have been scaled to length 1, which is the same thing.</p>
+    </div>
+    <div>
+      <div class="tblwrap"><table class="tbl" id="cosIn"></table></div>
+      <div class="tblwrap" style="margin-top:10px"><table class="tbl" id="cosOut"></table></div>
+      <button class="btn" id="dbl" style="margin-top:8px">Double document C</button>
+    </div>
+  </div>
+</section>
+
+<section id="basis" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Span, independence and a basis</h2>
+    <p class="sub">Drag the two basis arrows \(b_1\) (purple) and \(b_2\) (teal), and the point \(x\) (orange). The slanted grid is the coordinate system the new basis gives you; the dashed path shows \(x=c_1b_1+c_2b_2\).</p>
+    <div class="plot sq" id="pBs"></div>
+    <div class="row" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px" id="bsPre"><button class="btn" data-k="std">Standard basis</button><button class="btn" data-k="skew">Slanted</button><button class="btn" data-k="orth">Rotated (orthonormal)</button><button class="btn" data-k="dep">Dependent</button></div>
+    <div class="stats" id="bsStats"></div>
+    <div class="note" id="bsNote"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Pages about PCA, eigenvectors and the SVD keep saying things like "use the eigenvectors as a new set of axes" or "change to the eigen-basis". This section says precisely what that means.</p>
+      <h3 id="combination">Linear combinations and span</h3>
+      <p>Take some vectors \(b_1,b_2\). Scaling them and adding the results, \(c_1b_1+c_2b_2\), gives a <b>linear combination</b>; the numbers \(c_1,c_2\) are its <b>coefficients</b>. The set of every point you can reach this way is the <b>span</b> of \(b_1,b_2\). Two arrows pointing in different directions span the whole plane: walk some amount along \(b_1\), then some amount along \(b_2\), and you can reach any spot. Press <b>Dependent</b>: now both arrows lie on one line, and their span is only that line.</p>
+      <h3 id="independence">Linear independence</h3>
+      <p>Vectors are <b>linearly independent</b> when none of them is a combination of the others; equivalently, the only way to make \(c_1b_1+c_2b_2=0\) is \(c_1=c_2=0\). Dependent vectors waste a direction: one of them adds nothing new to the span. In a data matrix, dependent columns mean redundant features (area in square feet and in square metres), which is exactly what makes the <a href="../matrices/#rank">rank</a> drop and \(X^\top X\) impossible to invert.</p>
+      <h3 id="basis-def">Basis, dimension and coordinates</h3>
+      <p>A <b>basis</b> is a set of independent vectors that spans the whole space. Every basis of the plane has exactly 2 vectors, every basis of \(\mathbb R^d\) has \(d\): that number is the <b>dimension</b>. The <b>standard basis</b> \(e_1=(1,0),\ e_2=(0,1)\) is the one we use without thinking: the "coordinates" \((x_1,x_2)\) of a point are its coefficients in that basis.</p>
+      <p>Any other basis gives the same point different coordinates. If \(x=c_1b_1+c_2b_2\), then \(c=(c_1,c_2)\) are the coordinates of \(x\) <i>in the basis</i> \(b_1,b_2\). Put the basis vectors in the columns of a matrix \(B\) and this is one equation:</p>
+      <ol class="derive">
+        <li><div class="eq">\(x=c_1b_1+c_2b_2=Bc\)</div><div class="why">A matrix times a vector is a combination of its columns (see <a href="../matrices/#transform">matrices</a>).</div></li>
+        <li><div class="eq">\(c=B^{-1}x\)</div><div class="why">Independent columns make \(B\) invertible, so every \(x\) has exactly one set of coordinates. This is a <b>change of basis</b>.</div></li>
+        <li><div class="eq">\(c=B^\top x\ \) if the basis is orthonormal</div><div class="why">For perpendicular unit vectors \(B^\top B=I\), so \(B^{-1}=B^\top\): each coordinate is just a dot product, \(c_i=b_i\cdot x\). Try <b>Rotated</b>.</div></li>
+      </ol>
+      <p>This is what "a new set of axes" means everywhere on this site. <a href="../../ml/pca/">PCA</a> computes \(c=V^\top(x-\mu)\), the coordinates of each centred data point in the orthonormal basis of principal components, and keeps only the first few. The <a href="../decompositions/#eigdec">eigendecomposition</a> \(A=V\Lambda V^{-1}\) changes to the eigen-basis (\(V^{-1}\)), stretches, and changes back (\(V\)). An embedding of dimension 768 is a set of coordinates in a 768-dimensional space whose basis the network chose for itself.</p>
+      <details class="deeper"><summary>Going deeper: subspaces, and what a matrix looks like in another basis</summary><div>
+        <p>A <b>subspace</b> is a set of vectors closed under combinations: any span is one, such as a line or a plane through the origin. The column space and null space on the <a href="../matrices/#rank">rank</a> section are subspaces, and rank + nullity = number of columns says their dimensions add up.</p>
+        <p>If a map has matrix \(A\) in the standard basis, then in the basis \(B\) it has matrix \(B^{-1}AB\): convert coordinates to standard (\(B\)), apply \(A\), convert back (\(B^{-1}\)). Matrices related this way are called <b>similar</b>; they have the same determinant, trace and eigenvalues, because they are the same map in different coordinates. Diagonalising \(A\) means finding a basis in which \(B^{-1}AB\) is diagonal.</p>
+      </div></details>
+      <div class="algo"><h5 class="algo-h">Algorithm: coordinates of a vector in a new basis</h5><ol>
+        <li><span class="kw">input</span> basis vectors \(b_1,\dots,b_n\) as the columns of \(B\), a vector \(x\)</li>
+        <li><span class="kw">if</span> \(B^\top B=I\) <span class="kw">then</span> \(c\leftarrow B^\top x\) <span class="cm">orthonormal: one dot product per coordinate</span></li>
+        <li><span class="kw">else</span> solve \(Bc=x\) for \(c\) <span class="cm">elimination; fails if the columns are dependent</span></li>
+        <li>check: \(\sum_i c_i b_i\) should equal \(x\)</li>
+        <li><span class="kw">return</span> \(c\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="ml" class="card">
+  <h2><span class="num">6</span>Where the dot product shows up in ML</h2>
+  <p class="sub">Once you can see a dot product, you start seeing it everywhere. Each of these is \(a\cdot b\) with a different name for \(a\) and \(b\).</p>
+  <div class="grid3 prose">
+    <div><h3>Linear models</h3><p>A prediction is \(h_\theta(x)=\theta^\top x\): the features weighted and summed. <a href="../../ml/linear-regression/">Linear</a> and <a href="../../ml/logistic-regression/">logistic regression</a> are this one dot product followed by nothing or by a sigmoid.</p></div>
+    <div><h3>A neuron</h3><p>A <a href="../../dl/nn/neural-networks/">neuron</a> computes \(g(w^\top x+b)\). Its decision boundary is the set where \(w^\top x+b=0\): all points whose shadow on \(w\) has the same length, which is a line (a hyperplane).</p></div>
+    <div><h3>Attention</h3><p><a href="../../dl/nlp/attention/">Attention</a> scores how relevant word \(j\) is to word \(i\) with \(q_i\cdot k_j/\sqrt{d}\). The \(\sqrt d\) keeps the dot product from growing with dimension.</p></div>
+    <div><h3>Kernels</h3><p>An <a href="../../ml/svm/">SVM</a> only ever needs dot products between examples. Replacing \(x\cdot z\) with a kernel \(K(x,z)\) is the kernel trick.</p></div>
+    <div><h3>Projections and PCA</h3><p>With a unit vector \(u\), \(u\cdot x\) is the coordinate of \(x\) along \(u\). <a href="../../ml/pca/">PCA</a> picks the \(u\) that makes these coordinates vary the most.</p></div>
+    <div><h3>Matrix products</h3><p>Every entry of \(AB\) is a dot product of a row of \(A\) with a column of \(B\). The <a href="../matrices/">next page</a> builds on exactly this.</p></div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">7</span>The same thing in Python (NumPy)</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
+a, b = np.array([<span class="s">3.</span>, <span class="s">1.</span>]), np.array([<span class="s">1.</span>, <span class="s">2.</span>])
+a + b, <span class="s">1.5</span> * a                       <span class="c"># component-wise</span>
+a @ b                                  <span class="c"># dot product: 3*1 + 1*2 = 5</span>
+np.linalg.norm(a), np.linalg.norm(a, <span class="s">1</span>), np.linalg.norm(a, np.inf)
+cos = a @ b / (np.linalg.norm(a) * np.linalg.norm(b))
+theta = np.degrees(np.arccos(cos))      <span class="c"># angle between them</span>
+shadow = a @ b / np.linalg.norm(a)      <span class="c"># length of b's shadow on a</span>
+X = np.random.randn(<span class="s">100</span>, <span class="s">5</span>); w = np.random.randn(<span class="s">5</span>)
+scores = X @ w                          <span class="c"># 100 dot products at once: a linear model</span></pre>
+</section>
+<p class="foot">Part of the <a href="../">Mathematical concepts</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script>
+(function(){
+const {$} = ML; const B={x0:-5,x1:5,y0:-5,y1:5};
+/* ---- 1. addition and scaling ---- */
+const pA=new ML.Plot('#pA',{bounds:B}); const V1=[{v:[3,1]},{v:[1,2.5]}]; let c=1.5;
+function drawA(){ const P=ML.palette(), a=V1[0].v, b=V1[1].v, s=[a[0]+b[0],a[1]+b[1]], ca=[c*a[0],c*a[1]];
+  MX.axes(pA); MX.poly(pA,[[0,0],a,s,b],P.c1,.08);
+  pA.line(a[0],a[1],s[0],s[1],{color:P.c3,dash:[4,4],width:1.5,alpha:.7}); pA.line(b[0],b[1],s[0],s[1],{color:P.c1,dash:[4,4],width:1.5,alpha:.7});
+  MX.vec(pA,ca,P.c4,'c a',{width:2,alpha:.75}); MX.vec(pA,s,P.ink,'a + b',{width:2}); MX.vec(pA,a,P.c1,'a'); MX.vec(pA,b,P.c3,'b');
+  MX.set('addTex',`a+b=${MX.vtex(a,1)}+${MX.vtex(b,1)}=${MX.vtex(s,1)},\\quad ${MX.n(c,1)}\\,a=${MX.vtex(ca,2)}`,true); }
+MX.dragVecs(pA,V1,drawA); ML.bindRange('cS',v=>{c=v;drawA();},v=>v.toFixed(1)); pA.onResize=drawA;
+
+/* ---- 2. dot product ---- */
+const pD=new ML.Plot('#pD',{bounds:B}); const V2=[{v:[3.5,1]},{v:[1.5,3]}];
+const PRE={same:[[3,1],[2.4,0.8]],perp:[[3,1],[-1,3]],opp:[[3,1],[-2.5,-0.9]],long:[[1.2,0.3],[0.2,4.6]]};
+document.querySelectorAll('#dot [data-p]').forEach(bt=>bt.addEventListener('click',()=>{ const p=PRE[bt.dataset.p]; V2[0].v=p[0].slice(); V2[1].v=p[1].slice(); drawD(); }));
+function drawD(){ const P=ML.palette(), a=V2[0].v, b=V2[1].v, na=Math.hypot(...a), nb=Math.hypot(...b), d=a[0]*b[0]+a[1]*b[1];
+  const cs=na&&nb?d/(na*nb):0, th=Math.acos(Math.max(-1,Math.min(1,cs))), sh=na?d/na:0, u=na?[a[0]/na,a[1]/na]:[1,0], foot=[u[0]*sh,u[1]*sh];
+  MX.axes(pD); pD.hline(-u[1],u[0],0,{color:P.c1,alpha:.25,width:1});
+  /* shadow */ pD.line(0,0,foot[0],foot[1],{color:d>=0?P.c5:P.c4,width:7,alpha:.45}); pD.line(b[0],b[1],foot[0],foot[1],{color:P.muted,dash:[4,4],width:1.5});
+  if(Math.hypot(b[0]-foot[0],b[1]-foot[1])>0.25 && Math.abs(sh)>0.25){ const w=[b[0]-foot[0],b[1]-foot[1]], nw=Math.hypot(...w); MX.rightAngle(pD,foot,[-u[0]*Math.sign(sh),-u[1]*Math.sign(sh)],[w[0]/nw,w[1]/nw]); }
+  /* angle arc */ const c2=pD.ctx; c2.save(); c2.strokeStyle=P.c2; c2.lineWidth=2; c2.beginPath(); const a1=-Math.atan2(a[1],a[0]), a2=-Math.atan2(b[1],b[0]); let da=a2-a1; while(da>Math.PI) da-=2*Math.PI; while(da<-Math.PI) da+=2*Math.PI; c2.arc(pD.X(0),pD.Y(0),34,a1,a1+da,da<0); c2.stroke(); c2.restore();
+  MX.vec(pD,a,P.c1,'a'); MX.vec(pD,b,P.c3,'b');
+  const deg=th*180/Math.PI;
+  $('#dStats').innerHTML=`<div class="stat c1"><b>${d.toFixed(2)}</b><span>a · b</span></div><div class="stat c2"><b>${deg.toFixed(1)}°</b><span>angle θ</span></div><div class="stat c3"><b>${cs.toFixed(3)}</b><span>cos θ</span></div><div class="stat c5"><b>${sh.toFixed(2)}</b><span>shadow of b on a</span></div>`;
+  MX.set('dTex',`a\\cdot b=(${MX.n(a[0],1)})(${MX.n(b[0],1)})+(${MX.n(a[1],1)})(${MX.n(b[1],1)})=${MX.n(d)}\\;=\\;\\underbrace{${MX.n(na)}}_{\\|a\\|}\\times\\underbrace{${MX.n(nb)}}_{\\|b\\|}\\times\\underbrace{${MX.n(cs,3)}}_{\\cos\\theta}`,true);
+  $('#dNote').className='note'+(Math.abs(deg-90)<1.5?'':d>0?' ok':' warn');
+  $('#dNote').innerHTML=Math.abs(deg-90)<1.5?'<b>Orthogonal.</b> The shadow has zero length, so the dot product is zero: the vectors share no direction.':d>0?`<b>Positive.</b> The angle is under 90°, so \\(b\\) casts a shadow pointing the same way as \\(a\\).`:`<b>Negative.</b> The angle is over 90°, so the shadow of \\(b\\) points backwards along \\(a\\).`; ML.renderMath($('#dNote')); }
+MX.dragVecs(pD,V2,drawD); pD.onResize=drawD;
+
+/* ---- 3. norms ---- */
+const pN=new ML.Plot('#pN',{bounds:{x0:-3,x1:3,y0:-3,y1:3}}); const V3=[{v:[1.2,0.8]}]; let p=2;
+const pn=(x,q)=>q>8?Math.max(Math.abs(x[0]),Math.abs(x[1])):Math.pow(Math.pow(Math.abs(x[0]),q)+Math.pow(Math.abs(x[1]),q),1/q);
+function ball(r,q,color,alpha,width,dash){ const c=pN.ctx; c.save(); c.strokeStyle=color; c.globalAlpha=alpha; c.lineWidth=width; if(dash) c.setLineDash(dash); c.beginPath();
+  for(let t=0;t<=360;t++){ const a=t/360*2*Math.PI, ca=Math.cos(a), sa=Math.sin(a); let x,y; if(q>8){ const m=Math.max(Math.abs(ca),Math.abs(sa)); x=ca/m; y=sa/m; } else { x=Math.sign(ca)*Math.pow(Math.abs(ca),2/q); y=Math.sign(sa)*Math.pow(Math.abs(sa),2/q); }
+    t?c.lineTo(pN.X(r*x),pN.Y(r*y)):c.moveTo(pN.X(r*x),pN.Y(r*y)); } c.stroke(); c.restore(); }
+function drawN(){ const P=ML.palette(), x=V3[0].v, r=pn(x,p); MX.axes(pN,0.5);
+  ball(1,1,P.c4,.35,1.5,[4,4]); ball(1,2,P.c3,.35,1.5,[4,4]); ball(1,9,P.c2,.35,1.5,[4,4]); ball(r,p,P.c1,1,2.5);
+  MX.vec(pN,x,P.ink,'x'); pN.text('unit balls: L1 ◇  L2 ○  L∞ □',-2.9,-2.85,{color:P.muted,font:'11px Inter,system-ui'});
+  const l1=pn(x,1), l2=pn(x,2), li=pn(x,9);
+  $('#nStats').innerHTML=`<div class="stat c4"><b>${l1.toFixed(2)}</b><span>‖x‖₁ = |x₁|+|x₂|</span></div><div class="stat c3"><b>${l2.toFixed(2)}</b><span>‖x‖₂ = √(x₁²+x₂²)</span></div><div class="stat c2"><b>${li.toFixed(2)}</b><span>‖x‖∞ = max |xⱼ|</span></div><div class="stat c1"><b>${r.toFixed(2)}</b><span>‖x‖ with p = ${p>8?'∞':p.toFixed(1)}</span></div>`; }
+MX.dragVecs(pN,V3,drawN,{lim:2.9,snap:0.05}); ML.bindRange('pp',v=>{p=v;drawN();},v=>v>8?'∞':v.toFixed(1)); pN.onResize=drawN;
+
+/* ---- 4. cosine similarity ---- */
+const WORDS=['goal','match','team','market','price'], DOCS={A:[3,2,2,0,0],B:[0,0,1,3,2],C:[1,1,1,0,0]};
+function drawCos(){ const keys=Object.keys(DOCS), nrm=v=>Math.hypot(...v), dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
+  $('#cosIn').innerHTML=`<tr><th>count</th>${WORDS.map(w=>`<th>${w}</th>`).join('')}<th>‖·‖</th></tr>`+keys.map(k=>`<tr><td>doc ${k}</td>${DOCS[k].map((x,j)=>`<td><input type="number" min="0" max="20" value="${x}" data-k="${k}" data-j="${j}" style="width:46px;padding:2px 4px;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--ink);font:13px 'JetBrains Mono',monospace"></td>`).join('')}<td>${nrm(DOCS[k]).toFixed(2)}</td></tr>`).join('');
+  const pairs=[['A','B'],['A','C'],['B','C']];
+  $('#cosOut').innerHTML=`<tr><th>pair</th><th>dot product</th><th>cosine</th></tr>`+pairs.map(([x,y])=>{ const d=dot(DOCS[x],DOCS[y]), n=nrm(DOCS[x])*nrm(DOCS[y]); return `<tr><td>${x} · ${y}</td><td>${d}</td><td>${n?(d/n).toFixed(3):'–'}</td></tr>`; }).join(''); }
+$('#cosIn').addEventListener('change',e=>{ const t=e.target; if(t.tagName!=='INPUT') return; DOCS[t.dataset.k][+t.dataset.j]=Math.max(0,+t.value||0); drawCos(); });
+$('#dbl').addEventListener('click',()=>{ DOCS.C=DOCS.C.map(x=>Math.min(40,x*2)); drawCos(); });
+ML.onTheme(()=>{ drawA(); drawD(); drawN(); });
+drawA(); drawD(); drawN(); drawCos();
+/* ---- 5. basis ---- */
+const LA=ML.LA;
+const pBs=new ML.Plot('#pBs',{bounds:{x0:-4,x1:4,y0:-4,y1:4}}); const BV=[{v:[2,0.5]},{v:[0.6,1.6]},{v:[2.2,2.6]}];
+const BPRE={std:[[1,0],[0,1]],skew:[[2,0.5],[0.6,1.6]],orth:[[Math.cos(.5),Math.sin(.5)],[-Math.sin(.5),Math.cos(.5)]],dep:[[2,1],[-1,-0.5]]};
+function drawBs(){ const P=ML.palette(), b1=BV[0].v, b2=BV[1].v, x=BV[2].v, M=[[b1[0],b2[0]],[b1[1],b2[1]]], d=LA.det2(M);
+  pBs.clear(); pBs.grid(1,true);
+  const dep=Math.abs(d)<1e-3*Math.max(1,Math.hypot(...b1)*Math.hypot(...b2));
+  if(!dep){ for(let k=-8;k<=8;k++){ let p=LA.mv(M,[k,-8]), q=LA.mv(M,[k,8]); pBs.line(p[0],p[1],q[0],q[1],{color:P.c1,width:1,alpha:.22}); p=LA.mv(M,[-8,k]); q=LA.mv(M,[8,k]); pBs.line(p[0],p[1],q[0],q[1],{color:P.c3,width:1,alpha:.22}); } }
+  else { const u=Math.hypot(...b1)>1e-9?b1:b2, n=Math.hypot(...u)||1; pBs.line(-9*u[0]/n,-9*u[1]/n,9*u[0]/n,9*u[1]/n,{color:P.c2,width:5,alpha:.25}); }
+  let c=null; if(!dep){ c=LA.mv(LA.inv2(M),x); const s1=[c[0]*b1[0],c[0]*b1[1]];
+    pBs.line(0,0,s1[0],s1[1],{color:P.c1,width:3,alpha:.55,dash:[6,4]}); pBs.line(s1[0],s1[1],x[0],x[1],{color:P.c3,width:3,alpha:.55,dash:[6,4]}); }
+  MX.vec(pBs,b1,P.c1,'b₁'); MX.vec(pBs,b2,P.c3,'b₂'); MX.vec(pBs,x,P.c4,'x');
+  const orth=Math.abs(b1[0]*b2[0]+b1[1]*b2[1])<0.02&&Math.abs(Math.hypot(...b1)-1)<0.02&&Math.abs(Math.hypot(...b2)-1)<0.02;
+  $('#bsStats').innerHTML=dep?`<div class="stat c2"><b>${d.toFixed(2)}</b><span>det B</span></div><div class="stat"><b>—</b><span>coordinates of x</span></div>`:`<div class="stat c1"><b>${c[0].toFixed(2)}</b><span>c₁ (steps along b₁)</span></div><div class="stat c3"><b>${c[1].toFixed(2)}</b><span>c₂ (steps along b₂)</span></div><div class="stat c4"><b>(${x[0].toFixed(1)}, ${x[1].toFixed(1)})</b><span>x in the standard basis</span></div><div class="stat c2"><b>${d.toFixed(2)}</b><span>det B</span></div>`;
+  const n=$('#bsNote'); n.className='note'+(dep?' warn':''); n.innerHTML=dep?'<b>Dependent.</b> Both arrows lie on one line, so their span is only that line (shaded). Points off it cannot be reached, and points on it can be reached in infinitely many ways: this is not a basis.':orth?'<b>Orthonormal basis.</b> Perpendicular unit arrows: each coordinate is just a dot product, c<sub>i</sub> = b<sub>i</sub> · x.':'<b>A basis.</b> Two independent arrows span the plane, and every point has exactly one pair of coordinates c = B⁻¹x.'; }
+$('#bsPre').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const v=BPRE[b.dataset.k]; BV[0].v=v[0].slice(); BV[1].v=v[1].slice(); drawBs(); });
+MX.dragVecs(pBs,BV,drawBs,{free:false,lim:3.9,snap:0.05}); pBs.onResize=drawBs; drawBs();
+})();
+</script>
+<script>NLP.nav('math','vectors'); ML.renderMath(document.body);</script>
+</body>
+</html>

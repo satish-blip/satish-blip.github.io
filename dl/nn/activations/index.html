@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Activation Functions</title>
+<meta name="description" content="Interactive guide to neural-network activation functions: sigmoid, tanh, ReLU, leaky ReLU, ELU, GELU and Swish, their derivatives, why non-linearity matters, vanishing gradients through depth and dead ReLUs.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nn">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Foundations</p>
+  <h1>Activation functions: the <span class="grad">non-linearity</span></h1>
+  <p class="lede">Without an activation function, a 100-layer network is just one matrix: a straight line. The activation is what lets networks bend. But its shape also decides how well gradients survive the trip back through many layers. Compare them, train with each one, and watch gradients vanish.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#gallery">1 · The functions</a><a href="#why">2 · Why non-linearity</a><a href="#vanish">3 · Vanishing gradients</a><a href="#dead">4 · Dead ReLUs</a><a href="#guide">5 · Which to use</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is an activation function, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>On the <a href="../neural-networks/">neural networks page</a>, a hidden layer solved XOR by bending space. But what does the bending? Matrix multiplications only rotate, stretch and shift; stack a hundred of them and you still have one matrix. Something between the layers has to be curved, and the choice of that curve turns out to decide whether a deep network learns quickly, slowly, or not at all.</p>
+      <h3>The idea</h3><p>After each <a class="term" data-t="neuron">neuron</a> adds up its weighted inputs, it applies a fixed function to the total. That function is the <a class="term" data-t="activation">activation</a>. It must bend: if it were a straight line, a hundred layers would collapse into one linear model and could never solve <a class="term" data-t="xor">XOR</a>.</p><p>The shape matters for learning too. During <a class="term" data-t="backprop">backpropagation</a> every layer multiplies the gradient by the activation’s slope. Flat regions (<a class="term" data-t="saturation">saturation</a>) kill the signal, causing <a class="term" data-t="vanishing-gradient">vanishing gradients</a>; <a class="term" data-t="relu">ReLU</a> keeps slope 1 for positive inputs but can leave neurons <a class="term" data-t="dead-relu">dead</a>.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Each neuron computes \(z = w^\top x + b\).</li><li>It outputs \(a = \phi(z)\) for the chosen activation \(\phi\).</li><li>The backward pass multiplies the incoming gradient by \(\phi'(z)\).</li><li>Pick \(\phi\) so the network can bend and gradients survive.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A dimmer switch versus an on/off switch versus a one-way valve: sigmoid and tanh dim smoothly but saturate at the ends, the step function is all-or-nothing (no slope to learn from), ReLU lets current flow one way only.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>ReLU / GELU: fast and the default for deep nets</li><li>tanh: zero-centred, used in RNNs</li><li>Sigmoid: probabilities and gates</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Sigmoid in deep stacks: vanishing gradients</li><li>ReLU with a high learning rate: dead neurons</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="activation">Activation</a><a class="term" data-t="sigmoid">Sigmoid</a><a class="term" data-t="tanh">tanh</a><a class="term" data-t="relu">ReLU</a><a class="term" data-t="leaky-relu">Leaky ReLU</a><a class="term" data-t="elu">ELU</a><a class="term" data-t="gelu">GELU</a><a class="term" data-t="swish">Swish</a><a class="term" data-t="softmax">Softmax</a><a class="term" data-t="saturation">Saturation</a><a class="term" data-t="vanishing-gradient">Vanishing gradients</a><a class="term" data-t="dead-relu">Dead ReLU</a><a class="term" data-t="initialisation">Initialisation</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="gallery" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>The functions and their slopes</h2>
+    <p class="sub">Solid: \(\phi(x)\). Dashed: the derivative \(\phi'(x)\), which multiplies every gradient flowing backward through the neuron.</p>
+    <div class="plot wide" id="gPlot"></div>
+    <div class="legend" id="gLeg"></div>
+  </div>
+  <div class="card">
+    <div class="ctl"><span class="lbl">Show</span><div class="chips" id="actChips" style="display:flex;flex-wrap:wrap;gap:6px"></div></div>
+    <div class="ctl" style="margin-top:10px"><label for="xin"><span>Probe input \(x\)</span><output id="xinOut"></output></label><input type="range" id="xin" min="-5" max="5" step="0.05" value="1"></div>
+    <div id="probe" style="margin-top:10px"></div>
+    <div class="mathbox c1" id="formula" style="font-size:14px"></div>
+  </div>
+</section>
+
+<section id="why" class="card">
+  <h2><span class="num">2</span>Why non-linearity: same network, different activation</h2>
+  <p class="sub">Six identical networks (2 → 8 → 8 → 1, Adam, same initial seed) trained live, differing only in the activation. Pick a dataset and press Train.</p>
+  <div class="row" style="justify-content:space-between"><div class="dsrow" id="dsPick"></div><div class="player"><button class="btn primary" id="wRun">Train all</button><button class="btn" id="wReset">Reset</button><span class="pos" id="wEp"></span></div></div>
+  <div class="grid3 mini" id="wGrid" style="margin-top:12px"></div>
+  <div class="note" style="margin-top:12px"><b>Read the shapes.</b> <i>Linear</i> can only ever draw one straight line, however many layers it has. <i>ReLU</i> boundaries are made of straight pieces (it is piecewise linear, so the whole network is too). <i>tanh</i>, <i>sigmoid</i>, <i>GELU</i> and <i>Swish</i> give smooth curves. Sigmoid usually learns slowest: its outputs are not centred on zero and its slope is at most 0.25.</div>
+</section>
+
+<section id="vanish" class="card">
+  <h2><span class="num">3</span>Vanishing gradients through depth</h2>
+  <div class="grid2">
+    <div><div class="plot wide" id="vPlot"></div>
+      <div class="legend" id="vLeg"></div>
+      <div class="ctl" style="margin-top:10px"><label for="depth"><span>Depth (hidden layers of width 16)</span><output id="depthOut"></output></label><input type="range" id="depth" min="2" max="30" value="20"></div></div>
+    <div class="prose">
+      <p>The gradient reaching layer \(l\) is a product of one factor per layer above it:</p>
+      <div class="mathbox c2">$$\frac{\partial\mathcal L}{\partial a^{(l)}}=\frac{\partial\mathcal L}{\partial a^{(L)}}\prod_{k=l+1}^{L}W^{(k)\top}\operatorname{diag}\big(\phi'(z^{(k)})\big)$$</div>
+      <p>Sigmoid's slope is at most \(\tfrac14\), so twenty layers can shrink the signal by \(4^{-20}\approx10^{-12}\): the early layers simply stop learning. tanh is better (slope up to 1 at 0) and ReLU passes gradients through unchanged wherever it is active. The chart shows the gradient norm \(\lVert\partial\mathcal L/\partial W^{(l)}\rVert\) in every layer of freshly initialised networks on the moons data (log scale).</p>
+      <p>Here is exactly how the chart is computed: run the network forward once, then walk backwards multiplying by one factor per layer, and record how big the signal is when it arrives.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: measuring gradient flow through depth</h5><ol>
+        <li><span class="kw">input</span> network with \(L\) layers, activation \(\phi\), a batch \(x\)</li>
+        <li><span class="kw">forward</span>: <span class="kw">for</span> \(l=1..L\): \(z^{(l)}\leftarrow W^{(l)}a^{(l-1)}+b^{(l)}\); \(a^{(l)}\leftarrow\phi(z^{(l)})\)</li>
+        <li>\(g\leftarrow\partial\mathcal L/\partial a^{(L)}\) <span class="cm">the error signal at the top</span></li>
+        <li><span class="kw">for</span> \(l=L\) <span class="kw">down to</span> 1 <span class="kw">do</span></li>
+        <li class="i1">\(g\leftarrow g\odot\phi'(z^{(l)})\) <span class="cm">shrinks wherever the slope is below 1</span></li>
+        <li class="i1">record \(\lVert g\,a^{(l-1)\top}\rVert\) <span class="cm">gradient size for layer l's weights</span></li>
+        <li class="i1">\(g\leftarrow W^{(l)\top}g\) <span class="cm">pass the signal one layer down</span></li>
+        <li><span class="kw">return</span> the recorded norms, one per layer</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: why sigmoid shrinks gradients and ReLU does not</summary><div>
+        <p>\(\sigma'(z)=\sigma(z)(1-\sigma(z))\) is a product of two numbers that add to 1, so it is at most \(\tfrac12\cdot\tfrac12=\tfrac14\), reached only at \(z=0\); away from 0 it is far smaller. \(\tanh'(z)=1-\tanh^2(z)\le1\). ReLU's slope is exactly 1 for every active unit and 0 otherwise. The backward signal is multiplied by \(W^{(k)\top}\operatorname{diag}(\phi'(z^{(k)}))\) at every layer, so its size behaves roughly like a product of \(L\) random factors. If the typical factor is \(c\), the signal scales like \(c^{L}\): any \(c&lt;1\) vanishes exponentially and any \(c&gt;1\) explodes. Good initialisation chooses the weight scale so that \(c\approx1\) for the chosen activation (Xavier: \(\operatorname{Var}W=1/n\) for tanh; He: \(2/n\) for ReLU, compensating for the half of units that are off). That is also why the "edge of chaos" is a narrow target, and why residual connections, which add an identity path with factor exactly 1, made very deep networks easy.</p>
+      </div></details>
+      <div class="note">Fixes, in historical order: better activations (ReLU, 2011), careful initialisation (Xavier for tanh, He for ReLU, both used here), <a href="../normalisation/">normalisation</a> (2015) and <a href="../residual/">residual connections</a> (2015).</div>
+    </div>
+  </div>
+</section>
+
+<section id="dead" class="card">
+  <h2><span class="num">4</span>Dead ReLUs</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>A ReLU neuron whose input is negative for <i>every</i> training point outputs 0 everywhere and has zero gradient everywhere. Nothing can revive it: it is <b>dead</b>. A large learning rate makes this much more likely, because one big update can push the bias far negative.</p>
+      <div class="ctl"><label for="dlr"><span>Learning rate</span><output id="dlrOut"></output></label><input type="range" id="dlr" min="-3" max="0" step="0.1" value="-0.5"></div>
+      <div class="row"><button class="btn primary" id="dRun">Train ReLU vs leaky ReLU for 300 steps</button></div>
+      <div class="stats" id="dStats" style="margin-top:10px"></div>
+      <p class="hint">Leaky ReLU keeps a small slope (0.1 here) for negative inputs, so its neurons never fully die. ELU, GELU and Swish also have non-zero slope there.</p>
+    </div>
+    <div><div class="plot short" id="dPlot"></div><p class="hint">Share of hidden neurons (in a 2 → 32 → 32 → 1 network) that are dead after training, over 10 random initialisations at the chosen learning rate.</p></div>
+  </div>
+</section>
+
+<section id="guide" class="card">
+  <h2><span class="num">5</span>Which to use</h2>
+  <div class="tblwrap"><table class="tbl" style="font-size:14px">
+    <tr><th>Activation</th><th style="text-align:left">Formula</th><th>Range</th><th>Zero-centred</th><th>Saturates</th><th style="text-align:left">Where you see it</th></tr>
+    <tr><td>Sigmoid</td><td style="text-align:left">\(1/(1+e^{-x})\)</td><td>(0, 1)</td><td>no</td><td>both sides</td><td style="text-align:left;white-space:normal">Output layer for binary probabilities; gates inside LSTM/GRU</td></tr>
+    <tr><td>tanh</td><td style="text-align:left">\(\tanh x\)</td><td>(−1, 1)</td><td>yes</td><td>both sides</td><td style="text-align:left;white-space:normal">RNN hidden states, LSTM cell outputs</td></tr>
+    <tr><td>ReLU</td><td style="text-align:left">\(\max(0,x)\)</td><td>[0, ∞)</td><td>no</td><td>left only</td><td style="text-align:left;white-space:normal">Default for CNNs and MLPs; cheap; can die</td></tr>
+    <tr><td>Leaky ReLU</td><td style="text-align:left">\(\max(\alpha x,x)\)</td><td>(−∞, ∞)</td><td>roughly</td><td>no</td><td style="text-align:left;white-space:normal">ReLU without dead neurons; GAN discriminators</td></tr>
+    <tr><td>ELU</td><td style="text-align:left">\(x\) if \(x>0\), else \(e^x-1\)</td><td>(−1, ∞)</td><td>roughly</td><td>left, softly</td><td style="text-align:left;white-space:normal">Smooth alternative to ReLU</td></tr>
+    <tr><td>GELU</td><td style="text-align:left">\(x\,\Phi(x)\)</td><td>(≈−0.17, ∞)</td><td>roughly</td><td>left, softly</td><td style="text-align:left;white-space:normal">Transformers: BERT, GPT</td></tr>
+    <tr><td>Swish / SiLU</td><td style="text-align:left">\(x\,\sigma(x)\)</td><td>(≈−0.28, ∞)</td><td>roughly</td><td>left, softly</td><td style="text-align:left;white-space:normal">EfficientNet; SwiGLU in LLaMA-style transformers</td></tr>
+    <tr><td>Softmax</td><td style="text-align:left">\(e^{z_k}/\sum_je^{z_j}\)</td><td>simplex</td><td>–</td><td>–</td><td style="text-align:left;white-space:normal">Output layer for multi-class; inside <a href="../../nlp/attention/">attention</a></td></tr>
+  </table></div>
+</section>
+<p class="foot">Part of the <a href="../">neural network foundations</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/nn.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML;
+const LIST=[['sigmoid','Sigmoid','#e11d48'],['tanh','tanh','#0891b2'],['relu','ReLU','#7c3aed'],['leaky','Leaky ReLU','#ca8a04'],['elu','ELU','#16a34a'],['gelu','GELU','#2563eb'],['swish','Swish','#ea580c'],['linear','Linear','#64748b']];
+const TEX={sigmoid:'\\sigma(x)=\\frac{1}{1+e^{-x}},\\quad \\sigma\'(x)=\\sigma(x)(1-\\sigma(x))\\le\\tfrac14',tanh:'\\tanh x=\\frac{e^x-e^{-x}}{e^x+e^{-x}},\\quad \\tanh\'(x)=1-\\tanh^2x\\le1',relu:'\\mathrm{ReLU}(x)=\\max(0,x),\\quad \\mathrm{ReLU}\'(x)=\\mathbb 1[x>0]',leaky:'\\max(0.1x,\\,x),\\quad \\text{slope }0.1\\text{ or }1',elu:'x\\ (x>0),\\quad e^x-1\\ (x\\le0)',gelu:'\\mathrm{GELU}(x)=x\\,\\Phi(x)\\approx\\tfrac x2\\Big(1+\\tanh\\big(\\sqrt{2/\\pi}(x+0.044715x^3)\\big)\\Big)',swish:'\\mathrm{Swish}(x)=x\\,\\sigma(x)',linear:'\\phi(x)=x\\quad(\\text{no non-linearity})'};
+const on=new Set(['sigmoid','tanh','relu','gelu']); let focus='relu';
+const gP=new ML.Plot('#gPlot',{equal:false,bounds:{x0:-5,x1:5,y0:-1.5,y1:3}});
+function chips(){ $('#actChips').innerHTML=LIST.map(([k,l,c])=>`<button class="chip wordbtn${on.has(k)?' on':''}" data-k="${k}" style="${on.has(k)?`background:${c};border-color:${c}`:''}">${l}</button>`).join('');
+  $('#actChips').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const k=b.dataset.k; if(on.has(k)&&focus===k&&on.size>1) on.delete(k); else on.add(k); focus=k; chips(); drawG(); }); if(window.ML&&ML.tileRow) ML.tileRow('actChips'); }
+function drawG(){ const P=ML.palette(), x=+$('#xin').value; gP.clear(); gP.grid(1,true);
+  LIST.forEach(([k,l,c])=>{ if(!on.has(k)) return; const A=NN.ACT[k], ctx=gP.ctx; ctx.save(); ctx.strokeStyle=c; ctx.lineWidth=k===focus?3.5:2.2; ctx.beginPath(); for(let i=0;i<=300;i++){ const u=-5+10*i/300; const X=gP.X(u), Y=gP.Y(A.f(u)); i?ctx.lineTo(X,Y):ctx.moveTo(X,Y); } ctx.stroke();
+    ctx.setLineDash([5,4]); ctx.lineWidth=1.8; ctx.beginPath(); for(let i=0;i<=300;i++){ const u=-5+10*i/300; const X=gP.X(u), Y=gP.Y(A.d(u,A.f(u))); i?ctx.lineTo(X,Y):ctx.moveTo(X,Y); } ctx.stroke(); ctx.restore();
+    const y=A.f(x); ctx.save(); ctx.fillStyle=c; ctx.beginPath(); ctx.arc(gP.X(x),gP.Y(y),5,0,7); ctx.fill(); ctx.restore(); });
+  gP.line(x,-1.5,x,3,{color:P.muted,width:1,dash:[3,3]});
+  $('#gLeg').innerHTML=LIST.filter(a=>on.has(a[0])).map(([k,l,c])=>`<span><i class="sw" style="background:${c}"></i>${l}</span>`).join('');
+  $('#probe').innerHTML=NLP.bars(LIST.filter(a=>on.has(a[0])).flatMap(([k,l,c])=>{ const A=NN.ACT[k], y=A.f(x); return [{label:l+'(x)',value:y,color:c},{label:l+"'(x)",value:A.d(x,y),color:c}]; }),{lw:'100px',max:Math.max(1,Math.abs(x))});
+  $('#formula').innerHTML=ML.tex(TEX[focus],true); }
+ML.bindRange('xin',drawG,v=>v.toFixed(2)); chips();
+
+/* ---- 2. six networks ---- */
+const WA=['linear','sigmoid','tanh','relu','gelu','swish']; let W={ds:'moons',nets:[],plots:[],timer:null,ep:0,data:null};
+function wBuild(){ wStop(); W.data=ML.dataset(W.ds,200,0.2,7); W.ep=0; const g=$('#wGrid'); if(!W.plots.length){ g.innerHTML=WA.map(a=>`<div><div class="plot sq"></div><div class="hint" style="text-align:center" data-a="${a}"></div></div>`).join(''); W.plots=[...g.querySelectorAll('.plot')].map(h=>new ML.Plot(h)); W.plots.forEach(p=>p.onResize=wDraw); }
+  W.nets=WA.map(a=>NN.MLP([2,8,8,1],{act:a,seed:11})); wDraw(); }
+function wDraw(){ if(!W.nets.length) return; W.nets.forEach((n,k)=>{ const p=W.plots[k]; p.clear(); p.regions((x,y)=>n.predict([x,y]),5); p.contour((x,y)=>n.predict([x,y])-0.5,0,{width:2}); p.points(W.data.X,W.data.y,{r:2.8});
+  const acc=ML.accuracy({proba:x=>n.predict(x)},W.data.X,W.data.y); $('#wGrid').querySelector(`[data-a="${WA[k]}"]`).innerHTML=`<b style="color:var(--ink)">${LIST.find(l=>l[0]===WA[k])[1]}</b> · accuracy ${ML.pct(acc)} · loss ${n.lastLoss?fmt(n.lastLoss,3):'–'}`; }); $('#wEp').textContent='epoch '+W.ep; }
+function wStop(){ if(W.timer){ clearInterval(W.timer); W.timer=null; $('#wRun').textContent='Train all'; } }
+$('#wRun').onclick=()=>{ if(W.timer){ wStop(); return; } $('#wRun').textContent='Pause'; W.timer=setInterval(()=>{ W.nets.forEach(n=>n.train(W.data.X,W.data.y,{name:'adam',lr:0.02},4)); W.ep+=4; wDraw(); if(W.ep>=1200) wStop(); },60); };
+$('#wReset').onclick=wBuild;
+ML.datasetPicker('dsPick',W.ds,id=>{ W.ds=id; wBuild(); });
+
+/* ---- 3. vanishing ---- */
+const vP=new ML.Plot('#vPlot',{equal:false}); const VA=[['sigmoid','#e11d48'],['tanh','#0891b2'],['relu','#7c3aed'],['gelu','#2563eb']];
+function drawV(){ const P=ML.palette(), D=+$('#depth').value, d=ML.dataset('moons',64,0.2,3); const series=VA.map(([a,c])=>{ const sum=new Array(D+1).fill(0); for(let s=0;s<3;s++){ const n=NN.MLP([2,...Array(D).fill(16),1],{act:a,seed:5+s}); n.backward(d.X,d.y); n.gradNorms.forEach((g,l)=>sum[l]+=g/3); }
+    return {pts:sum.map((g,l)=>[l+1,Math.log10(g+1e-30)]),color:c,width:2.6,dots:true,r:2.5}; });
+  ML.chart(vP,series,{xl:'layer (1 = closest to the input)',yfmt:v=>'1e'+v.toFixed(0)}); $('#vLeg').innerHTML=VA.map(([a,c])=>`<span><i class="sw" style="background:${c}"></i>${LIST.find(l=>l[0]===a)[1]}</span>`).join(''); }
+ML.bindRange('depth',drawV);
+
+/* ---- 4. dead relus ---- */
+const dP=new ML.Plot('#dPlot',{equal:false});
+function deadShare(act,lr,seed){ const d=ML.dataset('moons',200,0.2,7), n=NN.MLP([2,32,32,1],{act,seed}); n.train(d.X,d.y,{name:'sgd',lr},300); const outs=n.layerOutputs(d.X); let dead=0,tot=0; [0,1].forEach(l=>{ for(let j=0;j<32;j++){ tot++; if(outs[l].every(r=>Math.abs(r[j])<1e-9)) dead++; } }); return dead/tot; }
+$('#dRun').onclick=()=>{ const lr=Math.pow(10,+$('#dlr').value); $('#dRun').disabled=true; setTimeout(()=>{ const P=ML.palette(); const r=[],lk=[]; for(let s=0;s<10;s++){ r.push(deadShare('relu',lr,100+s)); lk.push(deadShare('leaky',lr,100+s)); }
+  const avg=a=>a.reduce((x,y)=>x+y,0)/a.length; $('#dStats').innerHTML=[['c1',ML.pct(avg(r)),'dead ReLU neurons'],['c4',ML.pct(avg(lk)),'dead leaky-ReLU neurons']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  ML.chart(dP,[{pts:r.map((v,i)=>[i+1,v]),color:P.c1,dots:true,r:5,width:2},{pts:lk.map((v,i)=>[i+1,v]),color:P.c4,dots:true,r:5,width:2}],{y0:0,y1:Math.max(0.2,...r)*1.1,xl:'random initialisation #',yfmt:v=>(100*v).toFixed(0)+'%'}); $('#dRun').disabled=false; },20); };
+ML.bindRange('dlr',()=>{},v=>Math.pow(10,v).toPrecision(2));
+
+gP.onResize=drawG; vP.onResize=drawV; ML.onTheme(()=>{ chips(); drawG(); wDraw(); drawV(); });
+drawG(); wBuild(); drawV(); setTimeout(()=>$('#dRun').click(),200);
+})();
+</script>
+<script>NLP.nav('nn','activations'); ML.renderMath(document.body);</script>
+</body>
+</html>

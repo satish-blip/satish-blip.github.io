@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LLM inference & serving: KV cache, speculative decoding, GPTQ, AWQ, GGUF</title>
+<meta name="description" content="How large language models generate text fast and cheaply: prefill and decode, the KV cache and grouped-query attention, why decoding is memory-bound, continuous batching, speculative decoding with exact rejection sampling, and weight quantisation with GPTQ, AWQ and GGUF, all with live calculators and simulations.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nn">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<style>
+.src{font-size:12.5px;color:var(--muted);margin:10px 0 0;border-left:3px solid var(--line);padding-left:10px}
+.src a{color:inherit;text-decoration:underline;text-decoration-color:var(--line)}
+</style>
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Efficient deep learning &middot; Large language models</p>
+  <h1>LLM inference: <span class="grad">making every generated token cheap</span></h1>
+  <p class="lede">Training a model happens once; serving it happens billions of times. Generating text one token at a time turns out to be limited less by arithmetic than by how fast the GPU can read memory. This page works out where the time and memory go, then covers the tricks that every serving stack uses: the KV cache and grouped-query attention, batching, speculative decoding (which is provably exact), and quantising the weights to 4 bits with GPTQ, AWQ and llama.cpp's GGUF formats.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#kv">1 · Prefill, decode &amp; the KV cache</a><a href="#roof">2 · Why decoding is memory-bound</a><a href="#batch">3 · Batching</a><a href="#spec">4 · Speculative decoding</a><a href="#quant">5 · GPTQ, AWQ &amp; GGUF</a><a href="#py">6 · Python</a><a href="#credits">7 · Sources &amp; credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What makes LLM inference hard, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A language model writes one <a class="term" data-t="token">token</a> at a time, and each new token needs a full pass through the network: every one of its billions of weights read from memory, to produce a few bytes of output. Users want answers fast, providers want each GPU to serve many users, and many people want to run models on a laptop. How do we cut the cost of each token without changing the answers?</p>
+      <h3>The idea</h3><p>Avoid repeated work, move fewer bytes, and do more useful work per byte moved. The <a class="term" data-t="kv-cache">KV cache</a> stores what earlier tokens computed so it is never recomputed. <a class="term" data-t="continuous-batching">Batching</a> shares each read of the weights among many users. <a class="term" data-t="speculative-decoding">Speculative decoding</a> lets a small model guess several tokens that the big model checks in one pass. <a class="term" data-t="quantisation">Quantisation</a> stores weights in 4 or 8 bits so there is less to read.</p>
+      <h3>How it works</h3><ol class="steps2"><li><b>Prefill</b>: read the whole prompt in one parallel pass and fill the KV cache.</li><li><b>Decode</b>: generate token by token, each step reading the weights and the cache.</li><li>A scheduler batches many requests and manages cache memory in pages.</li><li>Optional: a draft model proposes tokens; weights are 4–8-bit.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A chef (the GPU) who must fetch a heavy recipe book from the cellar (memory) for every single word of a dish's description. Fetching takes far longer than reading. So the chef keeps notes on what is already written (KV cache), reads the book once for a whole table of orders (batching), lets an apprentice draft a few words that the chef checks in one go (speculative decoding), and prints a pocket edition of the book (quantisation).</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>KV cache, batching and speculative decoding leave outputs unchanged</li><li>4-bit weights make 70B models fit on one or two GPUs</li><li>Order-of-magnitude cost cuts from software alone</li></ul></div><div class="con"><b>Watch out for</b><ul><li>The KV cache can outgrow the weights at long contexts</li><li>Bigger batches raise throughput but slow each user down</li><li>Low-bit quantisation can hurt rare skills more than benchmarks show</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="prefill">Prefill</a><a class="term" data-t="decode-phase">Decode</a><a class="term" data-t="kv-cache">KV cache</a><a class="term" data-t="gqa">GQA</a><a class="term" data-t="memory-bound">Memory-bound</a><a class="term" data-t="arithmetic-intensity">Arithmetic intensity</a><a class="term" data-t="continuous-batching">Continuous batching</a><a class="term" data-t="paged-attention">PagedAttention</a><a class="term" data-t="speculative-decoding">Speculative decoding</a><a class="term" data-t="gptq">GPTQ</a><a class="term" data-t="awq">AWQ</a><a class="term" data-t="gguf">GGUF</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="kv" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Prefill, decode and the KV cache</h2>
+    <p class="sub">Choose a model and a workload. The calculator sizes the KV cache; the chart compares the work per generated token with and without it.</p>
+    <div class="ctl"><label for="kvM"><span>Model</span></label><select id="kvM"><option value="l27">Llama 2 7B (MHA: 32 KV heads)</option><option value="l38" selected>Llama 3 8B (GQA: 8 KV heads)</option><option value="l370">Llama 3 70B (GQA: 8 KV heads)</option><option value="l405">Llama 3.1 405B (GQA: 8 KV heads)</option></select></div>
+    <div class="ctl"><label for="kvT"><span>Context length (prompt + output)</span><output id="kvTOut"></output></label><input type="range" id="kvT" min="9" max="17" step="0.5" value="13"></div>
+    <div class="ctl"><label for="kvB"><span>Concurrent requests (batch)</span><output id="kvBOut"></output></label><input type="range" id="kvB" min="0" max="7" step="1" value="4"></div>
+    <div class="ctl"><div class="seg" id="kvP"><button data-v="2" class="on">KV in 16-bit</button><button data-v="1">8-bit</button><button data-v="0.5">4-bit</button></div></div>
+    <div class="stats" id="kvStats"></div>
+    <div class="plot wide" id="kvPlot"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Recall <a href="../../nlp/self-attention/">self-attention</a>: each new token's query \(q_t\) is compared with the keys \(k_1,\dots,k_t\) of every token so far, and the output is a weighted sum of their values:</p>
+      <div class="mathbox c1">$$o_t=\sum_{s\le t}\operatorname{softmax}_s\!\Big(\frac{q_t\cdot k_s}{\sqrt{d_h}}\Big)\,v_s .$$</div>
+      <p>The keys and values of earlier tokens do not change when a new token arrives (the <a href="../../nlp/self-attention/#mask">causal mask</a> guarantees it). So we compute each token's \(k_s, v_s\) once, in every layer and head, and keep them: the <a class="term" data-t="kv-cache">KV cache</a>. Generation then has two phases:</p>
+      <ul>
+        <li><b><a class="term" data-t="prefill">Prefill</a></b>: the whole prompt goes through in one parallel pass, filling the cache. This is big matrix–matrix work, and fast.</li>
+        <li><b><a class="term" data-t="decode-phase">Decode</a></b>: each step feeds just the newest token, appends its \(k,v\) to the cache, and attends over the cache. Without the cache, step \(t\) would recompute all \(t\) tokens: total work grows like \(t^2\) instead of \(t\). The chart shows the gap.</li>
+      </ul>
+      <p>The price is memory. Per token, the cache holds a key and a value vector per layer per KV head:</p>
+      <div class="mathbox c1">$$\text{KV bytes per token}=2\times n_{\text{layers}}\times n_{\text{kv heads}}\times d_{\text{head}}\times\text{bytes per number}.$$</div>
+      <p>Llama 2 7B (32 layers, 32 heads of 128) needs 0.5 MB per token in 16-bit, so a 4k-token conversation takes 2 GB, and 16 such users need 32 GB, more than twice the model's own weights. <a class="term" data-t="gqa">Grouped-query attention</a> (GQA) shares each key/value head among several query heads: Llama 3 uses 8 KV heads for 32 query heads, cutting the cache by 4× with little loss in quality. Multi-query attention (MQA) goes all the way to one KV head.</p>
+      <div class="algo" data-anim="kvcache"><h5 class="algo-h">Algorithm: generation with a KV cache</h5><ol>
+        <li><span class="kw">input</span> prompt tokens \(x_{1..m}\), model, max new tokens \(n\)</li>
+        <li><b>prefill</b>: run \(x_{1..m}\) in one pass; store \(K,V\) for every layer; get \(p(\cdot\mid x_{1..m})\)</li>
+        <li><span class="kw">for</span> \(t=m+1\) <span class="kw">to</span> \(m+n\) <span class="kw">do</span></li>
+        <li class="i1">pick \(x_t\) from \(p\) (greedy or sampling)</li>
+        <li class="i1">run only \(x_t\) through the network; in each layer compute \(q_t,k_t,v_t\)</li>
+        <li class="i1">append \(k_t,v_t\) to the cache; attend \(q_t\) over all cached keys <span class="cm">O(t) work, not O(t²)</span></li>
+        <li class="i1"><span class="kw">if</span> \(x_t\) is the end token <span class="kw">then</span> stop</li>
+        <li><span class="kw">return</span> \(x_{m+1..t}\)</li>
+      </ol></div>
+      <p class="src">Adapted from: Ainslie et al., <a href="https://arxiv.org/abs/2305.13245" target="_blank" rel="noopener">GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints</a> (2023); Shazeer, <a href="https://arxiv.org/abs/1911.02150" target="_blank" rel="noopener">Fast Transformer Decoding: One Write-Head is All You Need</a> (MQA, 2019). Model shapes from the Llama model cards.</p>
+    </div>
+  </div>
+</section>
+
+<section id="roof" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Why decoding is memory-bound: the roofline</h2>
+    <p class="sub">One decode step must read every weight once, however many requests share it. Pick a GPU and a weight precision, then see how throughput and each user's speed change with batch size.</p>
+    <div class="ctl"><label for="rfG"><span>Hardware</span></label><select id="rfG"><option value="h100" selected>H100 SXM (3.35 TB/s, 989 TFLOP/s)</option><option value="a100">A100 80GB (2.0 TB/s, 312 TFLOP/s)</option><option value="4090">RTX 4090 (1.0 TB/s, 165 TFLOP/s)</option><option value="mac">Apple M2 Ultra (0.8 TB/s, ≈27 TFLOP/s)</option></select></div>
+    <div class="ctl"><label for="rfN"><span>Model size</span><output id="rfNOut"></output></label><input type="range" id="rfN" min="9" max="11.2" step="0.05" value="9.9"></div>
+    <div class="ctl"><div class="seg" id="rfW"><button data-v="2" class="on">16-bit weights</button><button data-v="1">8-bit</button><button data-v="0.5">4-bit</button></div></div>
+    <div class="plot wide" id="rfPlot"></div>
+    <div class="stats" id="rfStats"></div>
+    <p class="hint">An idealised model: each step costs the larger of (bytes read ÷ bandwidth) and (FLOPs ÷ peak). KV-cache reads for 1,000-token contexts in 16-bit with 8 KV heads are included. Real systems reach 50–80% of these numbers.</p>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A GPU has two speeds: how fast it computes (FLOP/s) and how fast it reads memory (bytes/s). Which one limits a job depends on its <a class="term" data-t="arithmetic-intensity">arithmetic intensity</a>, the FLOPs done per byte read. An H100 can do about 989 TFLOP/s but read only 3.35 TB/s, so a job needs about \(989/3.35\approx295\) FLOPs per byte to keep the arithmetic units busy.</p>
+      <p>Now count one decode step for a model with \(N\) parameters stored in \(b\) bytes each, serving a batch of \(B\) requests. It reads all weights once (\(Nb\) bytes) and does about \(2N\) FLOPs per request (\(2NB\) in total):</p>
+      <div class="mathbox c1">$$\text{intensity}=\frac{2NB}{Nb}=\frac{2B}{b}\ \text{FLOPs per byte}.$$</div>
+      <p>With 16-bit weights (\(b=2\)) and one user, that is 1 FLOP per byte, about 300 times too little: the GPU spends almost all its time waiting for memory. Decoding is <a class="term" data-t="memory-bound">memory-bound</a>, and a single user's speed is roughly</p>
+      <div class="mathbox c3">$$\text{tokens/s}\approx\frac{\text{memory bandwidth}}{\text{bytes of weights}+\text{bytes of KV cache read}}.$$</div>
+      <p>A 7B model in 16-bit (14 GB) on an H100 tops out near 240 tokens per second for one user. Three levers follow directly. <b>Batch</b>: \(B\) users share each weight read, so throughput grows almost linearly with \(B\) until compute or KV-cache reads take over. <b>Quantise</b>: 4-bit weights are a quarter of the bytes, so single-user speed nearly quadruples. <b>Read fewer weights per token</b>: speculative decoding (section 4) and mixture-of-experts models, which use only some of their weights per token.</p>
+      <p>Prefill is the opposite case: thousands of prompt tokens share each weight read, so it is compute-bound. That is why serving systems report two latencies: time to first token (prefill) and time per output token (decode).</p>
+      <p class="src">Adapted from: Williams, Waterman and Patterson, <a href="https://dl.acm.org/doi/10.1145/1498765.1498785" target="_blank" rel="noopener">Roofline: an insightful visual performance model</a> (CACM 2009); Pope et al., <a href="https://arxiv.org/abs/2211.05102" target="_blank" rel="noopener">Efficiently Scaling Transformer Inference</a> (2022).</p>
+    </div>
+  </div>
+</section>
+
+<section id="batch" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Batching: static versus continuous</h2>
+    <p class="sub">Requests with very different answer lengths share 8 batch slots. Static batching waits for the whole batch to finish; continuous batching refills a slot the moment its request ends.</p>
+    <div class="ctl"><div class="seg" id="bMode"><button data-v="static">Static batching</button><button data-v="cont" class="on">Continuous batching</button></div></div>
+    <div class="ctl"><label for="bVar"><span>Spread of answer lengths</span><output id="bVarOut"></output></label><input type="range" id="bVar" min="0" max="1.2" step="0.05" value="0.8"></div>
+    <div class="plot wide" id="bPlot"></div>
+    <div class="row" style="margin:8px 0"><button class="btn" id="bNew">New requests</button></div>
+    <div class="stats" id="bStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Batching is what makes serving affordable, but requests are awkward to batch: one user wants a one-line answer, another a 2,000-token essay. With <b>static batching</b>, a batch starts together and ends when its longest request ends; slots whose request finished early sit idle (grey in the chart) and new requests wait in the queue.</p>
+      <p><a class="term" data-t="continuous-batching">Continuous batching</a> (also called iteration-level scheduling, introduced by the Orca system) makes the scheduling decision at every decode step instead of once per batch: as soon as a request emits its end token, its slot is given to the next request in the queue, whose prompt is prefilled and joined to the running batch. Utilisation stays near 100%, and throughput rises most when lengths vary widely; move the spread slider to see it.</p>
+      <p>The other half of the problem is memory. Each request's KV cache grows as it generates, and nobody knows in advance how long it will get. Reserving the maximum length per request wastes most of the memory. <a class="term" data-t="paged-attention">PagedAttention</a>, from the vLLM project, borrows an idea from operating systems: split the cache into fixed-size blocks (say 16 tokens), allocate blocks on demand, and keep a block table per request, like virtual-memory pages. Waste drops to under one block per request, so far more requests fit in a batch, and identical prompt prefixes (a shared system prompt) can share blocks.</p>
+      <details class="deeper"><summary>Going deeper: chunked prefill, prefix caching and disaggregation</summary><div>
+        <p>A long prompt's prefill can stall everyone else's decode steps. <b>Chunked prefill</b> splits it into pieces interleaved with decode steps. <b>Prefix caching</b> keeps the KV blocks of common prompt prefixes between requests, which is what provider-side prompt caching sells. Some large deployments go further and <b>disaggregate</b>: prefill runs on one pool of GPUs, which are compute-bound, and decode on another, which are memory-bound, each sized for its job.</p>
+      </div></details>
+      <p class="src">Adapted from: Yu et al., <a href="https://www.usenix.org/conference/osdi22/presentation/yu" target="_blank" rel="noopener">Orca: A Distributed Serving System for Transformer-Based Generative Models</a> (OSDI 2022); Kwon et al., <a href="https://arxiv.org/abs/2309.06180" target="_blank" rel="noopener">Efficient Memory Management for Large Language Model Serving with PagedAttention</a> (SOSP 2023).</p>
+    </div>
+  </div>
+</section>
+
+<section id="spec" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Speculative decoding: guess fast, check in one pass</h2>
+    <p class="sub">Left: the big model's next-token distribution \(p\) and a small draft model's \(q\). Run 20,000 speculative samples and check the output matches \(p\) exactly. Right: the expected speed-up.</p>
+    <div class="ctl"><label for="spA"><span>Draft model quality (how close q is to p)</span><output id="spAOut"></output></label><input type="range" id="spA" min="0" max="1" step="0.02" value="0.7"></div>
+    <div class="ctl"><label for="spK"><span>Tokens drafted per step k</span><output id="spKOut"></output></label><input type="range" id="spK" min="1" max="10" step="1" value="4"></div>
+    <div class="ctl"><label for="spC"><span>Draft cost relative to the big model c</span><output id="spCOut"></output></label><input type="range" id="spC" min="0.01" max="0.5" step="0.01" value="0.05"></div>
+    <div class="plot pe-vis" id="spBars" style="padding:10px 12px"></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="spGo">Run 20,000 speculative samples</button></div>
+    <div class="plot wide" id="spPlot"></div>
+    <div class="stats" id="spStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Decoding is memory-bound, so a forward pass that checks 5 tokens costs about the same as one that produces 1: the weights are read once either way. <a class="term" data-t="speculative-decoding">Speculative decoding</a> exploits this. A small, fast <b>draft model</b> guesses the next \(k\) tokens one by one; the large <b>target model</b> scores all \(k\) positions in a single pass; the longest acceptable prefix is kept. Easy stretches of text (“the United States of ___”) are accepted wholesale.</p>
+      <p>The clever part is that the output is not merely close to the big model's: it is <i>exactly</i> distributed as the big model's samples. For each drafted token \(x\sim q\), accept it with probability</p>
+      <div class="mathbox c1">$$\min\Big(1,\;\frac{p(x)}{q(x)}\Big),\qquad\text{otherwise sample a replacement from }\;p'(x)=\frac{\max\big(0,\,p(x)-q(x)\big)}{\sum_{x'}\max\big(0,\,p(x')-q(x')\big)} .$$</div>
+      <p>Why is this exact? The probability of emitting token \(x\) is the chance it was drafted and accepted, \(q(x)\min(1,p(x)/q(x))=\min(q(x),p(x))\), plus the chance of a rejection times \(p'(x)\). The rejection probability is \(1-\sum_x\min(p,q)=\sum_x\max(0,p-q)\), so the second term is exactly \(\max(0,p(x)-q(x))\). Adding the two, \(\min(p,q)+\max(0,p-q)=p(x)\). The histogram in the lab checks it.</p>
+      <p>The acceptance rate per token is \(\alpha=\sum_x\min(p(x),q(x))\). If acceptances were independent with rate \(\alpha\), one target pass would produce on average</p>
+      <div class="mathbox c1">$$\mathbb E[\text{tokens per target pass}]=\frac{1-\alpha^{k+1}}{1-\alpha},\qquad\text{speed-up}\approx\frac{1-\alpha^{k+1}}{(1-\alpha)(1+kc)} ,$$</div>
+      <p>where \(c\) is the cost of a draft step relative to a target step. Good drafts (\(\alpha\approx0.7\)–\(0.8\)) give 2–3× in practice.</p>
+      <div class="algo" data-anim="specdec"><h5 class="algo-h">Algorithm: speculative sampling (one step)</h5><ol>
+        <li><span class="kw">input</span> prefix, target \(p\), draft \(q\), lookahead \(k\)</li>
+        <li><span class="kw">for</span> \(i=1..k\): draw \(\tilde x_i\sim q(\cdot\mid\text{prefix},\tilde x_{&lt;i})\) <span class="cm">cheap, sequential</span></li>
+        <li>one target pass gives \(p(\cdot\mid\text{prefix},\tilde x_{&lt;i})\) for \(i=1..k{+}1\) <span class="cm">parallel</span></li>
+        <li><span class="kw">for</span> \(i=1..k\): <span class="kw">with prob.</span> \(\min(1,p(\tilde x_i)/q(\tilde x_i))\) accept \(\tilde x_i\)</li>
+        <li class="i1"><span class="kw">else</span> sample \(x\sim\operatorname{norm}(\max(0,p-q))\), append it, <span class="kw">stop</span></li>
+        <li><span class="kw">if</span> all \(k\) accepted: sample one bonus token from \(p(\cdot\mid\ldots,\tilde x_k)\)</li>
+        <li><span class="kw">return</span> between 1 and \(k+1\) new tokens</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: no draft model at all</summary><div>
+        <p>A separate draft model has to share the tokenizer and be kept in memory. Alternatives draft from the big model itself: <b>Medusa</b> adds extra heads that predict tokens 2, 3, … ahead; <b>EAGLE</b> trains a small head on the target's hidden states; <b>prompt lookup</b> drafts by copying n-grams from the prompt, which works remarkably well for editing and summarising. All use the same verify step.</p>
+      </div></details>
+      <p class="src">Adapted from: Leviathan, Kalman and Matias, <a href="https://arxiv.org/abs/2211.17192" target="_blank" rel="noopener">Fast Inference from Transformers via Speculative Decoding</a> (ICML 2023); Chen et al., <a href="https://arxiv.org/abs/2302.01318" target="_blank" rel="noopener">Accelerating Large Language Model Decoding with Speculative Sampling</a> (2023), Algorithm 2 and Theorem 1.</p>
+    </div>
+  </div>
+</section>
+
+<section id="quant" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Weight quantisation: RTN, GPTQ and AWQ, live</h2>
+    <p class="sub">A real-sized slice of a layer: 32 outputs × 128 inputs, with 512 calibration inputs in which a few channels carry much larger activations, as in real LLMs. Each method rounds the weights to b bits; the error is measured on the layer's <i>outputs</i>.</p>
+    <div class="ctl"><label for="qB"><span>Bits per weight b</span><output id="qBOut"></output></label><input type="range" id="qB" min="2" max="8" step="1" value="3"></div>
+    <div class="ctl"><label for="qG"><span>Group size (weights sharing one scale)</span><output id="qGOut"></output></label><input type="range" id="qG" min="0" max="3" step="1" value="2"></div>
+    <div class="ctl"><label for="qO"><span>Activation outliers</span><output id="qOOut"></output></label><input type="range" id="qO" min="1" max="30" step="1" value="12"></div>
+    <div class="plot wide" id="qPlot"></div>
+    <div class="stats" id="qStats"></div>
+    <p class="hint">Relative output error ‖XW − XŴ‖² / ‖XW‖² on the calibration data, log scale. GPTQ and AWQ use the calibration data; round-to-nearest (RTN) does not.</p>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The <a href="../compression/#quant">compression page</a> introduced round-to-nearest quantisation: give each group of weights one scale and round every weight to the nearest of \(2^b\) levels. At 8 bits that is nearly free; at 3–4 bits on large LLMs, plain rounding starts to hurt. The two most used fixes both change the question from “how close are the weights?” to “how close are the layer's <b>outputs</b> on real inputs?” For a layer \(y=Wx\) and calibration inputs \(X\), they target</p>
+      <div class="mathbox c1">$$\min_{\hat W\in\text{grid}}\;\big\|XW^\top-X\hat W^\top\big\|_F^2 .$$</div>
+      <p><b><a class="term" data-t="gptq">GPTQ</a></b> (Frantar et al., 2022) quantises the weights of each row one column at a time, and after rounding a column it updates the not-yet-quantised columns to cancel the error just made. The best correction comes from the inverse of \(H=X^\top X\), which says how inputs correlate. With \(\delta_j=(w_j-\hat w_j)/[H^{-1}]_{jj}\), the remaining weights move by \(-\delta_j\,[H^{-1}]_{j,\,j+1:}\). It comes from Optimal Brain Surgeon (1993), made fast enough for 175B-parameter models in a few GPU-hours by processing columns in a fixed order and using a Cholesky factor of \(H^{-1}\).</p>
+      <p><b><a class="term" data-t="awq">AWQ</a></b> (Lin et al., 2023) starts from an observation: a small share of input channels have much larger activations, and the weights that multiply them matter most. Scaling those weight columns up by \(s_j\) before rounding (and the inputs down by \(s_j\), so the product is unchanged) gives them finer effective resolution. It picks \(s_j=(\text{mean}|x_j|)^{\gamma}\), with \(\gamma\) chosen by a small grid search on the output error. No weight updates, no Hessian, and robust to the calibration set.</p>
+      <div class="algo" data-anim="gptq"><h5 class="algo-h">Algorithm: GPTQ for one weight matrix</h5><ol>
+        <li><span class="kw">input</span> weights \(W\) (rows × columns), calibration inputs \(X\), bits \(b\), group size \(g\)</li>
+        <li>\(H\leftarrow X^\top X+\lambda I\); \(U\leftarrow\) upper Cholesky factor of \(H^{-1}\) <span class="cm">shared by all rows</span></li>
+        <li><span class="kw">for</span> column \(j=1..d\) <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">if</span> \(j\) starts a group: set the group's scale from the current weights</li>
+        <li class="i1">\(\hat w_{:,j}\leftarrow\operatorname{round}(w_{:,j})\); \(\delta\leftarrow(w_{:,j}-\hat w_{:,j})/U_{jj}\)</li>
+        <li class="i1">\(w_{:,j+1:}\leftarrow w_{:,j+1:}-\delta\,U_{j,j+1:}\) <span class="cm">push the error onto later columns</span></li>
+        <li><span class="kw">return</span> \(\hat W\)</li>
+      </ol></div>
+      <p><b><a class="term" data-t="gguf">GGUF</a></b> is a file format rather than an algorithm: the single-file format of llama.cpp, used by Ollama and LM Studio to run models on CPUs, Macs and consumer GPUs. It stores weights in block-wise formats such as <code>Q8_0</code> (blocks of 32 weights, one 16-bit scale: 8.5 bits per weight) and the “k-quants” <code>Q2_K</code> to <code>Q6_K</code> (super-blocks of 256 with quantised sub-block scales, about 2.6 to 6.6 bits per weight). Mixes such as <code>Q4_K_M</code> keep sensitive tensors at higher precision; an importance matrix (“imatrix”) computed on calibration text plays a role similar to AWQ's activation statistics.</p>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Method</th><th>Needs calibration data?</th><th>Typical use</th></tr>
+        <tr><td>RTN, group-wise (bitsandbytes NF4, GGUF Q8_0)</td><td>No</td><td>Quick 8-bit or 4-bit loading; QLoRA</td></tr>
+        <tr><td>GPTQ</td><td>Yes, ~128 samples; minutes to hours</td><td>4-bit (and 3-bit) GPU serving</td></tr>
+        <tr><td>AWQ</td><td>Yes, small set</td><td>4-bit GPU serving (vLLM, TensorRT-LLM)</td></tr>
+        <tr><td>GGUF k-quants (+ imatrix)</td><td>Optional</td><td>Local inference: laptops, Macs, CPUs</td></tr>
+        <tr><td>FP8 / FP4 weights and activations</td><td>Scales only</td><td>Data-centre GPUs with native support (H100, B200)</td></tr>
+      </table></div>
+      <p class="src">Adapted from: Frantar, Ashkboos, Hoefler and Alistarh, <a href="https://arxiv.org/abs/2210.17323" target="_blank" rel="noopener">GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers</a> (ICLR 2023), Algorithm 1; Lin et al., <a href="https://arxiv.org/abs/2306.00978" target="_blank" rel="noopener">AWQ: Activation-aware Weight Quantization</a> (MLSys 2024); the llama.cpp <a href="https://github.com/ggml-org/llama.cpp" target="_blank" rel="noopener">repository</a> and <a href="https://github.com/ggml-org/ggml/blob/master/docs/gguf.md" target="_blank" rel="noopener">GGUF specification</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+  <p class="sub">Hugging Face transformers for the KV cache and speculative (assisted) decoding, vLLM for serving, and the usual routes to a 4-bit model.</p>
+<pre class="code"><span class="c"># pip install torch transformers accelerate vllm bitsandbytes</span>
+<span class="k">import</span> torch
+<span class="k">from</span> transformers <span class="k">import</span> AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+tok = AutoTokenizer.from_pretrained(<span class="s">"meta-llama/Llama-3.1-8B-Instruct"</span>)
+big = AutoModelForCausalLM.from_pretrained(<span class="s">"meta-llama/Llama-3.1-8B-Instruct"</span>,
+                                           torch_dtype=torch.bfloat16, device_map=<span class="s">"auto"</span>)
+inputs = <span class="f">tok</span>(<span class="s">"Explain the KV cache in one paragraph."</span>, return_tensors=<span class="s">"pt"</span>).to(big.device)
+
+<span class="c"># KV cache: on by default (use_cache=True); prefill happens on the first step</span>
+out = big.generate(**inputs, max_new_tokens=200, do_sample=<span class="k">False</span>)
+
+<span class="c"># speculative ("assisted") decoding with a small draft model that shares the tokenizer</span>
+draft = AutoModelForCausalLM.from_pretrained(<span class="s">"meta-llama/Llama-3.2-1B-Instruct"</span>,
+                                             torch_dtype=torch.bfloat16, device_map=<span class="s">"auto"</span>)
+out = big.generate(**inputs, assistant_model=draft, max_new_tokens=200, do_sample=<span class="k">False</span>)
+<span class="f">print</span>(tok.decode(out[0], skip_special_tokens=<span class="k">True</span>))
+
+<span class="c"># 4-bit loading on the fly (round-to-nearest NF4, no calibration)</span>
+q4 = AutoModelForCausalLM.from_pretrained(<span class="s">"meta-llama/Llama-3.1-8B-Instruct"</span>,
+        quantization_config=<span class="f">BitsAndBytesConfig</span>(load_in_4bit=<span class="k">True</span>, bnb_4bit_quant_type=<span class="s">"nf4"</span>))
+
+<span class="c"># serving: continuous batching + PagedAttention; AWQ or GPTQ checkpoints load the same way</span>
+<span class="k">from</span> vllm <span class="k">import</span> LLM, SamplingParams
+llm = <span class="f">LLM</span>(model=<span class="s">"meta-llama/Llama-3.1-8B-Instruct"</span>, gpu_memory_utilization=0.9)
+outs = llm.generate([<span class="s">"Hello!"</span>, <span class="s">"Summarise speculative decoding."</span>], <span class="f">SamplingParams</span>(max_tokens=128))
+
+<span class="c"># local inference with llama.cpp: convert, quantise to GGUF Q4_K_M, run</span>
+<span class="c">#   python convert_hf_to_gguf.py ./Llama-3.1-8B-Instruct --outfile model-f16.gguf</span>
+<span class="c">#   ./llama-quantize model-f16.gguf model-Q4_K_M.gguf Q4_K_M</span>
+<span class="c">#   ./llama-cli -m model-Q4_K_M.gguf -p "Hello"</span></pre>
+  <p class="hint">GPTQ and AWQ checkpoints are usually produced with dedicated tools (for example GPTQModel or llm-compressor) and then loaded by transformers or vLLM. Commands and flags change between releases; check each project's documentation.</p>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">7</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page is written for this site in its own words, with its own labs and simulations. The methods come from these papers and projects:</p>
+    <ul>
+      <li>Pope et al., <a href="https://arxiv.org/abs/2211.05102" target="_blank" rel="noopener">Efficiently Scaling Transformer Inference</a> (2022); Williams et al., the roofline model (2009).</li>
+      <li>Shazeer, <a href="https://arxiv.org/abs/1911.02150" target="_blank" rel="noopener">Multi-query attention</a> (2019); Ainslie et al., <a href="https://arxiv.org/abs/2305.13245" target="_blank" rel="noopener">GQA</a> (2023).</li>
+      <li>Yu et al., <a href="https://www.usenix.org/conference/osdi22/presentation/yu" target="_blank" rel="noopener">Orca</a> (2022); Kwon et al., <a href="https://arxiv.org/abs/2309.06180" target="_blank" rel="noopener">vLLM / PagedAttention</a> (2023).</li>
+      <li>Leviathan et al., <a href="https://arxiv.org/abs/2211.17192" target="_blank" rel="noopener">Speculative Decoding</a> (2023); Chen et al., <a href="https://arxiv.org/abs/2302.01318" target="_blank" rel="noopener">Speculative Sampling</a> (2023); Cai et al., <a href="https://arxiv.org/abs/2401.10774" target="_blank" rel="noopener">Medusa</a> (2024); Li et al., <a href="https://arxiv.org/abs/2401.15077" target="_blank" rel="noopener">EAGLE</a> (2024).</li>
+      <li>Frantar et al., <a href="https://arxiv.org/abs/2210.17323" target="_blank" rel="noopener">GPTQ</a> (2023); Lin et al., <a href="https://arxiv.org/abs/2306.00978" target="_blank" rel="noopener">AWQ</a> (2024); Dettmers et al., <a href="https://arxiv.org/abs/2208.07339" target="_blank" rel="noopener">LLM.int8()</a> (2022); Hassibi and Stork, Optimal Brain Surgeon (1993).</li>
+      <li>The <a href="https://github.com/ggml-org/llama.cpp" target="_blank" rel="noopener">llama.cpp</a> project and its GGUF format; <a href="https://docs.vllm.ai/" target="_blank" rel="noopener">vLLM</a> and Hugging Face <a href="https://huggingface.co/docs/transformers" target="_blank" rel="noopener">transformers</a> documentation.</li>
+    </ul>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"Why can the keys and values of earlier tokens be cached during generation?","o":["Because they are the same for every prompt","Because the causal mask means later tokens never change them","Because they are quantised","Because attention ignores earlier tokens"],"a":1,"e":"Each token only attends to earlier tokens, so a token's key and value in every layer are fixed once computed and can be reused at every later step."},
+{"q":"Llama 3 8B has 32 layers, 8 KV heads of size 128. How large is its KV cache per token in 16-bit?","o":["32 KB","128 KB","512 KB","1 MB"],"a":1,"e":"2 (K and V) × 32 layers × 8 heads × 128 × 2 bytes = 131,072 bytes = 128 KB. With 32 KV heads (no GQA) it would be 512 KB."},
+{"q":"A single user decodes with a 13B model in 16-bit on a GPU with 2 TB/s of memory bandwidth. Roughly what is the best possible speed?","o":["About 7 tokens/s","About 75 tokens/s","About 1,500 tokens/s","It depends only on the GPU's FLOP/s"],"a":1,"e":"Each token must read ~26 GB of weights; 2,000 GB/s ÷ 26 GB ≈ 77 tokens per second. Decoding is memory-bound."},
+{"q":"In speculative sampling, what is the distribution of the tokens it outputs?","o":["The draft model's distribution q","A mixture of p and q","Exactly the target model's distribution p","Greedy decoding of the target model"],"a":2,"e":"Accepting with probability min(1, p/q) and resampling rejections from norm(max(0, p − q)) gives exactly p(x) for every token."},
+{"q":"What does GPTQ do after rounding one column of a weight matrix?","o":["Nothing; it moves to the next column","It updates the remaining unquantised columns to compensate for the rounding error, using the inverse Hessian XᵀX","It rescales the input activations","It removes the column"],"a":1,"e":"GPTQ, following Optimal Brain Surgeon, spreads each column's rounding error onto later columns in the way that least changes the layer's outputs on calibration data."}
+]</script>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/gen.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette();
+const pct=x=>(100*x).toFixed(x<0.1?1:0)+'%';
+/* ---------- 1. KV cache ---------- */
+const KM={l27:{N:6.74e9,L:32,H:32,kv:32,hd:128,d:4096},l38:{N:8.03e9,L:32,H:32,kv:8,hd:128,d:4096},l370:{N:70.6e9,L:80,H:64,kv:8,hd:128,d:8192},l405:{N:405e9,L:126,H:128,kv:8,hd:128,d:16384}};
+let kvBy=2; const kvP=new ML.Plot('#kvPlot',{equal:false});
+function drawKv(){ const P=P0(), m=KM[$('#kvM').value], T=Math.round(Math.pow(2,+$('#kvT').value)), B=Math.pow(2,+$('#kvB').value);
+  $('#kvTOut').textContent=T.toLocaleString()+' tokens'; $('#kvBOut').textContent=B;
+  const per=2*m.L*m.kv*m.hd*kvBy, tot=per*T*B, w=m.N*2, mha=2*m.L*m.H*m.hd*kvBy*T*B;
+  GX.stats('#kvStats',[[GX.bytes(per),'KV cache per token','c1'],[GX.bytes(tot),'cache for '+B+' × '+T.toLocaleString()+' tokens','c2'],[GX.bytes(w),'weights (16-bit)','c3'],[(tot/w).toFixed(2)+'×','cache ÷ weights','c4'],[m.kv<m.H?GX.bytes(mha):'(already MHA)','same cache without GQA','c6']]);
+  const pts1=[], pts2=[]; for(let t=1;t<=T;t+=Math.max(1,Math.floor(T/120))){ const att=4*m.L*m.d*t; pts1.push([t,2*m.N+att]); pts2.push([t,(2*m.N)*t+2*m.L*m.d*t*t]); }
+  GX.chart(kvP,[{pts:pts2,color:P.c2,width:2.5,label:'without cache: recompute every token'},{pts:pts1,color:P.c5,width:2.5,label:'with KV cache'}],{logy:true,x0:1,x1:T,xl:'position t of the generated token',yl:'FLOPs for that token (log)'}); }
+['kvT','kvB'].forEach(id=>ML.bindRange(id,drawKv)); $('#kvM').onchange=drawKv; ML.bindSeg('kvP',v=>{ kvBy=+v; drawKv(); }); kvP.onResize=drawKv; drawKv();
+
+/* ---------- 2. roofline ---------- */
+const HW={h100:[3.35e12,989e12,'H100'],a100:[2.0e12,312e12,'A100'],'4090':[1.0e12,165e12,'RTX 4090'],mac:[0.8e12,27e12,'M2 Ultra']};
+let rfB=2; const rfP=new ML.Plot('#rfPlot',{equal:false});
+function drawRf(){ const P=P0(), [bw,pk,name]=HW[$('#rfG').value], N=Math.pow(10,+$('#rfN').value), d=Math.round(Math.sqrt(N/12/32)/128)*128||4096, L=Math.max(16,Math.round(N/(12*d*d)));
+  $('#rfNOut').textContent=GX.fmtN(N,1)+' params';
+  const kvTok=2*L*8*128*2, ctx=1000, thr=[], usr=[];
+  for(let e=0;e<=9;e+=0.1){ const B=Math.pow(2,e), bytes=N*rfB+B*ctx*kvTok, fl=2*N*B, t=Math.max(bytes/bw, fl/pk); thr.push([B,B/t]); usr.push([B,1/t]); }
+  const t1=Math.max((N*rfB+ctx*kvTok)/bw,2*N/pk), knee=pk*rfB/(2*bw);
+  GX.chart(rfP,[{pts:thr,color:P.c1,width:2.8,label:'total tokens/s (all users)'},{pts:usr,color:P.c4,width:2.5,label:'tokens/s for each user'}],{logx:true,logy:true,xl:'batch size (log)',yl:'tokens per second (log)'});
+  GX.stats('#rfStats',[[(1/t1).toFixed(0),'tokens/s, one user','c4'],[GX.bytes(N*rfB),'weights to read per step','c3'],[(2/rfB).toFixed(1),'FLOPs per byte at batch 1','c2'],[(pk/bw).toFixed(0),'FLOPs per byte the '+name+' needs','c1'],[Math.round(knee).toLocaleString(),'batch where compute would bind (weights only)','c5']]); }
+ML.bindRange('rfN',drawRf); $('#rfG').onchange=drawRf; ML.bindSeg('rfW',v=>{ rfB=+v; drawRf(); }); rfP.onResize=drawRf; drawRf();
+
+/* ---------- 3. batching simulation ---------- */
+const bP=new ML.Plot('#bPlot',{equal:false}); let bMode='cont', bSeed=3;
+function reqs(){ const r=ML.rng(bSeed), sp=+$('#bVar').value; return Array.from({length:40},()=>Math.max(4,Math.round(40*Math.exp(sp*r.gauss()-sp*sp/2)))); }
+function simulate(mode, L, S=8){ const slots=[], q=L.map((len,i)=>({i,len})); let t=0, busy=0, done=0; const lanes=Array.from({length:S},()=>[]);
+  if(mode==='static'){ while(q.length){ const batch=q.splice(0,S), mx=Math.max(...batch.map(b=>b.len)); batch.forEach((b,s)=>{ lanes[s].push([t,t+b.len,b.i]); lanes[s].push([t+b.len,t+mx,-1]); busy+=b.len; }); t+=mx; } }
+  else { const free=new Array(S).fill(0); q.forEach(b=>{ let s=0; for(let k=1;k<S;k++) if(free[k]<free[s]) s=k; lanes[s].push([free[s],free[s]+b.len,b.i]); free[s]+=b.len; busy+=b.len; }); t=Math.max(...free); }
+  return {lanes,t,util:busy/(S*t),tok:busy}; }
+function drawB(){ const P=P0(), L=reqs(), R=simulate(bMode,L), other=simulate(bMode==='cont'?'static':'cont',L), c=bP.ctx; bP.clear();
+  const T=Math.max(R.t,other.t), x0=40, w=bP.w-56, lh=(bP.h-40)/8;
+  c.save(); c.font='11px Inter,system-ui'; c.fillStyle=P.muted;
+  R.lanes.forEach((lane,s)=>{ c.fillStyle=P.muted; c.fillText('slot '+(s+1),4,22+lh*s+lh/2); lane.forEach(([a,b,i])=>{ const X=x0+w*a/T, W2=Math.max(1,w*(b-a)/T-1); c.fillStyle=i<0?P.line:ML.SERIES[i%10]; c.globalAlpha=i<0?.6:.85; c.fillRect(X,14+lh*s+2,W2,lh-4); c.globalAlpha=1; }); });
+  c.fillStyle=P.ink; c.fillText('decode steps →',x0,bP.h-8); c.strokeStyle=P.ink; c.setLineDash([4,4]); const xe=x0+w*R.t/T; c.beginPath(); c.moveTo(xe,8); c.lineTo(xe,bP.h-20); c.stroke(); c.restore();
+  GX.stats('#bStats',[[pct(R.util),'slot utilisation','c5'],[R.t.toLocaleString(),'steps to finish 40 requests','c3'],[(R.tok/R.t).toFixed(1),'tokens per step (throughput)','c1'],[(other.t/R.t).toFixed(2)+'×',bMode==='cont'?'faster than static':'of continuous’s speed','c4']]); }
+ML.bindSeg('bMode',v=>{ bMode=v; drawB(); }); ML.bindRange('bVar',drawB,v=>v.toFixed(2)); $('#bNew').onclick=()=>{ bSeed++; drawB(); }; bP.onResize=drawB; drawB();
+
+/* ---------- 4. speculative decoding ---------- */
+const TOK=['Paris','London','Rome','the','a','Berlin'], PT=[0.46,0.08,0.06,0.22,0.12,0.06], QBAD=[0.06,0.30,0.25,0.07,0.06,0.26];
+const spP=new ML.Plot('#spPlot',{equal:false}); let spHist=null;
+const qOf=a=>PT.map((p,i)=>a*p+(1-a)*QBAD[i]);
+function drawSp(){ const P=P0(), a=+$('#spA').value, k=+$('#spK').value, c=+$('#spC').value, q=qOf(a), al=PT.reduce((s,p,i)=>s+Math.min(p,q[i]),0);
+  $('#spAOut').textContent=a.toFixed(2); $('#spKOut').textContent=k; $('#spCOut').textContent=c.toFixed(2);
+  let h='<div style="display:grid;grid-template-columns:70px 1fr 1fr 1fr;gap:4px 8px;align-items:center;font-size:12.5px"><span></span><b style="color:var(--c1)">target p</b><b style="color:var(--c4)">draft q</b><b style="color:var(--c5)">speculative output</b>';
+  TOK.forEach((t,i)=>{ const bar=(v,col)=>`<span style="position:relative;height:16px;background:var(--soft);border-radius:3px"><span style="position:absolute;left:0;top:0;bottom:0;width:${100*v/0.5}%;max-width:100%;background:${col};border-radius:3px"></span><span class="mono" style="position:absolute;right:4px;top:0;font-size:11px">${(100*v).toFixed(1)}%</span></span>`;
+    h+=`<span class="mono">${t}</span>`+bar(PT[i],P.c1)+bar(q[i],P.c4)+(spHist?bar(spHist[i],P.c5):'<span class="hint">run →</span>'); });
+  $('#spBars').innerHTML=h+'</div>';
+  const pts=[], sp=[]; for(let kk=1;kk<=12;kk++){ const e=(1-Math.pow(al,kk+1))/(1-al+1e-12); pts.push([kk,e]); sp.push([kk,e/(1+kk*c)]); }
+  GX.chart(spP,[{pts,color:P.c3,width:2.4,label:'tokens per target pass',dots:true},{pts:sp,color:P.c5,width:2.8,label:'speed-up incl. draft cost',dots:true}],{x0:1,x1:12,y0:0,xl:'draft length k',vline:k,hline:1});
+  const e=(1-Math.pow(al,k+1))/(1-al+1e-12);
+  GX.stats('#spStats',[[pct(al),'acceptance rate α = Σ min(p,q)','c4'],[e.toFixed(2),'tokens per target pass','c3'],[(e/(1+k*c)).toFixed(2)+'×','expected speed-up','c5']]); }
+$('#spGo').onclick=()=>{ const q=qOf(+$('#spA').value), r=ML.rng((Math.random()*1e9)|0), cnt=new Array(6).fill(0), M=20000;
+  const draw=d=>{ let u=r(), i=0; while(i<5&&u>d[i]){ u-=d[i]; i++; } return i; };
+  const res=PT.map((p,i)=>Math.max(0,p-q[i])), rs=res.reduce((a,b)=>a+b,0), resN=res.map(x=>x/(rs||1));
+  for(let m=0;m<M;m++){ const x=draw(q); if(r()<Math.min(1,PT[x]/q[x])) cnt[x]++; else cnt[draw(resN)]++; }
+  spHist=cnt.map(x=>x/M); drawSp(); };
+['spA','spK','spC'].forEach(id=>$('#'+id).addEventListener('input',()=>{ if(id==='spA') spHist=null; drawSp(); })); spP.onResize=drawSp; drawSp();
+
+/* ---------- 5. RTN vs GPTQ vs AWQ ---------- */
+const qP=new ML.Plot('#qPlot',{equal:false}); const OUT=32, IN=128, NS=512;
+let QD=null;
+function makeData(outl){ const r=ML.rng(42), W=[], X=[], mag=new Array(IN).fill(1);
+  for(let j=0;j<IN;j++) mag[j]=(j%23===5||j%37===11)?outl:Math.exp(0.35*r.gauss());
+  for(let i=0;i<OUT;i++){ const row=[]; for(let j=0;j<IN;j++) row.push(r.gauss()*0.05*(r()<0.02?4:1)); W.push(row); }
+  const K=8, M=Array.from({length:IN},()=>Array.from({length:K},()=>r.gauss()/Math.sqrt(K))); /* real activations are strongly correlated: a few shared directions plus noise */
+  for(let n=0;n<NS;n++){ const z=Array.from({length:K},()=>r.gauss()), x=[]; for(let j=0;j<IN;j++){ let s=0; for(let k=0;k<K;k++) s+=M[j][k]*z[k]; x.push(mag[j]*(s+0.25*r.gauss())); } X.push(x); }
+  return {W,X,mag}; }
+const quantRow=(w,b,g)=>{ const q=new Array(w.length), L=Math.pow(2,b-1)-1; for(let s=0;s<w.length;s+=g){ let m=0; for(let j=s;j<s+g;j++) m=Math.max(m,Math.abs(w[j])); const sc=m/L||1e-9; for(let j=s;j<s+g;j++) q[j]=Math.max(-L-1,Math.min(L,Math.round(w[j]/sc)))*sc; } return q; };
+function outErr(W,Wq,X){ let num=0, den=0; for(const x of X) for(let i=0;i<OUT;i++){ let a=0,b=0; for(let j=0;j<IN;j++){ a+=W[i][j]*x[j]; b+=Wq[i][j]*x[j]; } num+=(a-b)*(a-b); den+=a*a; } return num/den; }
+function cholInvUpper(H){ const n=H.length, Lm=H.map(r=>r.slice());
+  /* inverse via Gauss-Jordan */ const A=H.map((r,i)=>[...r,...r.map((_,j)=>i===j?1:0)]);
+  for(let c=0;c<n;c++){ let p=c; for(let r=c+1;r<n;r++) if(Math.abs(A[r][c])>Math.abs(A[p][c])) p=r; [A[c],A[p]]=[A[p],A[c]]; const d=A[c][c]; for(let k=0;k<2*n;k++) A[c][k]/=d; for(let r=0;r<n;r++) if(r!==c){ const f=A[r][c]; if(f) for(let k=0;k<2*n;k++) A[r][k]-=f*A[c][k]; } }
+  const Hi=A.map(r=>r.slice(n)); /* upper Cholesky U with Hi = U^T U */ const U=Array.from({length:n},()=>new Array(n).fill(0));
+  for(let j=0;j<n;j++){ let s=Hi[j][j]; for(let k=0;k<j;k++) s-=U[k][j]*U[k][j]; U[j][j]=Math.sqrt(Math.max(s,1e-12)); for(let i=j+1;i<n;i++){ let t=Hi[j][i]; for(let k=0;k<j;k++) t-=U[k][j]*U[k][i]; U[j][i]=t/U[j][j]; } }
+  return U; }
+let Ucache=null;
+function gptq(W,X,b,g){ if(!Ucache){ const H=Array.from({length:IN},()=>new Array(IN).fill(0)); for(const x of X) for(let i=0;i<IN;i++){ const xi=x[i]; for(let j=i;j<IN;j++) H[i][j]+=xi*x[j]; } for(let i=0;i<IN;i++) for(let j=0;j<i;j++) H[i][j]=H[j][i]; let tr=0; for(let i=0;i<IN;i++) tr+=H[i][i]; for(let i=0;i<IN;i++) H[i][i]+=0.01*tr/IN; Ucache=cholInvUpper(H); }
+  const U=Ucache, L=Math.pow(2,b-1)-1;
+  return W.map(row=>{ const w=row.slice(), q=new Array(IN); let sc=1;
+    for(let j=0;j<IN;j++){ if(j%g===0){ let m=0; for(let k=j;k<j+g;k++) m=Math.max(m,Math.abs(w[k])); sc=m/L||1e-9; }
+      q[j]=Math.max(-L-1,Math.min(L,Math.round(w[j]/sc)))*sc; const e=(w[j]-q[j])/U[j][j]; for(let k=j+1;k<IN;k++) w[k]-=e*U[j][k]; }
+    return q; }); }
+function awq(W,X,b,g){ const mean=new Array(IN).fill(0); X.forEach(x=>x.forEach((v,j)=>mean[j]+=Math.abs(v)/X.length)); let best=null;
+  for(let gm=0;gm<=1.0001;gm+=0.1){ const s=mean.map(m=>Math.pow(m,gm)); const sm=Math.sqrt(Math.max(...s)*Math.min(...s)); const sn=s.map(v=>v/sm);
+    const Wq=W.map(row=>{ const sr=row.map((v,j)=>v*sn[j]); return quantRow(sr,b,g).map((v,j)=>v/sn[j]); }); const e=outErr(W,Wq,X); if(!best||e<best.e) best={e,Wq,gm}; }
+  return best; }
+let qCache={};
+function drawQ(){ const P=P0(), b=+$('#qB').value, g=[16,32,64,128][+$('#qG').value], o=+$('#qO').value;
+  $('#qBOut').textContent=b; $('#qGOut').textContent=g===128?'128 (whole row)':g; $('#qOOut').textContent=o+'× typical';
+  const key=o; if(!QD||QD.o!==o){ QD=makeData(o); QD.o=o; Ucache=null; qCache={}; }
+  const res=[]; for(let bb=2;bb<=8;bb++){ const k=bb+'_'+g; if(!qCache[k]){ const r=quantRow; const rt=outErr(QD.W,QD.W.map(row=>r(row,bb,g)),QD.X), gp=outErr(QD.W,gptq(QD.W,QD.X,bb,g),QD.X), aw=awq(QD.W,QD.X,bb,g); qCache[k]=[rt,gp,aw.e,aw.gm]; } res.push([bb,...qCache[b===bb?k:k]]); }
+  GX.chart(qP,[{pts:res.map(r=>[r[0],r[1]]),color:P.c2,width:2.5,dots:true,label:'RTN'},{pts:res.map(r=>[r[0],r[3]]),color:P.c4,width:2.5,dots:true,label:'AWQ'},{pts:res.map(r=>[r[0],r[2]]),color:P.c5,width:2.5,dots:true,label:'GPTQ'}],{logy:true,x0:2,x1:8,xl:'bits per weight',yl:'relative output error (log)',vline:b});
+  const cur=res.find(r=>r[0]===b);
+  GX.stats('#qStats',[[cur[1].toExponential(1),'RTN error','c2'],[cur[3].toExponential(1),'AWQ error (γ = '+cur[4].toFixed(1)+')','c4'],[cur[2].toExponential(1),'GPTQ error','c5'],[(cur[1]/cur[2]).toFixed(1)+'×','GPTQ improvement over RTN','c1'],[(b+16/g).toFixed(2),'bits per weight incl. 16-bit scales','c3']]); }
+['qB','qG','qO'].forEach(id=>$('#'+id).addEventListener('input',drawQ)); qP.onResize=drawQ; drawQ();
+ML.onTheme(()=>{ drawKv(); drawRf(); drawB(); drawSp(); drawQ(); });
+})();
+</script>
+<script>NLP.nav('nn','llm-inference'); ML.renderMath(document.body);</script>
+</body>
+</html>

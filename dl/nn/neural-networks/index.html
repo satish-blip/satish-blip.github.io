@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Neural Networks and XOR</title>
+<meta name="description" content="An intuitive, interactive introduction to neural networks: a single neuron, why one line cannot solve XOR, how a hidden layer bends space to make it separable, and a live network playground with backpropagation.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nn">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Foundations</p>
+  <h1>Neural networks, and how they <span class="grad">solve XOR</span></h1>
+  <p class="lede">A neuron draws one line. XOR needs two. A hidden layer gives the network several lines at once, and then the next layer combines them. That small idea, stacked many times, is all of deep learning. Build it by hand, watch the hidden layer bend space, then train networks live with backpropagation.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#neuron">1 · One neuron</a><a href="#hand">2 · XOR by hand</a><a href="#space">3 · The hidden layer bends space</a><a href="#play">4 · Train a network</a><a href="#maths">5 · Forward and backprop maths</a><a href="#code">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a neural network, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>Take the simplest puzzle that breaks linear models: two inputs that are each 0 or 1, and the answer is 1 when <i>exactly one</i> of them is 1 (XOR). Plot the four cases and the two "1" corners sit diagonally opposite each other. Logistic regression, LDA and a linear SVM all draw one straight line, and no straight line can put both "1" corners on the same side. We need a model that can build its own curved boundaries, and learn how from the data.</p>
+      <h3>The idea</h3><p>A <a class="term" data-t="neuron">neuron</a> takes a few numbers, multiplies each by a <a class="term" data-t="parameter">weight</a>, adds them up with a <a class="term" data-t="bias-term">bias</a>, and passes the total through a simple bend, the <a class="term" data-t="activation">activation function</a>. On its own that is just logistic regression: one straight boundary.</p><p>A <a class="term" data-t="neural-network">neural network</a> stacks <a class="term" data-t="layer">layers</a> of such neurons. Each <a class="term" data-t="layer">hidden layer</a> turns the data into new features, and the bends let the network fold and stretch space until the classes become separable. That is how it solves <a class="term" data-t="xor">XOR</a>, which no single straight line can. All the weights are learned together: <a class="term" data-t="backprop">backpropagation</a> computes how each one should change, and <a class="term" data-t="gradient-descent">gradient descent</a> makes the change.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Forward pass: feed the input through every layer to get a prediction.</li><li>Measure the error with a <a class="term" data-t="loss">loss function</a> (here <a class="term" data-t="cross-entropy">cross-entropy</a>).</li><li>Backward pass: use the <a class="term" data-t="chain-rule">chain rule</a> to get the gradient for every weight.</li><li>Update all weights a little against their gradients (an <a class="term" data-t="adam">optimiser</a> such as Adam), and repeat.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A team of clerks in a row of offices: the first office sorts letters by simple rules, the next combines those piles into broader categories, and the last makes the final decision. Training is the manager telling each office how to adjust its rules after every mistake.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Learns its own features from raw data</li><li>Can approximate almost any function given enough neurons</li><li>Scales to images, text and audio</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Needs more data and tuning than classical models</li><li>Non-convex: results depend on initialisation</li><li>Hard to interpret</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="neuron">Neuron</a><a class="term" data-t="activation">Activation</a><a class="term" data-t="layer">Hidden layer</a><a class="term" data-t="mlp">MLP</a><a class="term" data-t="xor">XOR</a><a class="term" data-t="linearly-separable">Linearly separable</a><a class="term" data-t="forward-pass">Forward pass</a><a class="term" data-t="loss">Loss</a><a class="term" data-t="backprop">Backpropagation</a><a class="term" data-t="chain-rule">Chain rule</a><a class="term" data-t="gradient-descent">Gradient descent</a><a class="term" data-t="learning-rate">Learning rate</a><a class="term" data-t="epoch">Epoch</a><a class="term" data-t="l2">L2 / weight decay</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="neuron" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>One neuron = one line</h2>
+    <p class="sub">A neuron computes \(a=\sigma(w_1x_1+w_2x_2+b)\). The boundary \(w_1x_1+w_2x_2+b=0\) is a straight line, so a single neuron is exactly logistic regression.</p>
+    <div class="plot sq" id="nPlot" style="max-width:520px;margin:0 auto"></div>
+  </div>
+  <div class="card">
+    <div class="controls">
+      <div class="ctl"><span class="lbl">Target truth table</span><div class="seg" id="gate"><button data-v="and" class="on">AND</button><button data-v="or">OR</button><button data-v="nand">NAND</button><button data-v="xor">XOR</button></div></div>
+      <div class="ctl"><label for="w1"><span>\(w_1\)</span><output id="w1Out"></output></label><input type="range" id="w1" min="-10" max="10" step="0.1" value="6"></div>
+      <div class="ctl"><label for="w2"><span>\(w_2\)</span><output id="w2Out"></output></label><input type="range" id="w2" min="-10" max="10" step="0.1" value="6"></div>
+      <div class="ctl"><label for="b0"><span>bias \(b\)</span><output id="b0Out"></output></label><input type="range" id="b0" min="-15" max="15" step="0.1" value="-9"></div>
+      <div class="row"><button class="btn primary" id="solve">Find weights for this gate</button></div>
+    </div>
+    <div id="tt" style="margin-top:12px"></div>
+    <div class="note" id="nNote"></div>
+  </div>
+</section>
+
+<section id="hand" class="card">
+  <h2><span class="num">2</span>XOR by hand: two lines, then an AND</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>XOR is true when exactly one input is 1. Notice that</p>
+      <div class="mathbox c1">$$x_1\oplus x_2=(x_1\lor x_2)\land\lnot(x_1\land x_2)=\mathrm{AND}\big(\mathrm{OR}(x_1,x_2),\ \mathrm{NAND}(x_1,x_2)\big)$$</div>
+      <p>Each of OR, NAND and AND is a single neuron (section 1). So a network with <b>two hidden neurons</b> (OR and NAND) and <b>one output neuron</b> (AND of the two) computes XOR exactly:</p>
+      <div class="mathbox c3">$$h_1=\sigma(20x_1+20x_2-10),\quad h_2=\sigma(-20x_1-20x_2+30),\quad y=\sigma(20h_1+20h_2-30)$$</div>
+      <div class="tblwrap"><table class="tbl" id="handTbl"></table></div>
+    </div>
+    <div><svg class="diagram" id="handNet" viewBox="0 0 520 300"></svg><p class="hint">Purple edges are positive weights, orange negative; thickness is magnitude. Hover or tap the table rows to light up the network for that input.</p></div>
+  </div>
+</section>
+
+<section id="space" class="card">
+  <h2><span class="num">3</span>The hidden layer bends space</h2>
+  <p class="sub">Slide from the input space \((x_1,x_2)\) to the hidden space \((h_1,h_2)\). In input space the XOR points sit on opposite corners and no line separates them. After the hidden layer, both "true" points land in the same spot, and one straight line (the output neuron) finishes the job.</p>
+  <div class="grid2">
+    <div><div class="plot sq" id="morph" style="max-width:520px;margin:0 auto"></div>
+      <div class="ctl" style="margin-top:10px"><label for="mt"><span>input space → hidden space</span><output id="mtOut"></output></label><input type="range" id="mt" min="0" max="1" step="0.01" value="0"></div>
+      <div class="row"><button class="btn primary" id="mPlay">Animate</button><label class="toggle"><input type="checkbox" id="mGrid" checked>Show the warped grid</label></div></div>
+    <div class="prose">
+      <p>This is the central intuition of deep learning: <b>each layer re-represents the data so that the next layer's job is easier.</b> The last layer of a classifier is always just a linear model (logistic regression) on the features the earlier layers learned.</p>
+      <p>The warped grid shows what the hidden layer does to the whole plane, not only to the four points: the sigmoid squashes everything into the unit square and folds the two "true" corners together.</p>
+      <div class="note"><b>Why not just more linear layers?</b> Without the non-linearity, \(W_2(W_1x+b_1)+b_2=(W_2W_1)x+(W_2b_1+b_2)\) is still one linear map, still one line. The bend comes entirely from \(\sigma\). See the <a href="../activations/">activations page</a>.</div>
+      <div class="note warn"><b>Same idea as kernels.</b> The SVM on the <a href="../../../ml/svm/#trick">SVM page</a> also lifts XOR into a space where it is linearly separable, but with a fixed feature map. A neural network <i>learns</i> its feature map from data.</div>
+    </div>
+  </div>
+</section>
+
+<section id="play" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Train a network live</h2>
+    <p class="sub">Full-batch backpropagation in your browser. Each small square below the plot is one hidden neuron: what it responds to across the plane. The network diagram shows the weights.</p>
+    <div class="plot sq" id="pPlot"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="run">Train</button><button class="btn" id="step">Step ×10</button><button class="btn" id="reset">Re-initialise</button><span class="pos" id="ep"></span></div>
+    <h3>Hidden neurons</h3><div id="neurons" class="thumbs" style="grid-template-columns:repeat(auto-fill,minmax(64px,1fr))"></div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="controls">
+        <div class="ctl"><span class="lbl">Dataset</span><div class="dsrow" id="dsPick"></div></div>
+        <div class="grid2" style="gap:12px">
+          <div class="ctl"><label for="layers">Hidden layers <output id="layersOut"></output></label><input type="range" id="layers" min="1" max="4" value="1"></div>
+          <div class="ctl"><label for="width">Neurons per layer <output id="widthOut"></output></label><input type="range" id="width" min="1" max="12" value="4"></div>
+        </div>
+        <div class="ctl"><span class="lbl">Activation</span><select id="act"><option value="tanh">tanh</option><option value="relu">ReLU</option><option value="sigmoid">sigmoid</option><option value="gelu">GELU</option><option value="leaky">leaky ReLU</option><option value="linear">linear (no non-linearity)</option></select></div>
+        <div class="ctl"><span class="lbl">Optimiser</span><select id="opt"><option value="adam">Adam</option><option value="sgd">Gradient descent</option><option value="momentum">Momentum</option><option value="rmsprop">RMSProp</option></select></div>
+        <div class="ctl"><label for="lr">Learning rate <output id="lrOut"></output></label><input type="range" id="lr" min="-3" max="0" step="0.1" value="-1.5"></div>
+        <div class="grid2" style="gap:12px">
+          <div class="ctl"><label for="l2">L2 (weight decay) <output id="l2Out"></output></label><input type="range" id="l2" min="-5" max="-1" step="0.25" value="-5"></div>
+          <div class="ctl"><label for="l1">L1 <output id="l1Out"></output></label><input type="range" id="l1" min="-5" max="-1" step="0.25" value="-5"></div>
+        </div>
+        <p class="hint" style="margin:0">Leftmost L1/L2 position means off.</p>
+      </div>
+    </div>
+    <div class="card"><div class="stats" id="pStats"></div><div class="plot short" id="pLoss" style="margin-top:10px"></div></div>
+    <div class="card"><h3 style="margin-top:0">Network</h3><svg class="diagram" id="pNet" viewBox="0 0 520 300"></svg></div>
+  </div>
+</section>
+
+<section id="maths" class="card">
+  <h2><span class="num">5</span>Forward pass and backpropagation</h2>
+  <p class="sub">Training a network uses the same recipe as logistic regression: define the prediction, define the loss, then follow the gradient downhill. The only new problem is step three: with thousands of weights in several layers, how do we get every partial derivative efficiently? Backpropagation is the answer, and it is nothing more than the chain rule applied in a sensible order.</p>
+  <div class="grid2 prose">
+    <div>
+      <h3>Step 1: the forward pass</h3>
+      <p>Write \(a^{(0)}=x\) for the input. Each layer takes the previous layer's outputs, forms weighted sums \(z\) (one per neuron, so a matrix–vector product), and bends them with the activation \(\phi\):</p>
+      <div class="mathbox c1">$$a^{(0)}=x,\qquad z^{(l)}=W^{(l)}a^{(l-1)}+b^{(l)},\qquad a^{(l)}=\phi\big(z^{(l)}\big),\qquad \hat p=\sigma\big(z^{(L)}\big)$$</div>
+      <p>Read it as a pipeline: \(W^{(l)}\) has one row per neuron in layer \(l\), and row \(j\) holds the weights neuron \(j\) gives to each input. The last layer is a single logistic-regression neuron on top of learned features.</p>
+      <h3>Step 2: the loss</h3>
+      <p>Loss for binary classification is the same cross-entropy as logistic regression: \(\mathcal L=-\tfrac1n\sum_i\big[y_i\log\hat p_i+(1-y_i)\log(1-\hat p_i)\big]\).</p>
+      <h3>Universal approximation</h3>
+      <p>How powerful is this family? With one hidden layer and enough neurons, a network with a non-polynomial activation can approximate any continuous function on a bounded region as closely as you like. Depth does not add expressive power in principle, but it often needs <b>exponentially fewer</b> neurons than width alone (each layer composes and reuses the previous layer's features).</p>
+      <details class="deeper"><summary>Going deeper: why weights must start random, and at what scale</summary><div>
+        <p>If every weight in a layer starts equal, every neuron in that layer computes the same thing, receives the same \(\delta\), and gets the same update: they stay clones forever. Random initialisation breaks this symmetry. The scale matters too. With \(n\) inputs of variance 1 and weights of variance \(v\), \(z\) has variance \(nv\). To keep signals from exploding or dying layer after layer we want \(nv\approx1\): Xavier/Glorot initialisation uses \(v=1/n_{\text{in}}\) (or \(2/(n_{\text{in}}+n_{\text{out}})\)) for tanh; He initialisation uses \(v=2/n_{\text{in}}\) for ReLU, because ReLU zeroes half of its inputs and so halves the variance.</p>
+      </div></details>
+    </div>
+    <div>
+      <h3>Step 3: backpropagation = the chain rule, organised</h3>
+      <p>Define \(\delta^{(l)}=\partial\mathcal L/\partial z^{(l)}\): "how much would the loss change if this neuron's weighted sum moved a little?". At the output it is simply the error. Each earlier layer's \(\delta\) is obtained from the next layer's by sending it back through the same weights, then scaling by the slope of the activation:</p>
+      <div class="mathbox c3">$$\delta^{(L)}=\hat p-y,\qquad \delta^{(l)}=\big(W^{(l+1)\top}\delta^{(l+1)}\big)\odot\phi'\big(z^{(l)}\big)$$</div>
+      <div class="mathbox c5">$$\frac{\partial\mathcal L}{\partial W^{(l)}}=\delta^{(l)}a^{(l-1)\top},\qquad \frac{\partial\mathcal L}{\partial b^{(l)}}=\delta^{(l)}$$</div>
+      <p>One backward sweep reuses each layer's \(\delta\) for the layer below, so all gradients cost about the same as one forward pass. Then any <a href="../optimisers/">optimiser</a> updates the weights. With regularisation the loss gains \(\lambda_2\lVert W\rVert_2^2/2+\lambda_1\lVert W\rVert_1\), adding \(\lambda_2W+\lambda_1\operatorname{sign}(W)\) to each weight gradient (see <a href="../../../ml/regularisation/">L1 and L2</a>).</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: training a network with backpropagation</h5><ol>
+        <li><span class="kw">input</span> data \((x_i,y_i)\), layer sizes, activation \(\phi\), learning rate \(\eta\)</li>
+        <li>initialise every \(W^{(l)}\) with small random numbers, \(b^{(l)}\leftarrow0\) <span class="cm">random, or all neurons stay identical</span></li>
+        <li><span class="kw">repeat</span> for each mini-batch</li>
+        <li class="i1"><span class="kw">forward</span>: \(a^{(0)}\leftarrow x\); <span class="kw">for</span> \(l=1..L\): \(z^{(l)}\leftarrow W^{(l)}a^{(l-1)}+b^{(l)}\), \(a^{(l)}\leftarrow\phi(z^{(l)})\) <span class="cm">store every z and a</span></li>
+        <li class="i1">\(\mathcal L\leftarrow\) cross-entropy of \(\hat p=\sigma(z^{(L)})\) against \(y\)</li>
+        <li class="i1"><span class="kw">backward</span>: \(\delta^{(L)}\leftarrow\hat p-y\)</li>
+        <li class="i1"><span class="kw">for</span> \(l=L\) <span class="kw">down to</span> 1 <span class="kw">do</span></li>
+        <li class="i2">\(\nabla W^{(l)}\leftarrow\delta^{(l)}a^{(l-1)\top}\); \(\nabla b^{(l)}\leftarrow\delta^{(l)}\)</li>
+        <li class="i2"><span class="kw">if</span> \(l&gt;1\): \(\delta^{(l-1)}\leftarrow(W^{(l)\top}\delta^{(l)})\odot\phi'(z^{(l-1)})\) <span class="cm">send the error one layer back</span></li>
+        <li class="i1"><span class="kw">update</span>: \(W\leftarrow W-\eta\nabla W\), \(b\leftarrow b-\eta\nabla b\) for every layer <span class="cm">or Adam</span></li>
+        <li><span class="kw">until</span> the loss stops improving</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: deriving the backprop equations</summary><div>
+        <p><b>Output layer.</b> With \(\hat p=\sigma(z^{(L)})\) and cross-entropy, exactly the same algebra as on the <a href="../../../ml/logistic-regression/#maths">logistic regression page</a> gives \(\partial\mathcal L/\partial z^{(L)}=\hat p-y\).</p>
+        <p><b>One layer back.</b> \(z^{(l)}\) affects the loss only through \(a^{(l)}\), which feeds every neuron \(k\) of the next layer via \(z^{(l+1)}_k=\sum_jW^{(l+1)}_{kj}a^{(l)}_j+b_k\). The multivariable chain rule sums over all those paths: \(\delta^{(l)}_j=\sum_k\frac{\partial\mathcal L}{\partial z^{(l+1)}_k}\frac{\partial z^{(l+1)}_k}{\partial a^{(l)}_j}\frac{\partial a^{(l)}_j}{\partial z^{(l)}_j}=\big(\sum_kW^{(l+1)}_{kj}\delta^{(l+1)}_k\big)\phi'(z^{(l)}_j)\). In matrix form that is \((W^{(l+1)\top}\delta^{(l+1)})\odot\phi'(z^{(l)})\).</p>
+        <p><b>Weights.</b> \(W^{(l)}_{jk}\) appears only in \(z^{(l)}_j\), with coefficient \(a^{(l-1)}_k\), so \(\partial\mathcal L/\partial W^{(l)}_{jk}=\delta^{(l)}_ja^{(l-1)}_k\): an outer product. "Error at the output end times activity at the input end", the same shape as the LMS rule.</p>
+        <p><b>Why it is cheap.</b> Computing each weight's derivative separately would repeat the work for every path through the network. Backprop is reverse-mode automatic differentiation: one backward sweep, cost about two forward passes, which is exactly what <code>loss.backward()</code> does in PyTorch.</p>
+      </div></details>
+      <div class="note warn">Notice \(\phi'\) in every \(\delta\). If \(\phi'\) is small (saturated sigmoid) the signal shrinks layer after layer: the <b>vanishing gradient</b> problem that ReLU, <a href="../residual/">residual connections</a> and <a href="../normalisation/">normalisation</a> were invented to fix.</div>
+    </div>
+  </div>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">6</span>The same thing in Python (PyTorch)</h2>
+<pre class="code"><span class="k">import</span> torch, torch.nn <span class="k">as</span> nn
+X = torch.tensor([[<span class="s">0.</span>,<span class="s">0.</span>],[<span class="s">0.</span>,<span class="s">1.</span>],[<span class="s">1.</span>,<span class="s">0.</span>],[<span class="s">1.</span>,<span class="s">1.</span>]]); y = torch.tensor([[<span class="s">0.</span>],[<span class="s">1.</span>],[<span class="s">1.</span>],[<span class="s">0.</span>]])
+model = nn.Sequential(nn.Linear(<span class="s">2</span>, <span class="s">4</span>), nn.Tanh(), nn.Linear(<span class="s">4</span>, <span class="s">1</span>))
+opt = torch.optim.Adam(model.parameters(), lr=<span class="s">0.03</span>, weight_decay=<span class="s">0</span>)   <span class="c"># weight_decay = L2</span>
+loss_fn = nn.BCEWithLogitsLoss()
+<span class="k">for</span> step <span class="k">in</span> range(<span class="s">2000</span>):
+    opt.zero_grad()
+    loss = loss_fn(model(X), y)
+    loss.<span class="f">backward</span>()           <span class="c"># backpropagation</span>
+    opt.<span class="f">step</span>()
+torch.sigmoid(model(X)).round()   <span class="c"># tensor([[0.],[1.],[1.],[0.]])</span></pre>
+</section>
+<p class="foot">Part of the <a href="../">neural network foundations</a> series. Everything runs in your browser; the network engine is <a href="../../assets/nn.js">nn.js</a>.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/nn.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML;
+const sig=z=>1/(1+Math.exp(-z));
+const PTS=[[0,0],[0,1],[1,0],[1,1]], GATES={and:[0,0,0,1],or:[0,1,1,1],nand:[1,1,1,0],xor:[0,1,1,0]}, SOL={and:[6,6,-9],or:[6,6,-3],nand:[-6,-6,9],xor:[6,6,-3]};
+const B={x0:-0.4,x1:1.4,y0:-0.4,y1:1.4};
+/* ---------- 1. single neuron ---------- */
+const nP=new ML.Plot('#nPlot',{bounds:B}); let gate='and';
+function drawN(){ const P=ML.palette(), w1=+$('#w1').value, w2=+$('#w2').value, b=+$('#b0').value, t=GATES[gate];
+  nP.clear(); nP.regions((x,y)=>sig(w1*x+w2*y+b),4); nP.grid(0.5); nP.contour((x,y)=>w1*x+w2*y+b,0,{width:2.6});
+  const out=PTS.map(p=>sig(w1*p[0]+w2*p[1]+b)); nP.points(PTS,t,{r:12,cross:i=>(out[i]>=0.5?1:0)!==t[i]});
+  PTS.forEach((p,i)=>nP.text(`(${p[0]},${p[1]})`,p[0],p[1],{dy:30,align:'center',color:P.muted,halo:true}));
+  const ok=out.filter((o,i)=>(o>=0.5?1:0)===t[i]).length;
+  $('#tt').innerHTML='<table class="tbl"><tr><th>x₁</th><th>x₂</th><th>target</th><th>z = w·x + b</th><th>a = σ(z)</th><th>output</th></tr>'+PTS.map((p,i)=>{ const z=w1*p[0]+w2*p[1]+b; return `<tr${(out[i]>=0.5?1:0)===t[i]?' class="best"':''}><td>${p[0]}</td><td>${p[1]}</td><td>${t[i]}</td><td>${fmt(z,1)}</td><td>${fmt(out[i],3)}</td><td>${out[i]>=0.5?1:0}</td></tr>`; }).join('')+'</table>';
+  $('#nNote').className='note'+(gate==='xor'?' warn':ok===4?' ok':''); $('#nNote').innerHTML= gate==='xor' ? `<b>${ok} / 4 correct, and that is the best a single line can do.</b> The two "1" points (0,1) and (1,0) sit on opposite corners from each other, with the "0" points on the other diagonal. Any straight line leaves at least one point on the wrong side. Minsky and Papert's 1969 proof of this stalled neural-network research for over a decade.` : ok===4?`<b>All 4 correct.</b> ${gate.toUpperCase()} is linearly separable, so one neuron is enough.`:`${ok} / 4 correct. Adjust the weights or press the button.`; }
+['w1','w2','b0'].forEach(id=>ML.bindRange(id,drawN,v=>v.toFixed(1)));
+ML.bindSeg('gate',v=>{ gate=v; drawN(); });
+$('#solve').onclick=()=>{ const s=SOL[gate]; ['w1','w2','b0'].forEach((id,k)=>{ $('#'+id).value=s[k]; $('#'+id+'Out').textContent=s[k].toFixed(1); }); drawN(); };
+/* ---------- 2. XOR by hand ---------- */
+const HW={W1:[[20,20],[-20,-20]],b1:[-10,30],W2:[20,20],b2:-30};
+const hand=x=>{ const h=HW.W1.map((w,j)=>sig(w[0]*x[0]+w[1]*x[1]+HW.b1[j])); return {h, y:sig(HW.W2[0]*h[0]+HW.W2[1]*h[1]+HW.b2)}; };
+function netSVG(svg, sizes, weights, acts, o={}){ const P=ML.palette(), W=520, H=300; const xs=sizes.map((_,l)=>60+l*(W-120)/(sizes.length-1));
+  const pos=sizes.map((n,l)=>Array.from({length:n},(_,i)=>[xs[l], H/2+(i-(n-1)/2)*Math.min(60,(H-40)/Math.max(n,1))]));
+  let s=''; const mx=Math.max(1e-9,...weights.flat(2).map(Math.abs));
+  weights.forEach((Wl,l)=>Wl.forEach((row,j)=>row.forEach((w,k)=>{ const a=pos[l][k], b=pos[l+1][j]; s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${w>=0?P.c1:P.c4}" stroke-width="${0.5+5*Math.abs(w)/mx}" opacity=".75"/>`; })));
+  pos.forEach((col,l)=>col.forEach((p,i)=>{ const v=acts?acts[l]?.[i]:null; const fill=v==null?P.card:`rgb(${ML.rgb(P.card).map((c,ch)=>Math.round(c+(ML.rgb(P.c3)[ch]-c)*Math.max(0,Math.min(1,v)))).join(',')})`;
+    s+=`<circle cx="${p[0]}" cy="${p[1]}" r="18" fill="${fill}" stroke="${P.ink}" stroke-width="1.5"/>`; const lab=o.labels?.[l]?.[i]; if(lab) s+=`<text x="${p[0]}" y="${p[1]-24}" text-anchor="middle" class="mut">${lab}</text>`; if(v!=null) s+=`<text x="${p[0]}" y="${p[1]+4}" text-anchor="middle" style="font-size:11px">${v.toFixed(2)}</text>`; }));
+  svg.innerHTML=s; }
+let hov=null;
+function drawHand(){ const rows=PTS.map(x=>{ const r=hand(x); return {x,...r}; });
+  $('#handTbl').innerHTML='<tr><th>x₁</th><th>x₂</th><th>h₁ = OR</th><th>h₂ = NAND</th><th>y = AND(h₁,h₂)</th><th>XOR</th></tr>'+rows.map((r,i)=>`<tr data-i="${i}" style="cursor:pointer"${hov===i?' class="best"':''}><td>${r.x[0]}</td><td>${r.x[1]}</td><td>${r.h[0].toFixed(3)}</td><td>${r.h[1].toFixed(3)}</td><td>${r.y.toFixed(3)}</td><td>${r.x[0]^r.x[1]}</td></tr>`).join('');
+  $('#handTbl').querySelectorAll('tr[data-i]').forEach(tr=>{ tr.onmouseenter=()=>{ hov=+tr.dataset.i; drawHand(); }; tr.onclick=tr.onmouseenter; });
+  const r=hov!=null?rows[hov]:null; netSVG($('#handNet'),[2,2,1],[HW.W1,[HW.W2]], r?[r.x,r.h,[r.y]]:null,{labels:[['x₁','x₂'],['h₁ OR','h₂ NAND'],['y AND']]}); }
+/* ---------- 3. morph ---------- */
+const mP=new ML.Plot('#morph',{bounds:{x0:-0.35,x1:1.35,y0:-0.35,y1:1.35}});
+function drawMorph(){ const P=ML.palette(), t=+$('#mt').value, c=mP.ctx; mP.clear(); mP.grid(0.5);
+  const map=x=>{ const h=hand(x).h; return [x[0]*(1-t)+h[0]*t, x[1]*(1-t)+h[1]*t]; };
+  if($('#mGrid').checked){ c.save(); c.strokeStyle=P.c1; c.globalAlpha=.35; c.lineWidth=1;
+    for(let k=0;k<=12;k++){ const v=-0.2+1.4*k/12; c.beginPath(); for(let s=0;s<=60;s++){ const p=map([-0.2+1.4*s/60,v]); s?c.lineTo(mP.X(p[0]),mP.Y(p[1])):c.moveTo(mP.X(p[0]),mP.Y(p[1])); } c.stroke(); c.beginPath(); for(let s=0;s<=60;s++){ const p=map([v,-0.2+1.4*s/60]); s?c.lineTo(mP.X(p[0]),mP.Y(p[1])):c.moveTo(mP.X(p[0]),mP.Y(p[1])); } c.stroke(); } c.restore(); }
+  // boundaries: in input space the two hidden lines; in hidden space the output line
+  if(t<0.5){ const a=1-2*t; mP.hline(20,20,-10,{color:P.c3,width:2,alpha:a,dash:[6,4]}); mP.hline(-20,-20,30,{color:P.c4,width:2,alpha:a,dash:[6,4]}); }
+  if(t>0.5) mP.hline(20,20,-30,{color:P.ink,width:2.6,alpha:2*t-1});
+  const Q=PTS.map(map); mP.points(Q,[0,1,1,0],{r:12});
+  PTS.forEach((p,i)=>mP.text(`(${p[0]},${p[1]})`,Q[i][0],Q[i][1],{dy:i===1?-20:30,align:'center',color:P.muted,halo:true}));
+  mP.text(t<0.5?'x₁ →':'h₁ = OR →',1.33,-0.33,{align:'right',dy:-4,color:P.muted}); mP.text(t<0.5?'x₂':'h₂ = NAND',-0.33,1.33,{dy:12,dx:4,color:P.muted}); }
+ML.bindRange('mt',drawMorph,v=>v<0.05?'input space':v>0.95?'hidden space':v.toFixed(2));
+$('#mGrid').onchange=drawMorph;
+let mt=null; $('#mPlay').onclick=()=>{ if(mt) return; let t=+$('#mt').value>0.5?1:0, dir=t?-1:1; mt=setInterval(()=>{ t+=dir*0.02; const tt=Math.max(0,Math.min(1,t)); $('#mt').value=tt; $('#mtOut').textContent=tt<0.05?'input space':tt>0.95?'hidden space':tt.toFixed(2); drawMorph(); if(t<=0||t>=1){ clearInterval(mt); mt=null; } },30); };
+/* ---------- 4. playground ---------- */
+const S={ds:'xor', net:null, timer:null, hist:[], epoch:0};
+const pP=new ML.Plot('#pPlot'), pL=new ML.Plot('#pLoss',{equal:false}); let data;
+function loadData(){ data=ML.dataset(S.ds,200,0.2,7); }
+function build(){ stop(); const L=+$('#layers').value, w=+$('#width').value, sizes=[2,...Array(L).fill(w),1]; S.net=NN.MLP(sizes,{act:$('#act').value,seed:Math.floor(Math.random()*1e6)}); S.hist=[]; S.epoch=0; drawP(true); }
+const opt=()=>({name:$('#opt').value, lr:Math.pow(10,+$('#lr').value), wd:+$('#l2').value<=-5?0:Math.pow(10,+$('#l2').value), l1:+$('#l1').value<=-5?0:Math.pow(10,+$('#l1').value)});
+function trainK(k){ let L; for(let i=0;i<k;i++){ L=S.net.train(data.X,data.y,opt(),1); S.epoch++; } S.hist.push([S.epoch,L]); }
+function drawP(neurons){ const P=ML.palette(), net=S.net; pP.clear(); pP.regions((x,y)=>net.predict([x,y]),5); pP.grid(1); pP.contour((x,y)=>net.predict([x,y])-0.5,0,{width:2.4}); pP.points(data.X,data.y,{r:3.8});
+  let ok=0; data.X.forEach((x,i)=>{ if((net.predict(x)>=0.5?1:0)===data.y[i]) ok++; }); let wsum=0, zeros=0, nw=0; net.layers.forEach(l=>l.W.forEach(v=>{ wsum+=v*v; nw++; if(Math.abs(v)<1e-3) zeros++; }));
+  $('#ep').textContent='epoch '+S.epoch; $('#pStats').innerHTML=[['c2',S.hist.length?fmt(S.hist[S.hist.length-1][1],4):'–','loss'],['c5',ML.pct(ok/data.X.length),'training accuracy'],['c1',net.count(),'parameters'],['c4',fmt(Math.sqrt(wsum),2),'‖W‖₂'],['c3',zeros,'weights ≈ 0 (|w| < 0.001)']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  ML.chart(pL,[{pts:S.hist,color:P.c2,width:2.4}],{y0:0,xl:'epoch'});
+  // network diagram (weights)
+  const Ws=net.layers.map(l=>Array.from({length:l.nout},(_,j)=>Array.from(l.W.slice(j*l.nin,(j+1)*l.nin)))); netSVG($('#pNet'),net.sizes,Ws,null);
+  if(neurons || S.epoch%40===0) drawNeurons(); }
+function drawNeurons(){ const net=S.net, box=$('#neurons'); const hs=net.sizes.slice(1,-1); const tot=hs.reduce((a,b)=>a+b,0); if(box.children.length!==tot){ box.innerHTML=''; hs.forEach((n,l)=>{ for(let j=0;j<n;j++){ const d=document.createElement('div'); d.className='thumb'; d.innerHTML=`<div class="plot sq" style="border:0;border-radius:0"></div><div>L${l+1}·${j+1}</div>`; box.appendChild(d); d._pl=new ML.Plot(d.firstChild); } }); }
+  const P=ML.palette(); let idx=0; const g=[]; for(let i=0;i<26;i++) for(let j=0;j<26;j++) g.push([-3.2+6.4*j/25, 3.2-6.4*i/25]); const outs=net.layerOutputs(g);
+  hs.forEach((n,l)=>{ for(let j=0;j<n;j++){ const pl=box.children[idx++]._pl; const vals=outs[l].map(r=>r[j]); const mx=Math.max(1e-9,...vals.map(Math.abs)); pl.clear(); const c=pl.ctx, cw=pl.w/26, ch=pl.h/26;
+    vals.forEach((v,k)=>{ c.fillStyle=NLP.div(v/mx); c.fillRect((k%26)*cw,Math.floor(k/26)*ch,cw+0.5,ch+0.5); }); } }); }
+function stop(){ if(S.timer){ clearInterval(S.timer); S.timer=null; $('#run').textContent='Train'; } }
+$('#run').onclick=()=>{ if(S.timer){ stop(); return; } $('#run').textContent='Pause'; S.timer=setInterval(()=>{ trainK(5); drawP(false); if(S.epoch>6000) stop(); },40); };
+$('#step').onclick=()=>{ stop(); trainK(10); drawP(true); };
+$('#reset').onclick=build;
+ML.datasetPicker('dsPick',S.ds,id=>{ S.ds=id; loadData(); build(); });
+['layers','width'].forEach(id=>ML.bindRange(id,build)); $('#act').onchange=build;
+ML.bindRange('lr',()=>{},v=>Math.pow(10,v).toPrecision(2)); ML.bindRange('l2',()=>{},v=>v<=-5?'off':Math.pow(10,v).toPrecision(2)); ML.bindRange('l1',()=>{},v=>v<=-5?'off':Math.pow(10,v).toPrecision(2));
+nP.onResize=drawN; mP.onResize=drawMorph; pP.onResize=pL.onResize=()=>S.net&&drawP(true);
+ML.onTheme(()=>{ drawN(); drawHand(); drawMorph(); drawP(true); });
+drawN(); drawHand(); drawMorph(); loadData(); build(); trainK(1);
+})();
+</script>
+<script>NLP.nav('nn','neural-networks'); ML.renderMath(document.body);</script>
+</body>
+</html>

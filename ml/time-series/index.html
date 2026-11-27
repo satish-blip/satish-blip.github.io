@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Time series forecasting explained interactively: splits without leakage, lag features, exponential smoothing, ARIMA and boosted trees</title>
+<meta name="description" content="Forecasting step by step in your browser: trend and seasonality, why random cross-validation lies on time series, lag and rolling features, autocorrelation, exponential smoothing and Holt–Winters, ARIMA and SARIMA, gradient-boosted trees for forecasting, and honest rolling-origin backtests.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Time series</p>
+  <h1>Time series: <span class="grad">forecasting without peeking at the future</span></h1>
+  <p class="lede">Sales next month, electricity demand tomorrow, claims next quarter. Forecasting looks like ordinary regression, but the rows are in order, the future is not allowed in, and yesterday is usually the best clue to today. This page builds the classic toolkit on one series you can reshape: decomposition, honest validation, lag features, exponential smoothing, ARIMA and gradient-boosted trees.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#anatomy">1 · Trend &amp; season</a><a href="#leak">2 · Honest splits</a><a href="#lags">3 · Lags &amp; autocorrelation</a><a href="#ets">4 · Exponential smoothing</a><a href="#arima">5 · ARIMA</a><a href="#gbdt">6 · Boosted trees</a><a href="#backtest">7 · Backtesting</a><a href="#py">8 · Python</a><a href="#credits">9 · Credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is time-series forecasting, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3>
+      <p>A <a class="term" data-t="time-series">time series</a> is a sequence of measurements in time order: \(y_1,y_2,\dots,y_T\). We want \(y_{T+1},\dots,y_{T+h}\), the next \(h\) values, often with a range of likely values. Unlike most datasets the rows are not independent: this month looks a lot like last month and like the same month last year.</p>
+      <h3>The idea</h3>
+      <p>Split the series into parts that each have a simple story, then extend each story forward:</p>
+      <ol class="steps2"><li><b><a class="term" data-t="trend">Trend</a></b>: the slow drift up or down.</li><li><b><a class="term" data-t="seasonality">Seasonality</a></b>: a pattern that repeats every \(m\) steps (12 months, 7 days, 24 hours).</li><li><b>Remainder</b>: what is left, often with short-term memory (<a class="term" data-t="autocorrelation">autocorrelation</a>).</li></ol>
+      <p>Statistical models (exponential smoothing, ARIMA) write these parts as equations. Machine-learning models (boosted trees, neural networks) learn them from <a class="term" data-t="lag-feature">lag features</a>, the past values placed beside each row.</p>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Guessing how busy a café will be next Saturday. You know it has been getting busier this year (trend), Saturdays beat Tuesdays (season), and last Saturday was unusually busy because of a festival (remainder, which probably will not repeat). A good guess combines all three, and an honest test of your guessing would only ever use what you knew <i>before</i> each Saturday.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Demand, sales and stock planning</li><li>Energy load, traffic, web visits</li><li>Claims and reserving patterns</li><li>Capacity and budget planning</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Random splits leak the future</li><li>Features you will not know at forecast time</li><li>Trees cannot extrapolate a trend</li><li>Breaks: a pandemic, a price change, a new product</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="stationarity">Stationarity</a><a class="term" data-t="autocorrelation">Autocorrelation</a><a class="term" data-t="lag-feature">Lag feature</a><a class="term" data-t="rolling-window">Rolling window</a><a class="term" data-t="exponential-smoothing">Exponential smoothing</a><a class="term" data-t="arima">ARIMA</a><a class="term" data-t="sarima">SARIMA</a><a class="term" data-t="backtesting">Backtesting</a><a class="term" data-t="mase">MASE</a></div>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="anatomy" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Trend, season and remainder</h2>
+    <p class="sub">Twelve years of monthly data (made on this page). Top: the series and its trend estimate. Bottom: the seasonal pattern (bars, one per month) and the remainder (line). The last two years, shaded, are kept back as the future for every model below.</p>
+    <div class="plot wide" id="pS"></div>
+    <div class="plot short" id="pDc" style="margin-top:10px"></div>
+    <div class="stats" id="sStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Write the series as a sum, an additive decomposition:</p>
+      <div class="mathbox c1">$$y_t=T_t+S_t+R_t,\qquad S_{t+m}=S_t .$$</div>
+      <p>The classical recipe estimates each part in turn. The trend is a centred moving average over one full season, which cancels the seasonal pattern; for even \(m=12\) it is a “2×12” average, \(\hat T_t=\tfrac{1}{24}y_{t-6}+\tfrac{1}{12}\sum_{j=-5}^{5}y_{t+j}+\tfrac{1}{24}y_{t+6}\). The seasonal index for each month is the average of \(y_t-\hat T_t\) over all years with that month, shifted to sum to zero. What is left is the remainder.</p>
+      <p>If the seasonal swings grow with the level (as with airline passengers), use a multiplicative form \(y_t=T_t\times S_t\times R_t\), or take logs first, which turns it into an additive one. Modern decompositions such as STL (Cleveland et al., 1990) use local regression so the season can change slowly.</p>
+      <div class="ctl"><label for="sTr"><span>Trend per year</span><output id="sTrOut"></output></label><input type="range" id="sTr" min="-10" max="30" step="1" value="12"></div>
+      <div class="ctl"><label for="sSe"><span>Seasonal swing</span><output id="sSeOut"></output></label><input type="range" id="sSe" min="0" max="40" step="1" value="18"></div>
+      <div class="ctl"><label for="sNo"><span>Noise</span><output id="sNoOut"></output></label><input type="range" id="sNo" min="0" max="15" step="0.5" value="5"></div>
+      <div class="ctl"><label for="sAr"><span>Memory of the noise (AR coefficient φ)</span><output id="sArOut"></output></label><input type="range" id="sAr" min="0" max="0.95" step="0.05" value="0.5"></div>
+      <p class="hint">Every chart on the page uses this series, so you can reshape it here and see how each method copes.</p>
+    </div>
+  </div>
+</section>
+
+<section id="leak" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Honest splits: why random cross-validation lies</h2>
+    <p class="sub">Each row is one validation fold, each cell one month: purple = training, orange = validation, grey = unused. Switch the scheme. The model (3-nearest-neighbour regression on the date and the month) and the data are the same in both.</p>
+    <div class="plot short" id="pF"></div>
+    <div class="seg" id="fScheme"><button data-v="random" class="on">Random 5-fold</button><button data-v="time">Expanding window</button><button data-v="sliding">Sliding window</button></div>
+    <div class="stats" id="fStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Ordinary <a class="term" data-t="cross-validation">cross-validation</a> shuffles rows into folds. On a time series that means the model is trained on March and May and tested on April: it interpolates between neighbours it has already seen. In real use it must <i>extrapolate</i> past the last date it knows. The random-split error is therefore much too optimistic, and models that are good at interpolation win the comparison for the wrong reason.</p>
+      <p>Compare the three numbers below the chart: the random 5-fold error, the time-ordered error, and the error on the two held-back years. Only the time-ordered scheme comes close to the truth.</p>
+      <p>The fix is to keep time order (<code>TimeSeriesSplit</code> in scikit-learn):</p>
+      <ul><li><b>Expanding window</b>: train on everything up to a cut-off, validate on the next \(h\) steps, move the cut-off forward.</li><li><b>Sliding window</b>: same, but train only on the most recent \(w\) steps, useful when old data are no longer representative.</li><li>Leave a <b>gap</b> between training and validation if features use the recent past that would not be available yet (for example, a 7-day rolling mean published with a delay).</li></ul>
+      <p>The same rule covers every preprocessing step: scalers, imputers and target encoders must be fitted on past rows only, exactly as on the <a href="../datasets/#leak">datasets page</a>.</p>
+      <div class="algo" data-anim="backtest"><h5 class="algo-h">Algorithm: rolling-origin evaluation (time-series cross-validation)</h5><ol>
+        <li><span class="kw">input</span> series \(y_1..y_T\), first cut-off \(t_0\), horizon \(h\), step \(s\)</li>
+        <li><span class="kw">for</span> cut-off \(c=t_0,\ t_0+s,\ \dots\) while \(c+h\le T\) <span class="kw">do</span></li>
+        <li class="i1">fit the model (and every preprocessing step) on \(y_1..y_c\) only</li>
+        <li class="i1">forecast \(\hat y_{c+1},\dots,\hat y_{c+h}\)</li>
+        <li class="i1">record the errors \(y_{c+j}-\hat y_{c+j}\) for \(j=1..h\)</li>
+        <li><span class="kw">return</span> the error averaged over cut-offs, for each horizon \(j\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="lags" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Lags, rolling windows and autocorrelation</h2>
+    <p class="sub">Autocorrelation of the training series at lags 1 to 36. Bars outside the dashed band (±1.96/√T) are larger than chance. Differencing removes the trend and the season; watch the slow decay and the spikes at 12, 24 and 36 disappear.</p>
+    <div class="plot short" id="pA"></div>
+    <div class="seg" id="aTr"><button data-v="raw" class="on">Raw series</button><button data-v="d1">First difference</button><button data-v="d12">Seasonal difference</button><button data-v="both">Both</button></div>
+    <div class="tblwrap"><table class="tbl" id="lagTbl"></table></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The <a class="term" data-t="autocorrelation">autocorrelation</a> at lag \(k\) is the correlation between the series and itself shifted by \(k\) steps:</p>
+      <div class="mathbox c1">$$r_k=\frac{\sum_{t=1}^{T-k}(y_t-\bar y)(y_{t+k}-\bar y)}{\sum_{t=1}^{T}(y_t-\bar y)^2}.$$</div>
+      <p>A trend makes every \(r_k\) large and slowly decaying; a season adds spikes at multiples of \(m\). Most forecasting models want a <a class="term" data-t="stationarity">stationary</a> series, one whose mean, variance and autocorrelations do not change over time. Differencing gets you there: \(\nabla y_t=y_t-y_{t-1}\) removes a linear trend and \(\nabla_{12}y_t=y_t-y_{t-12}\) removes a fixed season.</p>
+      <p>For a machine-learning model we turn the series into an ordinary table. Each row is a time \(t\); the target is \(y_t\); the features are things known before \(t\):</p>
+      <ul><li><a class="term" data-t="lag-feature">Lags</a>: \(y_{t-1}, y_{t-2}, y_{t-12}\)…, chosen where the autocorrelation is large.</li><li><a class="term" data-t="rolling-window">Rolling statistics</a> of the past: mean, maximum or standard deviation of \(y_{t-1},\dots,y_{t-w}\). The window must end at \(t-1\), never at \(t\).</li><li>Calendar features: month, day of week, holidays (known in advance, so safe).</li><li>Known future inputs: planned prices or promotions, but not weather you will only learn tomorrow.</li></ul>
+      <p class="hint">The table shows the last rows of the training data as a model would see them.</p>
+    </div>
+  </div>
+</section>
+
+<section id="ets" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Exponential smoothing and Holt–Winters</h2>
+    <p class="sub">Black: the series. Purple: one-step-ahead fitted values on the training years, then the forecast for the two held-back years with an approximate 95% band. Orange: what actually happened.</p>
+    <div class="plot wide" id="pE"></div>
+    <div class="seg" id="eModel"><button data-v="ses">Simple (level)</button><button data-v="holt">Holt (+ trend)</button><button data-v="hw" class="on">Holt–Winters (+ season)</button></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="eOpt">Find best α, β, γ</button><span class="pos" id="ePos"></span></div>
+    <div class="stats" id="eStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The simplest sensible forecast is a weighted average of the past in which recent values count more. <a class="term" data-t="exponential-smoothing">Simple exponential smoothing</a> keeps one number, the level \(\ell_t\), and updates it after each observation:</p>
+      <div class="mathbox c1">$$\ell_t=\alpha y_t+(1-\alpha)\ell_{t-1}\quad\Longleftrightarrow\quad \ell_t=\sum_{j\ge0}\alpha(1-\alpha)^j\,y_{t-j}.$$</div>
+      <p>Weights fall off geometrically, hence the name. \(\alpha\) near 1 follows the latest value; near 0 it averages a long history. Holt added a trend \(b_t\), and Winters a season \(s_t\) of period \(m\). The additive Holt–Winters equations:</p>
+      <div class="mathbox c4">$$\begin{aligned}\ell_t&=\alpha\,(y_t-s_{t-m})+(1-\alpha)(\ell_{t-1}+b_{t-1})\\ b_t&=\beta\,(\ell_t-\ell_{t-1})+(1-\beta)\,b_{t-1}\\ s_t&=\gamma\,(y_t-\ell_t)+(1-\gamma)\,s_{t-m}\\ \hat y_{t+h\mid t}&=\ell_t+h\,b_t+s_{t+h-m}\end{aligned}$$</div>
+      <p>Each line is the same idea: blend the newest evidence with the old estimate. The forecast extends the last level along the last trend and adds the matching seasonal value. The smoothing weights are chosen to minimise the squared one-step errors on the training data; press the button to search a grid. In the modern “ETS” view (Hyndman et al., 2002) these are state-space models with a likelihood, which gives proper prediction intervals and lets AIC choose between additive, multiplicative and damped versions.</p>
+      <div class="ctl"><label for="eA"><span>α (level)</span><output id="eAOut"></output></label><input type="range" id="eA" min="0.01" max="1" step="0.01" value="0.3"></div>
+      <div class="ctl"><label for="eB"><span>β (trend)</span><output id="eBOut"></output></label><input type="range" id="eB" min="0" max="0.5" step="0.01" value="0.05"></div>
+      <div class="ctl"><label for="eG"><span>γ (season)</span><output id="eGOut"></output></label><input type="range" id="eG" min="0" max="0.8" step="0.01" value="0.2"></div>
+      <div class="algo" data-anim="holt"><h5 class="algo-h">Algorithm: Holt–Winters (additive) forecasting</h5><ol>
+        <li><span class="kw">input</span> series \(y_1..y_T\), period \(m\), weights \(\alpha,\beta,\gamma\), horizon \(h\)</li>
+        <li>initialise \(\ell_0\) = mean of the first season, \(b_0\) = average change per step, \(s_j=y_j-\ell_0\)</li>
+        <li><span class="kw">for</span> \(t=1,\dots,T\) <span class="kw">do</span></li>
+        <li class="i1">one-step forecast \(\hat y_t=\ell_{t-1}+b_{t-1}+s_{t-m}\); error \(e_t=y_t-\hat y_t\)</li>
+        <li class="i1">update \(\ell_t,\ b_t,\ s_t\) with the three smoothing equations</li>
+        <li><span class="kw">for</span> \(j=1,\dots,h\): \(\hat y_{T+j}=\ell_T+j\,b_T+s_{T+j-m}\)</li>
+        <li><span class="kw">return</span> forecasts; choose \(\alpha,\beta,\gamma\) to minimise \(\sum e_t^2\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="arima" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>ARIMA and seasonal ARIMA</h2>
+    <p class="sub">Choose the orders; the model is fitted to the training years and forecasts the last two. Lower AIC is better (only comparable between models with the same differencing).</p>
+    <div class="plot wide" id="pR"></div>
+    <div class="ar-grid">
+      <div class="ctl"><label for="rp"><span>p (AR)</span><output id="rpOut"></output></label><input type="range" id="rp" min="0" max="3" step="1" value="0"></div>
+      <div class="ctl"><label for="rd"><span>d (differences)</span><output id="rdOut"></output></label><input type="range" id="rd" min="0" max="1" step="1" value="1"></div>
+      <div class="ctl"><label for="rq"><span>q (MA)</span><output id="rqOut"></output></label><input type="range" id="rq" min="0" max="2" step="1" value="1"></div>
+      <div class="ctl"><label for="rP"><span>P (seasonal AR)</span><output id="rPOut"></output></label><input type="range" id="rP" min="0" max="1" step="1" value="0"></div>
+      <div class="ctl"><label for="rD"><span>D (seasonal diff.)</span><output id="rDOut"></output></label><input type="range" id="rD" min="0" max="1" step="1" value="1"></div>
+      <div class="ctl"><label for="rQ"><span>Q (seasonal MA)</span><output id="rQOut"></output></label><input type="range" id="rQ" min="0" max="1" step="1" value="1"></div>
+    </div>
+    <div class="stats" id="rStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>ARIMA describes the <i>stationary</i> series left after differencing with two kinds of memory. An <b>autoregressive</b> part says the value depends on its own past; a <b>moving-average</b> part says it depends on past surprises (forecast errors):</p>
+      <div class="mathbox c1">$$w_t=c+\underbrace{\phi_1w_{t-1}+\dots+\phi_pw_{t-p}}_{\text{AR}(p)}+\underbrace{\theta_1\varepsilon_{t-1}+\dots+\theta_q\varepsilon_{t-q}}_{\text{MA}(q)}+\varepsilon_t,\qquad w_t=\nabla^d y_t .$$</div>
+      <p>That is <a class="term" data-t="arima">ARIMA(\(p,d,q\))</a>: I for “integrated”, because we forecast \(w\) and then add the differences back up. <a class="term" data-t="sarima">Seasonal ARIMA</a> (\(p,d,q\))(\(P,D,Q\))\(_m\) adds the same three ideas at lag \(m\): \(w_t=\nabla^d\nabla_m^D y_t\) with terms in \(w_{t-m}\) and \(\varepsilon_{t-m}\). The default here, (0,1,1)(0,1,1)\(_{12}\), is Box and Jenkins’ famous “airline model”, and it is a strong baseline for monthly data with trend and season.</p>
+      <p>How to choose orders: difference until the autocorrelation plot (section 3) dies out quickly; a sharp cut-off in the partial autocorrelation after lag \(p\) suggests AR(\(p\)); a cut-off in the autocorrelation after lag \(q\) suggests MA(\(q\)). In practice, search a small grid and keep the lowest AIC, which is what <code>auto_arima</code> does.</p>
+      <p>Estimating MA terms needs the past errors, which depend on the coefficients. This page uses the Hannan–Rissanen trick: first fit a long AR model to get stand-in errors, then fit everything by least squares. Libraries maximise the exact Gaussian likelihood, which gives slightly different numbers.</p>
+      <div class="algo" data-anim="arima"><h5 class="algo-h">Algorithm: fitting and forecasting ARIMA (Hannan–Rissanen)</h5><ol>
+        <li><span class="kw">input</span> series \(y\), orders \((p,d,q)(P,D,Q)_m\), horizon \(h\)</li>
+        <li>\(w\leftarrow\) difference \(y\) \(d\) times, then seasonally \(D\) times</li>
+        <li>fit a long AR model to \(w\) by least squares; \(\hat\varepsilon_t\leftarrow\) its residuals</li>
+        <li>regress \(w_t\) on \(w_{t-1..p},\ w_{t-m..Pm},\ \hat\varepsilon_{t-1..q},\ \hat\varepsilon_{t-m..Qm}\) <span class="cm">least squares</span></li>
+        <li><span class="kw">for</span> \(j=1..h\): \(\hat w_{T+j}\leftarrow\) the fitted equation, with future \(\varepsilon=0\)</li>
+        <li>undo the differencing: add back \(y_{t-m}\) and \(y_{t-1}\) step by step</li>
+        <li><span class="kw">return</span> \(\hat y_{T+1..T+h}\) and AIC \(=T\log(\text{SSE}/T)+2k\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="gbdt" class="lab">
+  <div class="card hl">
+    <h2><span class="num">6</span>Gradient-boosted trees as forecasters</h2>
+    <p class="sub">Boosted trees (100 depth-3 trees) trained on lag features, then forecasting the two held-back years one step at a time, feeding each prediction back in as the next lag. Switch the target to see why trees need help with trends.</p>
+    <div class="plot wide" id="pB"></div>
+    <div class="seg" id="bTarget"><button data-v="level">Predict the level y<sub>t</sub></button><button data-v="diff" class="on">Predict the change y<sub>t</sub> − y<sub>t−12</sub></button></div>
+    <div class="stats" id="bStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Gradient-boosted trees (LightGBM, XGBoost, CatBoost; see <a href="../ensembles/">bagging and boosting</a>) won most of the large forecasting competitions of the last decade, such as the M5 retail competition (2020), mainly because they combine many related series and many features in one model. The recipe is the lag table from section 3:</p>
+      <ul><li>features at time \(t\): \(y_{t-1}, y_{t-2}, y_{t-3}, y_{t-12}\), the mean of the last 12 values and the month;</li><li>train any regressor on these rows;</li><li>forecast <b>recursively</b>: predict \(t+1\), put the prediction into the lag columns, predict \(t+2\), and so on (or train one model per horizon, the “direct” strategy).</li></ul>
+      <p>The trap: a tree predicts the average of a leaf, so it can never output a value larger than anything it saw in training. With a rising trend the level model flattens out at the old maximum. The cure is to model something stationary, here the change from a year ago, \(y_t-y_{t-12}\), and add it back afterwards. Detrending or differencing the target is the single most important step when using trees for forecasting.</p>
+      <div class="algo" data-anim="recursive"><h5 class="algo-h">Algorithm: recursive forecasting with lag features</h5><ol>
+        <li><span class="kw">input</span> training series, lags \(L=\{1,2,3,12\}\), a regressor \(f\), horizon \(h\)</li>
+        <li>build rows \((x_t,\ y_t)\) with \(x_t=(y_{t-\ell})_{\ell\in L}\), rolling mean, month</li>
+        <li>target \(z_t=y_t-y_{t-12}\) <span class="cm">stationary target, trees cannot extrapolate</span></li>
+        <li>train \(f\) on the rows</li>
+        <li><span class="kw">for</span> \(j=1..h\) <span class="kw">do</span></li>
+        <li class="i1">build \(x_{T+j}\) from the history plus the forecasts so far</li>
+        <li class="i1">\(\hat y_{T+j}\leftarrow f(x_{T+j})+y_{T+j-12}\); append it to the history</li>
+        <li><span class="kw">return</span> \(\hat y_{T+1..T+h}\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: global models and deep learning</summary><div>
+        <p>With thousands of related series (products, stores, sensors), one “global” model trained on all of them usually beats one model per series, because rare patterns are learned from many examples. Deep models (DeepAR, N-BEATS, temporal fusion transformers) and recent pretrained time-series foundation models (TimesFM, Chronos, Moirai) follow the same idea at larger scale. On a single short series, however, ETS and ARIMA remain very hard to beat, as the backtest below usually shows.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="backtest" class="lab">
+  <div class="card hl">
+    <h2><span class="num">7</span>Backtesting: which method wins on this series?</h2>
+    <p class="sub">Rolling-origin evaluation: each method is refitted at four cut-offs (years 7 to 10) and forecasts the next 12 months each time. Bars: mean absolute scaled error (MASE) per method; below 1 beats the seasonal-naive forecast “same month last year”.</p>
+    <div class="plot short" id="pBt"></div>
+    <div class="tblwrap"><table class="tbl" id="btTbl"></table></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>One train/test split gives one noisy number. A <a class="term" data-t="backtesting">backtest</a> repeats the forecast from several origins, as in section 2, and averages. Report errors on a scale that compares across series:</p>
+      <div class="mathbox c1">$$\text{MASE}=\frac{\tfrac1h\sum_{j=1}^{h}|y_{T+j}-\hat y_{T+j}|}{\tfrac{1}{T-m}\sum_{t=m+1}^{T}|y_t-y_{t-m}|}.$$</div>
+      <p>The denominator is the in-sample error of the seasonal-naive forecast, so <a class="term" data-t="mase">MASE</a> below 1 means “better than copying last year”. Unlike percentage errors (MAPE), it does not explode when values are near zero and it treats over- and under-forecasts alike.</p>
+      <p>Always include the naive baselines: on many real series, especially short or noisy ones, they are surprisingly hard to beat. Reshape the series in section 1: with no trend and high noise the simple methods catch up; with a strong trend, the tree on levels falls behind.</p>
+      <p>Beyond point forecasts, judge prediction intervals too: a 95% interval should contain about 95% of outcomes in the backtest (coverage), and narrower is better only when coverage holds. Quantile loss and CRPS score whole forecast distributions.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">8</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> pandas <span class="k">as</span> pd
+<span class="k">from</span> statsmodels.tsa.seasonal <span class="k">import</span> STL
+<span class="k">from</span> statsmodels.tsa.holtwinters <span class="k">import</span> ExponentialSmoothing
+<span class="k">from</span> statsmodels.tsa.statespace.sarimax <span class="k">import</span> SARIMAX
+y = pd.read_csv(<span class="s">"sales.csv"</span>, index_col=<span class="s">"month"</span>, parse_dates=<span class="k">True</span>)[<span class="s">"sales"</span>].asfreq(<span class="s">"MS"</span>)
+train, test = y[:<span class="s">-24</span>], y[<span class="s">-24</span>:]                                    <span class="c"># split by time, never at random</span>
+
+STL(train, period=<span class="s">12</span>).fit().plot()                                  <span class="c"># trend / season / remainder</span>
+hw  = ExponentialSmoothing(train, trend=<span class="s">"add"</span>, seasonal=<span class="s">"add"</span>, seasonal_periods=<span class="s">12</span>).fit()
+sar = SARIMAX(train, order=(<span class="s">0</span>,<span class="s">1</span>,<span class="s">1</span>), seasonal_order=(<span class="s">0</span>,<span class="s">1</span>,<span class="s">1</span>,<span class="s">12</span>)).fit(disp=<span class="k">False</span>)  <span class="c"># airline model</span>
+fc_hw, fc_sar = hw.forecast(<span class="s">24</span>), sar.get_forecast(<span class="s">24</span>).summary_frame()     <span class="c"># mean + intervals</span>
+
+<span class="c"># boosted trees on lag features, predicting the change from a year ago</span>
+<span class="k">import</span> lightgbm <span class="k">as</span> lgb
+df = pd.DataFrame({<span class="s">"y"</span>: y})
+<span class="k">for</span> L <span class="k">in</span> [<span class="s">1</span>, <span class="s">2</span>, <span class="s">3</span>, <span class="s">12</span>]: df[<span class="s">f"lag</span>{L}<span class="s">"</span>] = df.y.shift(L)
+df[<span class="s">"roll12"</span>] = df.y.shift(<span class="s">1</span>).rolling(<span class="s">12</span>).mean()                   <span class="c"># window ends at t-1</span>
+df[<span class="s">"month"</span>]  = df.index.month
+df[<span class="s">"target"</span>] = df.y - df.lag12
+<span class="k">from</span> sklearn.model_selection <span class="k">import</span> TimeSeriesSplit
+<span class="k">for</span> tr, va <span class="k">in</span> TimeSeriesSplit(n_splits=<span class="s">5</span>, test_size=<span class="s">12</span>).split(df.dropna()):  <span class="c"># expanding window</span>
+    ...</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">9</span>Sources and credits</h2>
+  <div class="prose">
+    <p>The series, demos and code on this page were written for this site. The structure, notation and much of the practical advice follow Rob Hyndman and George Athanasopoulos’s free textbook <a href="https://otexts.com/fpp3/" target="_blank" rel="noopener"><i>Forecasting: Principles and Practice</i></a> (3rd edition), the best introduction to the subject: in particular its treatment of classical decomposition, ETS, ARIMA, time-series cross-validation and MASE. The scikit-learn documentation of <code>TimeSeriesSplit</code> and its <a href="https://scikit-learn.org/stable/auto_examples/applications/plot_cyclical_feature_engineering.html" target="_blank" rel="noopener">time-related feature engineering example</a> informed section 3.</p>
+    <p>Original papers and books: Brown 1956 and Holt 1957 (exponential smoothing); Winters 1960 (seasonal smoothing); Box and Jenkins 1970 (<i>Time Series Analysis: Forecasting and Control</i>, ARIMA and the airline model); Hannan and Rissanen 1982 (estimating ARMA orders); Cleveland et al. 1990 (STL); Hyndman et al. 2002 (state-space ETS); Hyndman and Koehler 2006 (MASE); Makridakis, Spiliotis and Assimakopoulos 2022 (the M5 competition); Salinas et al. 2020 (DeepAR); Oreshkin et al. 2020 (N-BEATS).</p>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+ {"q":"Why does ordinary shuffled k-fold cross-validation give over-optimistic scores on a time series?","o":["It uses too few folds","The model is trained on data from after the validation points, so it interpolates instead of forecasting","Time series cannot be standardised","It ignores the target"],"a":1,"e":"In use, a forecaster only knows the past. Keep time order: expanding or sliding windows (TimeSeriesSplit)."},
+ {"q":"A 7-day rolling mean feature for day t should be computed from…","o":["Days t−3 to t+3","Days t−6 to t","Days t−7 to t−1 (the window ends before t)","The whole dataset"],"a":2,"e":"Including \\(y_t\\) itself leaks the target. The window must end at t−1, or earlier if the data arrive late."},
+ {"q":"Seasonal differencing \\(y_t-y_{t-12}\\) on monthly data removes…","o":["Noise","A seasonal pattern that repeats every 12 months (and a linear trend becomes a constant)","Outliers","The need for any model"],"a":1,"e":"It also turns a linear trend into a constant, which is why the airline model uses both a regular and a seasonal difference."},
+ {"q":"A gradient-boosted tree model trained on the level of a steadily rising series will, for the next two years, most likely…","o":["Extrapolate the trend perfectly","Flatten out near the highest value it saw in training","Predict zero","Oscillate wildly"],"a":1,"e":"Each tree leaf predicts an average of training targets, so predictions cannot exceed the training range. Model a stationary target (differences or detrended values) instead."},
+ {"q":"A MASE of 0.8 means…","o":["80% of forecasts are correct","The forecast errors are 80% of those of the seasonal-naive forecast","The model explains 80% of the variance","The MAPE is 0.8%"],"a":1,"e":"MASE scales the mean absolute error by the in-sample error of ‘same season last year’, so below 1 beats that baseline."}
+]</script>
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything runs in your browser. Next: <a href="../anomaly-detection/">Anomaly detection &rarr;</a></p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../dl/assets/evo.js"></script>
+<script>
+(function(){
+const {$} = ML;
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+if(window.EVO) EVO.render('#evoSlot','ts');
+const P=()=>ML.palette(), M=12, N=144, NT=120, H=24;
+let tr=12, se=18, no=5, ar=.5, Y=[];
+/* ---------- the series ---------- */
+function makeSeries(){ const r=ML.rng(17); let e=0; Y=[]; for(let t=0;t<N;t++){ e=ar*e+no*Math.sqrt(1-ar*ar)*r.gauss(); const m=t%M; Y.push(100+tr*t/12+se*(Math.sin(2*Math.PI*(m-2)/12)+.45*Math.sin(4*Math.PI*m/12))+e); } }
+const mean=a=>a.reduce((s,v)=>s+v,0)/a.length, mae=(a,b)=>mean(a.map((v,i)=>Math.abs(v-b[i])));
+/* small dense least squares with a little ridge */
+function lstsq(X, y, lam=1e-6){ const k=X[0].length, A=[...Array(k)].map(()=>new Array(k).fill(0)), b=new Array(k).fill(0);
+  X.forEach((x,i)=>{ for(let p=0;p<k;p++){ b[p]+=x[p]*y[i]; for(let q=0;q<k;q++) A[p][q]+=x[p]*x[q]; } }); for(let p=0;p<k;p++) A[p][p]+=lam;
+  const Mx=A.map((r,i)=>[...r,b[i]]); for(let c=0;c<k;c++){ let pv=c; for(let r=c+1;r<k;r++) if(Math.abs(Mx[r][c])>Math.abs(Mx[pv][c])) pv=r; [Mx[c],Mx[pv]]=[Mx[pv],Mx[c]]; const d=Mx[c][c]||1e-12; for(let r=0;r<k;r++) if(r!==c){ const f=Mx[r][c]/d; for(let q=c;q<=k;q++) Mx[r][q]-=f*Mx[c][q]; } }
+  return Mx.map((r,i)=>r[k]/(r[i]||1e-12)); }
+/* forecast-chart helper: whole series, fitted, forecast, band; shaded test region */
+function fcChart(plot, o){ const pal=P(), lo=Math.min(...Y, ...(o.lo||[Infinity]), ...(o.fc||[Infinity]))-5, hi=Math.max(...Y, ...(o.hi||[-Infinity]), ...(o.fc||[-Infinity]))+5;
+  const ser=[{pts:Y.slice(0,NT).map((v,t)=>[t,v]),color:pal.ink,width:1.6},{pts:Y.slice(NT-1).map((v,j)=>[NT-1+j,v]),color:pal.c4,width:2}];
+  if(o.fit) ser.push({pts:o.fit.map((v,t)=>[t,v]).filter(p=>p[1]!=null&&isFinite(p[1])),color:pal.c1,width:1.3});
+  if(o.fc) ser.push({pts:o.fc.map((v,j)=>[o.start+j,v]),color:pal.c1,width:2.6});
+  const fr=ML.chart(plot,ser,{x0:0,x1:N-1,y0:lo,y1:hi,xl:'month'}); if(!fr) return; const c=plot.ctx;
+  c.save(); c.fillStyle=pal.c4; c.globalAlpha=.07; c.fillRect(fr.fx(o.start||NT),12,fr.fx(N-1)-fr.fx(o.start||NT),plot.h-40); c.restore();
+  if(o.lo&&o.hi){ c.save(); c.fillStyle=pal.c1; c.globalAlpha=.15; c.beginPath(); o.lo.forEach((v,j)=>{ const X=fr.fx(o.start+j), Yp=fr.fy(v); j?c.lineTo(X,Yp):c.moveTo(X,Yp); }); for(let j=o.hi.length-1;j>=0;j--) c.lineTo(fr.fx(o.start+j),fr.fy(o.hi[j])); c.closePath(); c.fill(); c.restore(); }
+  return fr; }
+
+/* ---------- 1 · decomposition ---------- */
+const pS=new ML.Plot('#pS',{equal:false}), pDc=new ML.Plot('#pDc',{equal:false});
+function decomp(y){ const n=y.length, T=new Array(n).fill(null); for(let t=6;t<n-6;t++){ let s=(y[t-6]+y[t+6])/24; for(let j=-5;j<=5;j++) s+=y[t+j]/12; T[t]=s; }
+  const S=new Array(M).fill(0), C=new Array(M).fill(0); for(let t=0;t<n;t++) if(T[t]!=null){ S[t%M]+=y[t]-T[t]; C[t%M]++; } const Sm=S.map((v,i)=>v/C[i]), adj=mean(Sm), Sx=Sm.map(v=>v-adj);
+  return {T, S:Sx, R:y.map((v,t)=>T[t]==null? null : v-T[t]-Sx[t%M])}; }
+function drawS(){ const pal=P(), D=decomp(Y.slice(0,NT)); const fr=ML.chart(pS,[{pts:Y.map((v,t)=>[t,v]),color:pal.ink,width:1.6},{pts:D.T.map((v,t)=>[t,v]).filter(p=>p[1]!=null),color:pal.c1,width:2.8}],{x0:0,x1:N-1,xl:'month'});
+  if(fr){ const c=pS.ctx; c.save(); c.fillStyle=pal.c4; c.globalAlpha=.08; c.fillRect(fr.fx(NT),12,fr.fx(N-1)-fr.fx(NT),pS.h-40); c.restore(); }
+  const rr=D.R.filter(v=>v!=null), lim=Math.max(...D.S.map(Math.abs),...rr.map(Math.abs))*1.1||1;
+  const f2=ML.chart(pDc,[{pts:D.R.map((v,t)=>[t,v]).filter(p=>p[1]!=null),color:pal.c3,width:1.4}],{x0:0,x1:NT-1,y0:-lim,y1:lim,xl:'remainder (line) · seasonal index by month (bars, left)'});
+  if(f2){ const c=pDc.ctx, w=(f2.fx(NT-1)-f2.fx(0))/40; c.save(); D.S.forEach((v,m)=>{ c.fillStyle=v>=0?pal.c1:pal.c2; c.globalAlpha=.75; const X=f2.fx(0)+4+m*w*1.15; c.fillRect(X,Math.min(f2.fy(v),f2.fy(0)),w,Math.abs(f2.fy(v)-f2.fy(0))); }); c.restore(); }
+  const vR=mean(rr.map(v=>v*v)), vS=mean(D.S.map(v=>v*v)), detr=Y.slice(6,NT-6).map((v,i)=>v-D.T[i+6]); const Fs=Math.max(0,1-vR/(mean(detr.map(v=>v*v))||1));
+  $('#sStats').innerHTML=stat('c1',(D.T[NT-7]-D.T[6]>0?'+':'')+((D.T[NT-7]-D.T[6])/((NT-13)/12)).toFixed(1),'trend per year (estimated)')+stat('c4',Math.sqrt(vS).toFixed(1),'seasonal size (RMS)')+stat('c3',Math.sqrt(vR).toFixed(1),'remainder size (RMS)')+stat('c5',Fs.toFixed(2),'strength of season'); }
+
+/* ---------- 2 · honest splits ---------- */
+const pF=new ML.Plot('#pF',{equal:false}); let scheme='random';
+const feats=t=>[t/12, Math.sin(2*Math.PI*(t%M)/M)*1.5, Math.cos(2*Math.PI*(t%M)/M)*1.5];
+const knn=(trIdx, t, k=3)=>{ const f=feats(t); return mean(trIdx.map(i=>[i,feats(i).reduce((s,v,j)=>s+(v-f[j])**2,0)]).sort((a,b)=>a[1]-b[1]).slice(0,k).map(p=>Y[p[0]])); };
+function folds(s){ const out=[]; if(s==='random'){ const idx=ML.rng(3).shuffle([...Array(NT).keys()]); for(let f=0;f<5;f++){ const va=new Set(idx.filter((_,i)=>i%5===f)); out.push({tr:[...Array(NT).keys()].filter(i=>!va.has(i)), va:[...va]}); } }
+  else for(let f=0;f<5;f++){ const cut=60+f*12; out.push({tr:[...Array(cut).keys()].filter(i=>s==='time'||i>=cut-48), va:[...Array(12).keys()].map(j=>cut+j)}); } return out; }
+function cvErr(s){ const F=folds(s); return mean(F.map(f=>mae(f.va.map(t=>knn(f.tr,t)), f.va.map(t=>Y[t])))); }
+function drawF(){ const pal=P(), F=folds(scheme); pF.clear(); const c=pF.ctx, L=70, R=12, T=16, rowH=(pF.h-T-30)/5, cw=(pF.w-L-R)/N;
+  c.save(); c.font='12px Inter,system-ui'; c.fillStyle=pal.muted; F.forEach((f,i)=>{ const y=T+i*rowH, tr=new Set(f.tr), va=new Set(f.va); c.fillText('fold '+(i+1),8,y+rowH*.6);
+    for(let t=0;t<N;t++){ c.fillStyle= t>=NT? pal.line : va.has(t)? pal.c4 : tr.has(t)? pal.c1 : pal.line; c.globalAlpha= t>=NT? .5 : 1; c.fillRect(L+t*cw+.5,y+2,Math.max(1,cw-1),rowH-6); } c.globalAlpha=1; });
+  c.fillStyle=pal.muted; c.fillText('held-back future (last 2 years) →',L+NT*cw-200,pF.h-8); c.restore();
+  const eR=cvErr('random'), eT=cvErr('time'), eS=cvErr('sliding'), eF=mae([...Array(H).keys()].map(j=>knn([...Array(NT).keys()],NT+j)), Y.slice(NT));
+  $('#fStats').innerHTML=stat('c2',eR.toFixed(1),'random 5-fold MAE')+stat('c1',(scheme==='sliding'?eS:eT).toFixed(1),(scheme==='sliding'?'sliding':'expanding')+'-window MAE')+stat('c4',eF.toFixed(1),'MAE on the real future'); }
+ML.bindSeg('fScheme', v=>{ scheme=v; drawF(); });
+
+/* ---------- 3 · ACF and lag table ---------- */
+const pA=new ML.Plot('#pA',{equal:false}); let aTr='raw';
+const diff=(y,l)=>y.slice(l).map((v,i)=>v-y[i]);
+function acf(y,K){ const m=mean(y), d=y.reduce((s,v)=>s+(v-m)**2,0); return [...Array(K)].map((_,k)=>{ let s=0; for(let t=0;t+k+1<y.length;t++) s+=(y[t]-m)*(y[t+k+1]-m); return s/d; }); }
+function drawA(){ const pal=P(); let y=Y.slice(0,NT); if(aTr==='d1'||aTr==='both') y=diff(y,1); if(aTr==='d12'||aTr==='both') y=diff(y,12); const r=acf(y,36), band=1.96/Math.sqrt(y.length);
+  const fr=ML.chart(pA,[{pts:[[0,band],[37,band]],color:pal.muted,dash:[5,4],width:1},{pts:[[0,-band],[37,-band]],color:pal.muted,dash:[5,4],width:1}],{x0:0,x1:37,y0:-1,y1:1,xl:'lag k'});
+  const c=pA.ctx; c.save(); r.forEach((v,k)=>{ c.fillStyle=(k+1)%12===0? pal.c4 : pal.c1; c.globalAlpha=Math.abs(v)>band? .9 : .35; const X=fr.fx(k+1); c.fillRect(X-3,Math.min(fr.fy(v),fr.fy(0)),6,Math.abs(fr.fy(v)-fr.fy(0))); }); c.restore();
+  const rows=[...Array(6).keys()].map(j=>NT-6+j), f=t=>Y[t].toFixed(1);
+  $('#lagTbl').innerHTML='<tr><th>t</th><th>month</th><th>target y<sub>t</sub></th><th>y<sub>t−1</sub></th><th>y<sub>t−2</sub></th><th>y<sub>t−12</sub></th><th>mean(y<sub>t−3..t−1</sub>)</th></tr>'+rows.map(t=>`<tr><td>${t+1}</td><td>${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][t%12]}</td><td><b>${f(t)}</b></td><td>${f(t-1)}</td><td>${f(t-2)}</td><td>${f(t-12)}</td><td>${mean([Y[t-1],Y[t-2],Y[t-3]]).toFixed(1)}</td></tr>`).join(''); }
+ML.bindSeg('aTr', v=>{ aTr=v; drawA(); });
+
+/* ---------- 4 · exponential smoothing ---------- */
+const pE=new ML.Plot('#pE',{equal:false}); let eM='hw', eA=.3, eB=.05, eG=.2;
+function ets(y, a, b, g, model, h){ const useT=model!=='ses', useS=model==='hw'; let l=mean(y.slice(0,M)), bb=useT? (mean(y.slice(M,2*M))-mean(y.slice(0,M)))/M : 0; const s=useS? y.slice(0,M).map(v=>v-l) : new Array(M).fill(0);
+  const fit=new Array(y.length).fill(null); let sse=0, cnt=0;
+  for(let t=0;t<y.length;t++){ const st=s[t%M], yh=l+bb+st; if(t>=M){ fit[t]=yh; sse+=(y[t]-yh)**2; cnt++; }
+    const l0=l; l=a*(y[t]-st)+(1-a)*(l+bb); if(useT) bb=b*(l-l0)+(1-b)*bb; if(useS) s[t%M]=g*(y[t]-l)+(1-g)*st; }
+  const fc=[...Array(h).keys()].map(j=>l+(j+1)*bb+s[(y.length+j)%M]); return {fit, fc, sse, sd:Math.sqrt(sse/Math.max(1,cnt))}; }
+function drawE(){ const r=ets(Y.slice(0,NT),eA,eB,eG,eM,H), z=1.96; const lo=r.fc.map((v,j)=>v-z*r.sd*Math.sqrt(1+j*eA*eA)), hi=r.fc.map((v,j)=>v+z*r.sd*Math.sqrt(1+j*eA*eA));
+  fcChart(pE,{fit:r.fit, fc:r.fc, start:NT, lo, hi}); const sn=mae(Y.slice(M,NT),Y.slice(0,NT-M)), m=mae(r.fc,Y.slice(NT)); const inside=Y.slice(NT).filter((v,j)=>v>=lo[j]&&v<=hi[j]).length;
+  $('#eStats').innerHTML=stat('c1',m.toFixed(1),'forecast MAE (2 years)')+stat('c5',(m/sn).toFixed(2),'MASE')+stat('c3',r.sd.toFixed(1),'one-step error SD')+stat('c4',inside+' / '+H,'actual values inside the band'); }
+function optE(){ let best=null; for(let a=.05;a<=1.001;a+=.05) for(let b=0;b<=(eM==='ses'?0:.5);b+=.05) for(let g=0;g<=(eM==='hw'?.8:0);g+=.05){ const s=ets(Y.slice(0,NT),a,b,g,eM,0).sse; if(!best||s<best[0]) best=[s,a,b,g]; }
+  [['eA',best[1]],['eB',best[2]],['eG',best[3]]].forEach(([id,v])=>{ const el=$('#'+id); el.value=v; $('#'+id+'Out').textContent=(+v).toFixed(2); }); eA=+$('#eA').value; eB=+$('#eB').value; eG=+$('#eG').value; $('#ePos').textContent='lowest one-step squared error on the training years'; drawE(); }
+ML.bindSeg('eModel', v=>{ eM=v; drawE(); }); $('#eOpt').addEventListener('click',optE);
+ML.bindRange('eA',v=>{eA=v;drawE();},v=>v.toFixed(2)); ML.bindRange('eB',v=>{eB=v;drawE();},v=>v.toFixed(2)); ML.bindRange('eG',v=>{eG=v;drawE();},v=>v.toFixed(2));
+
+/* ---------- 5 · ARIMA (Hannan–Rissanen) ---------- */
+const pR=new ML.Plot('#pR',{equal:false}); const ord={p:0,d:1,q:1,P:0,D:1,Q:1};
+function arima(y, o, h){ let z=y.slice(); for(let i=0;i<o.d;i++) z=diff(z,1); let w=z.slice(); if(o.D) w=diff(w,M); const nw=w.length;
+  const mL=Math.min(24, Math.floor(nw/3)), e=new Array(nw).fill(0);
+  if(o.q||o.Q){ const X=[], t=[]; for(let i=mL;i<nw;i++){ X.push([1,...[...Array(mL)].map((_,j)=>w[i-j-1])]); t.push(w[i]); } const b=lstsq(X,t,1e-3); for(let i=mL;i<nw;i++) e[i]=w[i]-b[0]-b.slice(1).reduce((s,v,j)=>s+v*w[i-j-1],0); }
+  const lagsW=[...Array(o.p).keys()].map(j=>j+1).concat(o.P?[M]:[]), lagsE=[...Array(o.q).keys()].map(j=>j+1).concat(o.Q?[M]:[]), start=Math.max(o.q||o.Q? mL : 0, ...lagsW, ...lagsE.map(l=>l+(o.q||o.Q?mL:0)), 0);
+  const row=(W,E,i)=>[1,...lagsW.map(l=>W[i-l]),...lagsE.map(l=>E[i-l])]; const X=[], t=[]; for(let i=start;i<nw;i++){ X.push(row(w,e,i)); t.push(w[i]); }
+  const beta=lstsq(X,t,1e-6); const res=t.map((v,i)=>v-X[i].reduce((s,x,j)=>s+x*beta[j],0)); const sse=res.reduce((s,v)=>s+v*v,0), k=beta.length, aic=t.length*Math.log(sse/t.length)+2*k;
+  const E=e.slice(); for(let i=start;i<nw;i++) E[i]=res[i-start];
+  const W=w.slice(); for(let j=0;j<h;j++){ const i=W.length; E.push(0); W.push(row(W,E,i).reduce((s,x,q)=>s+x*beta[q],0)); }
+  /* undo differencing */
+  const Z=z.slice(); for(let j=0;j<h;j++){ const i=z.length+j; Z.push(o.D? W[nw+j]+Z[i-M] : W[nw+j]); }
+  const Yh=y.slice(); for(let j=0;j<h;j++){ const i=y.length+j; Yh.push(o.d? Z[z.length+j]+Yh[i-1] : Z[z.length+j]); }
+  return {fc:Yh.slice(y.length), aic, beta, sd:Math.sqrt(sse/t.length), k}; }
+function drawR(){ const r=arima(Y.slice(0,NT),ord,H); fcChart(pR,{fc:r.fc,start:NT}); const sn=mae(Y.slice(M,NT),Y.slice(0,NT-M)), m=mae(r.fc,Y.slice(NT));
+  $('#rStats').innerHTML=stat('c1',`(${ord.p},${ord.d},${ord.q})(${ord.P},${ord.D},${ord.Q})₁₂`,'model')+stat('c3',r.aic.toFixed(1),'AIC')+stat('c4',m.toFixed(1),'forecast MAE')+stat('c5',(m/sn).toFixed(2),'MASE'); }
+['p','d','q','P','D','Q'].forEach(k=>ML.bindRange('r'+k, v=>{ ord[k]=v; drawR(); }));
+
+/* ---------- 6 · boosted trees ---------- */
+const pB=new ML.Plot('#pB',{equal:false}); let bT='diff';
+function featRow(h, t){ return [h[t-1], h[t-2], h[t-3], h[t-12], mean(h.slice(t-12,t)), t%M]; }
+function tpred(nd,x){ while(nd.v===undefined) nd = x[nd.f]<nd.s? nd.l : nd.r; return nd.v; }
+function gbm(X, y, rounds=100, lr=.1){ const base=mean(y), F=y.map(()=>base), T=[]; for(let r=0;r<rounds;r++){ const g=y.map((v,i)=>v-F[i]), tr=(function build(){ let d=3; const t=(function mk(idx,dep){ const v=mean(idx.map(i=>g[i])); if(dep<=0||idx.length<10) return {v}; let best=null;
+      for(let f=0;f<X[0].length;f++){ const s=idx.slice().sort((a,b)=>X[a][f]-X[b][f]); let sl=0; const tot=s.reduce((a,i)=>a+g[i],0); for(let k=0;k<s.length-1;k++){ sl+=g[s[k]]; const nl=k+1; if(nl<5||s.length-nl<5||X[s[k]][f]===X[s[k+1]][f]) continue; const gain=sl*sl/nl+(tot-sl)**2/(s.length-nl); if(!best||gain>best[0]) best=[gain,f,(X[s[k]][f]+X[s[k+1]][f])/2]; } }
+      if(!best) return {v}; return {f:best[1], s:best[2], l:mk(idx.filter(i=>X[i][best[1]]<best[2]),dep-1), r:mk(idx.filter(i=>X[i][best[1]]>=best[2]),dep-1)}; })([...Array(X.length).keys()],d); return t; })();
+    T.push(tr); X.forEach((x,i)=>{ F[i]+=lr*tpred(tr,x); }); }
+  return x=>base+lr*T.reduce((s,t)=>s+tpred(t,x),0); }
+function gbFore(y, target, h){ const X=[], t=[]; for(let i=12;i<y.length;i++){ X.push(featRow(y,i)); t.push(target==='diff'? y[i]-y[i-12] : y[i]); } const f=gbm(X,t); const hist=y.slice();
+  for(let j=0;j<h;j++){ const i=hist.length, p=f(featRow(hist,i)); hist.push(target==='diff'? p+hist[i-12] : p); } return {fc:hist.slice(y.length), maxTrain:Math.max(...y)}; }
+let gbCache={};
+function drawB(){ const key=bT+'|'+tr+'|'+se+'|'+no+'|'+ar; if(!gbCache[key]) gbCache={[key]:gbFore(Y.slice(0,NT),bT,H)}; const r=gbCache[key], pal=P(); const fr=fcChart(pB,{fc:r.fc,start:NT});
+  if(fr){ const c=pB.ctx; c.save(); c.strokeStyle=pal.c2; c.setLineDash([4,4]); c.beginPath(); c.moveTo(fr.fx(0),fr.fy(r.maxTrain)); c.lineTo(fr.fx(N-1),fr.fy(r.maxTrain)); c.stroke(); c.fillStyle=pal.c2; c.font='12px Inter,system-ui'; c.fillText('highest value in training',fr.fx(2),fr.fy(r.maxTrain)-5); c.restore(); }
+  const sn=mae(Y.slice(M,NT),Y.slice(0,NT-M)), m=mae(r.fc,Y.slice(NT)); $('#bStats').innerHTML=stat('c1',m.toFixed(1),'forecast MAE')+stat('c5',(m/sn).toFixed(2),'MASE')+stat('c4',Math.max(...r.fc).toFixed(1),'largest forecast')+stat('c2',r.maxTrain.toFixed(1),'largest training value'); }
+ML.bindSeg('bTarget', v=>{ bT=v; drawB(); });
+
+/* ---------- 7 · backtest ---------- */
+const pBt=new ML.Plot('#pBt',{equal:false}); let btKey='';
+function backtest(){ const methods=[['Seasonal naive',y=>[...Array(12).keys()].map(j=>y[y.length-12+j])],['Last year + yearly change',y=>{ const d=mean(y.slice(-12))-mean(y.slice(-24,-12)); return [...Array(12).keys()].map(j=>y[y.length-12+j]+d); }],
+    ['Holt–Winters',y=>{ let best=null; for(let a=.1;a<=1;a+=.15) for(let b=0;b<=.3;b+=.1) for(let g=0;g<=.6;g+=.15){ const s=ets(y,a,b,g,'hw',0).sse; if(!best||s<best[0]) best=[s,a,b,g]; } return ets(y,best[1],best[2],best[3],'hw',12).fc; }],
+    ['SARIMA (0,1,1)(0,1,1)',y=>arima(y,{p:0,d:1,q:1,P:0,D:1,Q:1},12).fc],['Trees on levels',y=>gbFore(y,'level',12).fc],['Trees on yearly change',y=>gbFore(y,'diff',12).fc]];
+  const cuts=[84,96,108,120]; return methods.map(([name,f])=>{ const ms=cuts.map(c=>{ const y=Y.slice(0,c), fc=f(y), sn=mae(y.slice(M),y.slice(0,c-M)); return mae(fc,Y.slice(c,c+12))/sn; }); return {name, ms, mean:mean(ms)}; }); }
+function drawBt(){ const key=[tr,se,no,ar].join('|'); if(key!==btKey){ pBt._r=backtest(); btKey=key; } const R=pBt._r, pal=P(), mx=Math.max(1.2,...R.map(r=>r.mean))*1.1; pBt.clear(); const c=pBt.ctx, L=170, Rm=50, T=10, bh=(pBt.h-T-24)/R.length;
+  c.save(); c.font='12.5px Inter,system-ui'; R.forEach((r,i)=>{ const y=T+i*bh, w=(pBt.w-L-Rm)*r.mean/mx; c.fillStyle=pal.ink; c.textAlign='right'; c.fillText(r.name,L-8,y+bh*.62); c.fillStyle=r.mean<1? pal.c5 : pal.c2; c.globalAlpha=.8; c.fillRect(L,y+4,w,bh-8); c.globalAlpha=1; c.textAlign='left'; c.fillStyle=pal.ink; c.fillText(r.mean.toFixed(2),L+w+6,y+bh*.62); });
+  const x1=L+(pBt.w-L-Rm)/mx; c.strokeStyle=pal.ink; c.setLineDash([4,4]); c.beginPath(); c.moveTo(x1,T); c.lineTo(x1,pBt.h-20); c.stroke(); c.setLineDash([]); c.fillStyle=pal.muted; c.textAlign='center'; c.fillText('MASE = 1',x1,pBt.h-6); c.restore();
+  $('#btTbl').innerHTML='<tr><th>Method</th><th>cut-off yr 7</th><th>yr 8</th><th>yr 9</th><th>yr 10</th><th>mean</th></tr>'+R.map(r=>`<tr><td>${r.name}</td>${r.ms.map(v=>`<td>${v.toFixed(2)}</td>`).join('')}<td><b>${r.mean.toFixed(2)}</b></td></tr>`).join(''); }
+
+/* ---------- wiring ---------- */
+let pend=0; function all(){ makeSeries(); gbCache={}; drawS(); drawF(); drawA(); drawE(); drawR(); drawB(); clearTimeout(pend); pend=setTimeout(drawBt,120); }
+ML.bindRange('sTr',v=>{tr=v;all();}); ML.bindRange('sSe',v=>{se=v;all();}); ML.bindRange('sNo',v=>{no=v;all();},v=>v.toFixed(1)); ML.bindRange('sAr',v=>{ar=v;all();},v=>v.toFixed(2));
+all();
+pS.onResize=pDc.onResize=()=>drawS(); pF.onResize=()=>drawF(); pA.onResize=()=>drawA(); pE.onResize=()=>drawE(); pR.onResize=()=>drawR(); pB.onResize=()=>drawB(); pBt.onResize=()=>{ if(pBt._r) drawBt(); };
+ML.onTheme && ML.onTheme(()=>{ drawS(); drawF(); drawA(); drawE(); drawR(); drawB(); drawBt(); });
+})();
+</script>
+<script>ML.nav('time-series'); ML.renderMath(document.body);</script>
+</body>
+</html>

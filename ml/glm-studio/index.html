@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GLM Pricing Studio</title>
+<meta name="description" content="Build an insurance pricing GLM in your browser: exposure offsets, weights, Poisson, gamma, Tweedie and negative binomial models, base levels, banding, interactions, relativities with confidence intervals, one-way and consistency charts, lift, double lift and Gini, then export the statsmodels code.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/ml.css">
+<link rel="stylesheet" href="../playground/pg.css">
+<link rel="stylesheet" href="studio.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+<script defer src="../assets/core.js"></script>
+<script defer src="../playground/sheet.js"></script>
+<script defer src="../assets/glm.js"></script>
+<script defer src="../assets/motor.js"></script>
+<script defer src="../assets/insurance.js"></script>
+<script defer src="studio.js"></script>
+<script defer src="../playground/carousel.js"></script>
+<script defer src="studio-tabs.js"></script>
+<script defer src="studio-views.js"></script>
+<script defer src="../playground/wfdock.js"></script>
+<script defer src="studio-code.js"></script>
+<script defer src="../playground/explain.js"></script>
+<script defer src="studio-explain.js"></script>
+<script defer src="studio-actuarial.js"></script>
+<script defer src="studio-predict.js"></script>
+<script defer src="../playground/shell.js"></script>
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../">&larr; Home</a><span class="sect">Play</span><nav class="algnav playnav" aria-label="Play"><a href="../playground/">ML Playground</a><a class="on" href="./" aria-current="page">GLM pricing</a><a href="../reserving/">Reserving</a><a href="../../word2vec/">Word2vec</a><a href="../../dl/lab/">DL lab</a><a href="../../learn/">Learn ML &rarr;</a></nav></div></header>
+
+<main class="wrap">
+<section class="pg-hero">
+  <div class="hero-l"><h1><span class="grad">GLM Pricing Studio</span></h1><div class="viewseg" role="group" aria-label="View"><button type="button" data-view="tabs" class="on">Tabs</button><button type="button" data-view="flow">Workflow</button><button type="button" data-view="stat">Statistical</button></div></div>
+  <div class="status" id="status"></div>
+</section>
+
+<div class="tabbar"><nav class="tabs wrap" id="tabs" role="tablist">
+  <button class="tab on" data-tab="data" role="tab"><span class="n">1</span><span>Data<span class="sub" data-sub="data">portfolio</span></span></button>
+  <button class="tab" data-tab="explore" role="tab"><span class="n">2</span><span>One-way analysis<span class="sub" data-sub="explore">by factor</span></span></button>
+  <button class="tab" data-tab="model" role="tab"><span class="n">3</span><span>Model<span class="sub" data-sub="model">family, factors</span></span></button>
+  <button class="tab" data-tab="results" role="tab"><span class="n">4</span><span>Relativities<span class="sub" data-sub="results">coefficients</span></span></button>
+  <button class="tab" data-tab="validate" role="tab"><span class="n">5</span><span>Validation<span class="sub" data-sub="validate">lift, Gini</span></span></button>
+  <button class="tab" data-tab="predict" role="tab"><span class="n">6</span><span>Predict<span class="sub" data-sub="predict">price a policy</span></span></button>
+  <button class="tab" data-tab="compare" role="tab"><span class="n">7</span><span>Compare &amp; export<span class="sub" data-sub="compare">models, code</span></span></button>
+</nav></div>
+
+<section class="pane on" id="pane-data"></section>
+<section class="pane" id="pane-explore"></section>
+<section class="pane" id="pane-model"></section>
+<section class="pane" id="pane-results"></section>
+<section class="pane" id="pane-validate"></section>
+<section class="pane" id="pane-predict"></section>
+<section class="pane" id="pane-compare"></section>
+<section class="wf" id="wf" aria-label="Workflow"></section>
+<section class="stv" id="stv" aria-label="Statistical view"></section>
+
+<p class="footnote">The GLM engine is written from scratch in JavaScript (IRLS) and checked against statsmodels to 1e-9. The sample portfolio is synthetic, generated with known true relativities so you can see how well each model recovers them.</p>
+</main>
+
+<div class="drawer-bg" id="drawerBg"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="Code">
+  <div class="drawer-h"><div style="flex:1;min-width:0"><h3 id="drawerTitle">Code</h3><p id="drawerSub"></p></div>
+    <button class="btn sm" id="drawerCopy">Copy</button><button class="btn sm" id="drawerDl">Download</button><button class="drawer-close" id="drawerX" aria-label="Close the code panel" title="Close (Esc)"><span aria-hidden="true">&times;</span> Close</button></div>
+  <div class="seg" id="drawerSeg"><button data-v="py" class="on">Python · statsmodels</button><button data-v="js">JavaScript · runs on this page</button></div>
+  <pre><code id="drawerCode"></code></pre>
+</aside>
+<div class="toast" id="toast"></div>
+<dialog class="help" id="help" aria-labelledby="helpT">
+  <div class="help-h"><h2 id="helpT">How to build a pricing GLM here</h2><button class="x" id="helpX" aria-label="Close">&times;</button></div>
+  <div class="help-b">
+    <p class="help-lede">A pricing GLM predicts the expected cost of a policy as a base rate times one multiplier (relativity) per rating factor. Work left to right; nothing leaves your browser, and every panel has a <b>&lt;/&gt; Code</b> button with the matching statsmodels code.</p>
+    <ol class="help-steps">
+      <li><b>Data.</b> Use the sample motor portfolio or upload a policy-level CSV. Say which columns hold <b>exposure</b> (years on risk), <b>claim counts</b> and <b>claim amounts</b>, and what you are modelling: frequency, severity or pure premium. <button class="btn sm" data-help-go="data">Open</button></li>
+      <li><b>One-way analysis.</b> Look at each factor on its own: exposure by level and the observed frequency or cost. One-way views mislead when factors are correlated (young drivers also have no no-claims discount), which is why we fit a GLM. <button class="btn sm" data-help-go="explore">Open</button></li>
+      <li><b>Model.</b> Pick the family (Poisson for counts, gamma for severity, Tweedie for pure premium), keep the log link so effects multiply, let log(exposure) be the offset and the right column the weight. Choose rating factors, their base levels, bands and merges, and any interactions. <button class="btn sm" data-help-go="model">Open</button></li>
+      <li><b>Relativities.</b> Read each factor's multipliers with their confidence intervals, next to the one-way observed values and (for the sample) the true values. Drop or merge levels whose intervals overlap 1. <button class="btn sm" data-help-go="results">Open</button></li>
+      <li><b>Validate.</b> Check on held-out data: lift chart, Gini, actual versus expected by factor and consistency over the years. <button class="btn sm" data-help-go="validate">Open</button></li>
+      <li><b>Predict.</b> Type or change any detail of a policy and watch its price build up from the base rate, one relativity at a time, with a 95% interval. Load any row, compare every saved model on the same policy, or upload a CSV and download it scored. <button class="btn sm" data-help-go="predict">Open</button></li>
+      <li><b>Compare and export.</b> Save models, compare their AIC and test Gini, run a double lift, combine frequency × severity, and export the Python code and the rating table. <button class="btn sm" data-help-go="compare">Open</button></li>
+    </ol>
+    <h3>Basic and Advanced</h3>
+    <p>The <b>Basic / Advanced</b> switch at the top keeps the everyday workflow uncluttered. <b>Basic</b> shows what every pricing model needs: the fit, relativities, the relativity override, the monograph’s validation charts, prediction and export. <b>Advanced</b> adds the niche checks, each marked with a purple <span class="advb">Advanced</span> tag: fit statistics and both dispersion estimates, collinearity (VIF / GVIF), thin-level warnings with one-click merges, piecewise-linear (hinge) factors, locking a whole factor to an outside table, binned working residuals, partial residual plots, leverage and Cook’s distance, k-fold cross-validation, the nested-model F-test and an add-one factor search. The choice is remembered on this device.</p>
+    <h3>Change a relativity and see what moves</h3>
+    <p>On the <b>Relativities</b> tab, pick a factor and a level and drag <b>New relativity</b> (or type it, or press Fitted / One-way / 1 / True). Two ways to respond:</p>
+    <ul class="help-tips">
+      <li><b>Refit the others (offset).</b> The level is <i>locked</i>: its rows get log(new relativity) added to the offset and its own coefficient is removed, then the GLM is refitted. Every other coefficient re-estimates around your number. While you drag, the chart shows an instant estimate from the fit’s covariance matrix, Δβ<sub>others</sub> ≈ Σ<sub>oj</sub> / Σ<sub>jj</sub> · Δβ<sub>j</sub>; when you let go the exact refit replaces it.</li>
+      <li><b>Rebalance the base rate only.</b> Nothing else moves except the base rate, which is scaled so the total expected on the training data is unchanged (an off-balance correction). This is what happens when a rating table is edited by hand.</li>
+      <li><b>Reading it.</b> Bars are the % change in every other relativity, largest first. Factors correlated with the one you changed move most, because they were sharing its effect. <b>Cost in fit</b> is the rise in deviance with its χ² test: a small p-value means the data disagree with your override.</li>
+      <li><b>Keep this change in the model</b> stores the lock (shown as a chip; × removes it) and refits, so the rating table, validation, prediction and exported Python all use it. In Advanced you can lock a whole factor to an outside table, as the monograph does with deductible factors.</li>
+    </ul>
+    <h3>The monograph’s validation charts</h3>
+    <ul class="help-tips">
+      <li><b>Actual versus predicted</b>: 50 equal-exposure buckets on log scales; points should follow the 45° line.</li>
+      <li><b>Simple quantile plot</b>: judged on accuracy, monotonicity and vertical distance (the lift).</li>
+      <li><b>Double lift against the current premium</b> and the <b>loss ratio chart</b>: sort by model ÷ current premium. They need a current-premium column (the sample has one from an older, cruder tariff; pick yours on the Data tab).</li>
+      <li><b>Lorenz curve and Gini</b> for the model and the current premium; <b>ROC / AUROC</b> for claim / no-claim models.</li>
+      <li><b>Checks against the monograph</b> (Compare &amp; export tab) recompute its worked examples and stated properties with this page’s engine.</li>
+    </ul>
+    <h3>Source</h3>
+    <p class="help-lede">The actuarial requirements, checks and charts follow <b>Goldburd, Khare and Tevet, <i>Generalized Linear Models for Insurance Rating</i>, CAS Monograph No. 5</b> (Casualty Actuarial Society; <a href="https://www.casact.org/sites/default/files/2021-01/05-Goldburd-Khare-Tevet.pdf" target="_blank" rel="noopener">PDF</a>). Section numbers beside each panel point to it. The code is written from scratch and checked against statsmodels; the data are synthetic.</p>
+    <h3>Rules of thumb</h3>
+    <ul class="help-tips">
+      <li><b>Base level = the level with the most exposure.</b> Its relativity is 1 and every other level is measured against it, so the standard errors stay small.</li>
+      <li><b>Frequency: weight 1, offset log(exposure).</b> Severity: weight = claim count, no offset. Pure premium (Tweedie): weight = exposure, response = cost per year of exposure.</li>
+      <li><b>Over-dispersion</b> (Pearson χ²/df well above 1 in a Poisson model) leaves the relativities unbiased but makes the standard errors too small: switch to quasi-Poisson or negative binomial.</li>
+      <li><b>Cap large losses</b> before modelling severity, and load the excess back separately.</li>
+      <li><b>The Statistical view</b> (switch at the top) shows the fitted model as equations: distribution, link, the linear predictor with your numbers, the IRLS weights and the likelihood.</li>
+    </ul>
+  </div>
+</dialog>
+</body>
+</html>

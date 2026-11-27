@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hyperparameter optimisation explained interactively: grid search, random search, Bayesian optimisation, Optuna and nested cross-validation</title>
+<meta name="description" content="How to choose the settings a model cannot learn for itself: validation curves, why random search beats grid search, Gaussian-process Bayesian optimisation with expected improvement, Optuna’s TPE sampler and pruning with successive halving, and nested cross-validation for an honest final score.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Evaluating &amp; tuning models</p>
+  <h1>Hyperparameter optimisation: <span class="grad">tuning without fooling yourself</span></h1>
+  <p class="lede">Every model has knobs it cannot learn from the data: the depth of a tree, the strength of a penalty, the learning rate of a network. Choosing them is itself a search, with a budget and a risk of overfitting the validation set. This page compares the ways to search, from a plain grid to Bayesian optimisation and Optuna, and shows how to report a score you can trust afterwards.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#curve">1 · Validation curves</a><a href="#gridrand">2 · Grid vs random</a><a href="#bo">3 · Bayesian optimisation</a><a href="#tpe">4 · TPE (Optuna)</a><a href="#prune">5 · Pruning</a><a href="#nested">6 · Nested CV</a><a href="#practice">7 · In practice</a><a href="#py">8 · Python</a><a href="#credits">9 · Credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is hyperparameter optimisation, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3>
+      <p><a class="term" data-t="parameter">Parameters</a> (weights, coefficients, split thresholds) are learned by training. <a class="term" data-t="hyperparameter">Hyperparameters</a> are fixed before training starts: how deep, how fast, how much penalty, how many neighbours. Bad choices can turn a good algorithm into a bad model, and the best values depend on the data, so there is no universal default.</p>
+      <h3>The idea</h3>
+      <p>Treat “train the model with settings \(\lambda\) and measure its validation score” as a black-box function \(f(\lambda)\), expensive to evaluate and noisy, and search for its best value within a budget:</p>
+      <ol class="steps2"><li>Define a <a class="term" data-t="search-space">search space</a>: which settings, which ranges, on which scale.</li><li>Pick a strategy: <a class="term" data-t="grid-search">grid</a>, <a class="term" data-t="random-search">random</a>, or a model-based one that learns where to look next (<a class="term" data-t="bayesian-optimisation">Bayesian optimisation</a>).</li><li>Score each candidate with <a class="term" data-t="cross-validation">cross-validation</a>, never the test set.</li><li>Retrain the winner on all training data; report its score on untouched data.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Perfecting a recipe: oven temperature, baking time, amount of sugar. Each trial costs a whole cake. You would not bake every combination on a fine grid; you would try a few spread-out guesses, notice what worked, and try near the best ones, while remembering that one tasting can be lucky. That is Bayesian optimisation and cross-validation, in a kitchen.</p>
+      <div class="pc"><div class="pro"><b>Good habits</b><ul><li>Search learning rates and penalties on a log scale</li><li>Prefer random or Bayesian search to a big grid</li><li>Stop bad trials early</li><li>Keep a test set the search never sees</li></ul></div><div class="con"><b>Watch out for</b><ul><li>The best validation score is optimistic</li><li>Tuning on the test set</li><li>Leakage when preprocessing is outside the CV loop</li><li>Spending the budget on settings that do not matter</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="validation-curve">Validation curve</a><a class="term" data-t="gaussian-process">Gaussian process</a><a class="term" data-t="acquisition-function">Acquisition function</a><a class="term" data-t="expected-improvement">Expected improvement</a><a class="term" data-t="tpe">TPE</a><a class="term" data-t="optuna">Optuna</a><a class="term" data-t="successive-halving">Successive halving</a><a class="term" data-t="nested-cv">Nested CV</a></div>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="curve" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>One knob: the validation curve</h2>
+    <p class="sub">A degree-12 polynomial with a ridge penalty fitted to 30 noisy points. Top: the fit at the chosen λ. Bottom: training error and 5-fold cross-validation error across λ (log scale); the dot is your λ, the ring the best.</p>
+    <div class="plot wide" id="pVf"></div>
+    <div class="plot short" id="pVc" style="margin-top:10px"></div>
+    <div class="stats" id="vStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Start with one hyperparameter. Here it is the penalty \(\lambda\) of <a href="../regularisation/">ridge regression</a> on polynomial features: the weights minimise \(\sum_i(y_i-w^\top\phi(x_i))^2+\lambda\lVert w\rVert^2\), so \(w\) is a parameter and \(\lambda\) a hyperparameter.</p>
+      <p>A <a class="term" data-t="validation-curve">validation curve</a> plots the training and validation error against the hyperparameter. With tiny \(\lambda\) the curve wiggles through every point: low training error, high validation error, <a class="term" data-t="overfitting">overfitting</a>. With huge \(\lambda\) it flattens towards a constant: both errors high, <a class="term" data-t="underfitting">underfitting</a>. The best \(\lambda\) sits at the bottom of the U, which is the <a class="term" data-t="bias-variance">bias–variance trade-off</a> drawn directly.</p>
+      <p>Two lessons carry over to everything below. First, \(\lambda\) matters on a <b>log scale</b>: going from 0.001 to 0.01 changes as much as from 1 to 10, so search \(\log\lambda\), not \(\lambda\). Second, the curve is noisy: the minimum of the cross-validation curve is an estimate with an error bar, and many nearby values are equally good. A common rule picks the simplest model within one standard error of the best.</p>
+      <div class="ctl"><label for="vL"><span>log₁₀ λ</span><output id="vLOut"></output></label><input type="range" id="vL" min="-6" max="3" step="0.1" value="-2"></div>
+      <div class="player"><button class="btn" id="vNew">New data</button></div>
+    </div>
+  </div>
+</section>
+
+<section id="gridrand" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Grid search versus random search</h2>
+    <p class="sub">Validation accuracy (shading, brighter = better) over two hyperparameters; only the horizontal one really matters. Dots: the trials each method spends the same budget on. The strips under and beside the map show which values of each setting were actually tried.</p>
+    <div class="plot sq" id="pGr"></div><div class="plot sq" id="pRa" style="margin-top:10px"></div>
+    <div class="stats" id="gStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p><a class="term" data-t="grid-search">Grid search</a> tries every combination of a few values per setting. With 9 trials on a 3×3 grid, the important setting is tried at only 3 values, because each one is repeated for 3 values of the unimportant setting. <a class="term" data-t="random-search">Random search</a> draws each trial independently, so 9 trials try the important setting at 9 different values.</p>
+      <p>Bergstra and Bengio (2012) showed this matters in practice because of <b>low effective dimensionality</b>: in most models only a few hyperparameters strongly affect the score, and which ones differs between datasets. A grid wastes most of its budget varying the ones that do not matter. Random search also has useful properties: any budget, easy to run in parallel, easy to stop or extend, and adding a useless setting costs nothing.</p>
+      <p>The stats below repeat both searches 300 times: on average, how close does the best trial get to the true best score? Random search is closer for every budget, and the gap grows with the number of unimportant settings.</p>
+      <div class="ctl"><label for="gB"><span>Budget (trials)</span><output id="gBOut"></output></label><input type="range" id="gB" min="2" max="8" step="1" value="3"></div>
+      <div class="player"><button class="btn" id="gNew">Draw again</button></div>
+      <div class="algo" data-anim="gridrand"><h5 class="algo-h">Algorithm: grid search and random search with cross-validation</h5><ol>
+        <li><span class="kw">input</span> model, search space, budget \(B\), folds \(K\)</li>
+        <li><span class="kw">grid</span>: candidates \(\leftarrow\) every combination of a few listed values <span class="cm">size grows exponentially</span></li>
+        <li><span class="kw">random</span>: candidates \(\leftarrow\) \(B\) independent draws from the space <span class="cm">log-uniform for scales</span></li>
+        <li><span class="kw">for</span> each candidate \(\lambda\) <span class="kw">do</span></li>
+        <li class="i1">score\((\lambda)\leftarrow\) mean \(K\)-fold validation score <span class="cm">preprocessing inside each fold</span></li>
+        <li>\(\lambda^\ast\leftarrow\arg\max\) score; refit on all training data with \(\lambda^\ast\)</li>
+        <li><span class="kw">return</span> the refitted model <span class="cm">its CV score is optimistic: see section 6</span></li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="bo" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Bayesian optimisation: learn where to look next</h2>
+    <p class="sub">The hidden curve (dashed) is validation loss against log learning rate; each evaluation costs a full training run. Purple: the Gaussian-process guess with a ±2σ band. Below: the acquisition function; its peak is where the next run goes.</p>
+    <div class="plot wide" id="pBo"></div>
+    <div class="plot short" id="pAq" style="margin-top:10px"></div>
+    <div class="seg" id="bAcq"><button data-v="ei" class="on">Expected improvement</button><button data-v="ucb">Lower confidence bound</button><button data-v="pi">Probability of improvement</button></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="bNext">Evaluate next point</button><button class="btn" id="bReset">Reset</button><span class="pos" id="bPos"></span></div>
+    <div class="stats" id="bStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Random search ignores what earlier trials found. <a class="term" data-t="bayesian-optimisation">Bayesian optimisation</a> keeps a cheap <i>surrogate model</i> of the expensive function, updates it after every trial, and uses it to choose the next trial. The classic surrogate is a <a class="term" data-t="gaussian-process">Gaussian process</a> (GP): a prior over smooth functions defined by a kernel, here \(k(x,x')=\sigma_f^2\exp\!\big(-\tfrac{(x-x')^2}{2\ell^2}\big)\). After observing \(y\) at points \(X\), its prediction at \(x\) is a Gaussian with</p>
+      <div class="mathbox c1">$$\mu(x)=k_x^\top(K+\sigma_n^2I)^{-1}y,\qquad \sigma^2(x)=k(x,x)-k_x^\top(K+\sigma_n^2I)^{-1}k_x .$$</div>
+      <p>The mean is the best guess; the variance is small near tried points and large in unexplored gaps. An <a class="term" data-t="acquisition-function">acquisition function</a> turns both into a single number that balances <i>exploitation</i> (try where \(\mu\) is low) and <i>exploration</i> (try where \(\sigma\) is large). With best loss so far \(y^\ast\) and \(z=(y^\ast-\mu(x))/\sigma(x)\):</p>
+      <div class="mathbox c4">$$\text{EI}(x)=\big(y^\ast-\mu(x)\big)\,\Phi(z)+\sigma(x)\,\varphi(z),\qquad \text{LCB}(x)=\mu(x)-\kappa\,\sigma(x).$$</div>
+      <p><a class="term" data-t="expected-improvement">Expected improvement</a> is the average amount by which \(x\) would beat the current best, counting only improvements. Press the button a few times: early points explore, then trials concentrate around the minimum, usually finding it in far fewer evaluations than a grid. Notice the second, narrower valley: a short length-scale \(\ell\) lets the GP believe in such features; a long one smooths them away.</p>
+      <div class="ctl"><label for="bL"><span>GP length-scale ℓ</span><output id="bLOut"></output></label><input type="range" id="bL" min="0.02" max="0.4" step="0.01" value="0.1"></div>
+      <div class="algo" data-anim="bayesopt"><h5 class="algo-h">Algorithm: Bayesian optimisation</h5><ol>
+        <li><span class="kw">input</span> black-box \(f\), search space, budget \(B\), surrogate (GP), acquisition \(a\)</li>
+        <li>evaluate \(f\) at a few random points <span class="cm">initial design</span></li>
+        <li><span class="kw">while</span> budget remains <span class="kw">do</span></li>
+        <li class="i1">fit the surrogate to all \((x,f(x))\) so far: \(\mu(x),\sigma(x)\)</li>
+        <li class="i1">\(x_{\text{next}}\leftarrow\arg\max_x a(x)\) <span class="cm">cheap: no training involved</span></li>
+        <li class="i1">evaluate \(f(x_{\text{next}})\) <span class="cm">expensive: one training run</span></li>
+        <li><span class="kw">return</span> the best \(x\) found</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: limits of the GP approach</summary><div>
+        <p>A GP costs \(O(n^3)\) in the number of trials, struggles beyond about 20 dimensions, and handles categorical or conditional settings (“the number of layers only matters if the model is a network”) awkwardly. That is why practical tools use other surrogates: random forests (SMAC), tree-structured Parzen estimators (Hyperopt, Optuna, next section), or GPs with special kernels (BoTorch). Snoek, Larochelle and Adams (2012) made GP-based tuning of neural networks popular.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="tpe" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>TPE, the sampler inside Optuna</h2>
+    <p class="sub">The same hidden curve. Trials so far are split at the γ quantile into <b>good</b> (green) and <b>bad</b> (red). Their smoothed densities l(x) and g(x) are drawn below; the next trial goes where the ratio l/g is largest (purple).</p>
+    <div class="plot wide" id="pTp"></div>
+    <div class="plot short" id="pTd" style="margin-top:10px"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="tpNext">Next trial</button><button class="btn" id="tpRun">Add 10</button><button class="btn" id="tpReset">Reset</button><span class="pos" id="tpPos"></span></div>
+    <div class="stats" id="tpStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The <a class="term" data-t="tpe">tree-structured Parzen estimator</a> (Bergstra et al., 2011) flips the question. Instead of modelling the score given the settings, it models the settings given the score. Split the trials into the best fraction \(\gamma\) (say 25%) and the rest, and fit a kernel density to each group:</p>
+      <div class="mathbox c1">$$l(x)=p(x\mid y\text{ in the best }\gamma),\qquad g(x)=p(x\mid y\text{ in the rest}).$$</div>
+      <p>Bergstra et al. showed that maximising expected improvement is then the same as maximising the ratio \(l(x)/g(x)\): go where good trials were common and bad ones rare. In practice TPE draws many candidates from \(l\) and keeps the one with the highest ratio.</p>
+      <p>Densities are easy to fit for any kind of setting (log-scaled numbers, integers, categories) and the search space can be a tree: a setting only exists if its parent choice was made. That flexibility is why <a class="term" data-t="optuna">Optuna</a> (Akiba et al., 2019) uses TPE as its default sampler. Optuna’s “define-by-run” interface lets you write the search space as ordinary Python inside the objective, shown in section 8.</p>
+      <div class="ctl"><label for="tpG"><span>γ (share counted as good)</span><output id="tpGOut"></output></label><input type="range" id="tpG" min="0.1" max="0.5" step="0.05" value="0.25"></div>
+      <div class="algo" data-anim="tpe"><h5 class="algo-h">Algorithm: tree-structured Parzen estimator</h5><ol>
+        <li><span class="kw">input</span> objective \(f\), search space, \(\gamma\), number of candidates \(N\)</li>
+        <li>run a few random trials first <span class="cm">startup trials</span></li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1">sort the trials by score; the best \(\gamma\) share is “good”, the rest “bad”</li>
+        <li class="i1">fit densities \(l(x)\) to good trials and \(g(x)\) to bad ones <span class="cm">one Gaussian per trial</span></li>
+        <li class="i1">draw \(N\) candidates from \(l\); keep the one with the largest \(l(x)/g(x)\)</li>
+        <li class="i1">evaluate it and add it to the trials</li>
+        <li><span class="kw">until</span> the budget is spent; <span class="kw">return</span> the best trial</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="prune" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Pruning: stop the losers early with successive halving</h2>
+    <p class="sub">27 configurations of a network, each line its validation loss as training goes on. At each rung (dashed) the worse half is stopped (grey) and the survivors get twice the budget. The best configuration is marked; compare the compute used with training all 27 to the end.</p>
+    <div class="plot wide" id="pSh"></div>
+    <div class="seg" id="shEta"><button data-v="2" class="on">Keep the best 1/2</button><button data-v="3">Keep the best 1/3</button></div>
+    <div class="player" style="margin-top:10px"><button class="btn" id="shNew">New configurations</button></div>
+    <div class="stats" id="shStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>For models trained in steps (networks, boosting), a bad configuration usually looks bad early. <a class="term" data-t="successive-halving">Successive halving</a> (Jamieson and Talwalkar, 2016) exploits this: start many configurations with a small budget, keep the best \(1/\eta\) at each rung, multiply their budget by \(\eta\), repeat. Most of the compute goes to the promising few.</p>
+      <p>The risk is a slow starter: a configuration with a small learning rate may look worse early and win in the end. <b>Hyperband</b> (Li et al., 2018) hedges by running several brackets that start with different numbers of configurations and budgets. Optuna exposes these as <i>pruners</i>: inside the training loop you report the intermediate score with <code>trial.report()</code>, and <code>trial.should_prune()</code> tells you to stop.</p>
+      <div class="algo" data-anim="halving"><h5 class="algo-h">Algorithm: successive halving</h5><ol>
+        <li><span class="kw">input</span> \(n\) configurations, minimum budget \(r\), reduction factor \(\eta\)</li>
+        <li><span class="kw">for</span> rung \(k=0,1,2,\dots\) <span class="kw">do</span></li>
+        <li class="i1">train every surviving configuration up to budget \(r\,\eta^k\) <span class="cm">epochs, trees or samples</span></li>
+        <li class="i1">score each on validation data</li>
+        <li class="i1">keep the best \(\lceil n_k/\eta\rceil\); stop the rest</li>
+        <li><span class="kw">until</span> one configuration is left (or the maximum budget is reached)</li>
+        <li><span class="kw">return</span> the survivor</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="nested" class="lab">
+  <div class="card hl">
+    <h2><span class="num">6</span>Nested cross-validation: an honest score after tuning</h2>
+    <p class="sub">Labels here are pure coin flips, so no model can truly beat 50% accuracy. We tune a k-nearest-neighbour classifier over many settings. Purple: the best cross-validated score from the search, as often reported. Green: the nested score. Averaged over repeated datasets.</p>
+    <div class="plot short" id="pNe"></div>
+    <div class="plot short" id="pNd" style="margin-top:10px"></div>
+    <div class="player" style="margin-top:10px"><button class="btn" id="nRun">Run again</button><span class="pos" id="nPos"></span></div>
+    <div class="stats" id="nStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>After a search, the winning configuration’s cross-validation score is the <i>maximum</i> of many noisy estimates. As on the <a href="../datasets/#splits">datasets page</a>, the maximum of noisy numbers is optimistic: the winner was partly chosen for its luck. The more configurations you try and the smaller the data, the bigger the bias. With pure-noise labels the bias is all there is, which makes it easy to see.</p>
+      <p><a class="term" data-t="nested-cv">Nested cross-validation</a> puts the entire tuning procedure inside an outer loop. Each outer fold holds out data that the search never touches; the search runs on the rest with its own inner folds; the chosen model is then scored once on the outer fold. The average outer score estimates how well <i>the procedure</i> “tune, then train” will do on new data, which is exactly the number you want to report.</p>
+      <p>The diagram (lower chart) shows the structure: outer folds in orange, inner folds nested inside each outer training part. It costs \(K_{\text{outer}}\times K_{\text{inner}}\times\) (number of configurations) fits, so with expensive models people use a single held-out test set instead, which gives the same protection more cheaply.</p>
+      <div class="ctl"><label for="nC"><span>Settings compared</span><output id="nCOut"></output></label><input type="range" id="nC" min="1" max="30" step="1" value="20"></div>
+      <div class="ctl"><label for="nN"><span>Dataset size n</span><output id="nNOut"></output></label><input type="range" id="nN" min="40" max="200" step="10" value="60"></div>
+      <div class="algo" data-anim="nestedcv"><h5 class="algo-h">Algorithm: nested cross-validation</h5><ol>
+        <li><span class="kw">input</span> data, search space, outer folds \(K_o\), inner folds \(K_i\)</li>
+        <li><span class="kw">for</span> each outer fold \(k=1..K_o\) <span class="kw">do</span></li>
+        <li class="i1">outer test \(\leftarrow\) fold \(k\); outer train \(\leftarrow\) the rest</li>
+        <li class="i1">run the whole search on outer train, scoring each candidate by \(K_i\)-fold CV</li>
+        <li class="i1">refit the winner on outer train; score it once on outer test</li>
+        <li><span class="kw">return</span> the mean outer score <span class="cm">estimates “tune then train” on new data</span></li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="practice" class="card">
+  <h2><span class="num">7</span>Hyperparameter tuning in practice</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>What usually matters most</h3>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Model</th><th>Tune first</th><th>Scale</th></tr>
+        <tr><td>Ridge, lasso, logistic</td><td>penalty \(\lambda\) (or \(C\))</td><td>log</td></tr>
+        <tr><td>SVM (RBF)</td><td>\(C\) and \(\gamma\) together</td><td>log, log</td></tr>
+        <tr><td>Random forest</td><td>features per split, min leaf size</td><td>linear; trees: more is better</td></tr>
+        <tr><td>Gradient boosting</td><td>learning rate × number of trees (early stopping), depth or leaves, subsampling</td><td>log, integer</td></tr>
+        <tr><td>Neural network</td><td>learning rate, then batch size, weight decay, schedule</td><td>log</td></tr>
+        <tr><td>k-NN</td><td>k, distance weighting, scaling</td><td>integer</td></tr>
+      </table></div>
+    </div>
+    <div>
+      <h3>A sensible workflow</h3>
+      <ol class="steps2"><li>Get a baseline with library defaults; they are often good.</li><li>Put preprocessing in a pipeline so it is refitted inside every fold.</li><li>Run random search or Optuna (TPE) for a modest budget, with early stopping or pruning for iterative models.</li><li>Look at the results: which settings mattered, is the best value at the edge of the range (then widen it)?</li><li>Report the score on a held-out test set, or with nested CV.</li></ol>
+      <p>Try it without writing code in the <a href="../playground/#/tune">ML Playground’s tuning stage</a>, which runs a cross-validated grid search on any of its models and shows the code.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">8</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> scipy.stats <span class="k">import</span> loguniform
+<span class="k">from</span> sklearn.pipeline <span class="k">import</span> make_pipeline
+<span class="k">from</span> sklearn.preprocessing <span class="k">import</span> StandardScaler
+<span class="k">from</span> sklearn.svm <span class="k">import</span> SVC
+<span class="k">from</span> sklearn.model_selection <span class="k">import</span> GridSearchCV, RandomizedSearchCV, HalvingRandomSearchCV, cross_val_score, KFold
+<span class="k">from</span> sklearn.experimental <span class="k">import</span> enable_halving_search_cv        <span class="c"># noqa: needed before HalvingRandomSearchCV</span>
+
+pipe  = make_pipeline(StandardScaler(), SVC())                      <span class="c"># scaler refitted inside every fold</span>
+grid  = GridSearchCV(pipe, {<span class="s">"svc__C"</span>: [<span class="s">0.1</span>, <span class="s">1</span>, <span class="s">10</span>], <span class="s">"svc__gamma"</span>: [<span class="s">0.01</span>, <span class="s">0.1</span>, <span class="s">1</span>]}, cv=<span class="s">5</span>)
+rand  = RandomizedSearchCV(pipe, {<span class="s">"svc__C"</span>: loguniform(<span class="s">1e-2</span>, <span class="s">1e3</span>), <span class="s">"svc__gamma"</span>: loguniform(<span class="s">1e-4</span>, <span class="s">1e1</span>)},
+                           n_iter=<span class="s">40</span>, cv=<span class="s">5</span>, random_state=<span class="s">0</span>)
+<span class="c"># nested CV: the whole search is the "model" scored by the outer loop</span>
+outer = cross_val_score(rand, X, y, cv=KFold(<span class="s">5</span>, shuffle=<span class="k">True</span>, random_state=<span class="s">1</span>))
+print(<span class="s">"nested CV accuracy"</span>, outer.mean())
+
+<span class="k">import</span> optuna                                                       <span class="c"># TPE sampler + pruning</span>
+<span class="k">def</span> objective(trial):
+    lr    = trial.suggest_float(<span class="s">"learning_rate"</span>, <span class="s">1e-3</span>, <span class="s">0.3</span>, log=<span class="k">True</span>)
+    depth = trial.suggest_int(<span class="s">"max_depth"</span>, <span class="s">2</span>, <span class="s">10</span>)
+    model = make_model(lr, depth)
+    <span class="k">for</span> step <span class="k">in</span> range(<span class="s">100</span>):
+        model.train_one_epoch()
+        score = model.validate()
+        trial.report(score, step)
+        <span class="k">if</span> trial.should_prune(): <span class="k">raise</span> optuna.TrialPruned()        <span class="c"># successive halving / Hyperband</span>
+    <span class="k">return</span> score
+study = optuna.create_study(direction=<span class="s">"maximize"</span>, sampler=optuna.samplers.TPESampler(seed=<span class="s">0</span>),
+                            pruner=optuna.pruners.SuccessiveHalvingPruner())
+study.optimize(objective, n_trials=<span class="s">100</span>); print(study.best_params)</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">9</span>Sources and credits</h2>
+  <div class="prose">
+    <p>The demos and code on this page were written for this site. Section 2 recreates, on our own toy objective, the well-known figure from Bergstra and Bengio’s paper on random search. The Optuna description follows the <a href="https://optuna.readthedocs.io/" target="_blank" rel="noopener">Optuna documentation</a>, and the nested cross-validation demonstration follows the idea of the scikit-learn example <a href="https://scikit-learn.org/stable/auto_examples/model_selection/plot_nested_cross_validation_iris.html" target="_blank" rel="noopener">“Nested versus non-nested cross-validation”</a>.</p>
+    <p>Original papers: Bergstra and Bengio 2012 (random search for hyper-parameter optimization); Bergstra, Bardenet, Bengio and Kégl 2011 (TPE); Jones, Schonlau and Welch 1998 (expected improvement, EGO); Rasmussen and Williams 2006 (<i>Gaussian Processes for Machine Learning</i>); Snoek, Larochelle and Adams 2012 (practical Bayesian optimisation of ML algorithms); Hutter, Hoos and Leyton-Brown 2011 (SMAC); Jamieson and Talwalkar 2016 (successive halving); Li et al. 2018 (Hyperband); Akiba et al. 2019 (Optuna); Varma and Simon 2006 and Cawley and Talbot 2010 (bias from model selection, nested CV).</p>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+ {"q":"Which is a hyperparameter rather than a parameter?","o":["The coefficients of a linear regression","The split thresholds inside a trained tree","The maximum depth of a decision tree","The weights of a neural network"],"a":2,"e":"Hyperparameters are set before training; parameters are learned during it."},
+ {"q":"With a budget of 9 trials and two hyperparameters of which only one matters, why does random search usually beat a 3×3 grid?","o":["Random numbers are more accurate","Random search tries the important hyperparameter at 9 different values; the grid only at 3","Grids cannot use cross-validation","Random search needs fewer folds"],"a":1,"e":"This is Bergstra and Bengio’s low-effective-dimensionality argument: grids waste trials repeating values of the important setting."},
+ {"q":"In Bayesian optimisation, the acquisition function…","o":["Is the model being tuned","Scores candidate settings by trading off a low predicted loss against high uncertainty, to choose the next trial","Is the final test score","Removes noisy trials"],"a":1,"e":"Expected improvement, for example, rewards points likely to beat the current best, either because μ is low or σ is large."},
+ {"q":"Optuna’s default TPE sampler picks the next trial where…","o":["The Gaussian-process mean is lowest","The ratio of the density of good trials to bad trials, l(x)/g(x), is largest","The grid has not been tried","The learning rate is smallest"],"a":1,"e":"TPE models p(x | good) and p(x | bad) with kernel densities, which also handle integers, categories and conditional settings."},
+ {"q":"Why report a nested-CV score instead of the best score from the search?","o":["It is always higher","The best score of many noisy CV estimates is optimistically biased; nested CV scores the whole tune-then-train procedure on data the search never saw","Nested CV is faster","The search score uses the test set"],"a":1,"e":"With pure-noise labels the search’s best score can be well above 50% while the nested score stays near 50%."}
+]</script>
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything runs in your browser. Related: <a href="../datasets/">datasets and splits</a> · <a href="../metrics/">evaluation metrics</a></p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../dl/assets/evo.js"></script>
+<script>
+(function(){
+const {$} = ML;
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+if(window.EVO) EVO.render('#evoSlot','eval');
+const P=()=>ML.palette(), mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
+function solve(A,b){ const n=b.length, M=A.map((r,i)=>[...r,b[i]]); for(let c=0;c<n;c++){ let p=c; for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c])) p=r; [M[c],M[p]]=[M[p],M[c]]; const d=M[c][c]||1e-12; for(let r=0;r<n;r++) if(r!==c){ const f=M[r][c]/d; for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k]; } } return M.map((r,i)=>r[n]/(r[i]||1e-12)); }
+
+/* ---------- 1 · validation curve (ridge on degree-12 polynomial) ---------- */
+const pVf=new ML.Plot('#pVf',{equal:false}), pVc=new ML.Plot('#pVc',{equal:false}); let vL=-2, vSeed=4, VX=[], VY=[], curve=null;
+const truth=x=>Math.sin(2.6*x)+.3*x; const phi=x=>[...Array(13)].map((_,j)=>Math.pow(x/1.6,j));
+function ridge(X,Y,lam){ const k=13, A=[...Array(k)].map(()=>new Array(k).fill(0)), b=new Array(k).fill(0); X.forEach((x,i)=>{ const f=phi(x); for(let p=0;p<k;p++){ b[p]+=f[p]*Y[i]; for(let q=0;q<k;q++) A[p][q]+=f[p]*f[q]; } }); for(let p=1;p<k;p++) A[p][p]+=lam; A[0][0]+=1e-9; return solve(A,b); }
+const pred=(w,x)=>phi(x).reduce((s,f,j)=>s+f*w[j],0);
+function vData(){ const r=ML.rng(vSeed); VX=[...Array(30)].map(()=>-1.6+3.2*r()); VY=VX.map(x=>truth(x)+.3*r.gauss()); curve=null; }
+function vCurve(){ const L=[]; for(let l=-6;l<=3.001;l+=.25){ const lam=Math.pow(10,l), w=ridge(VX,VY,lam), tr=mean(VX.map((x,i)=>(pred(w,x)-VY[i])**2)); let cv=0; for(let f=0;f<5;f++){ const tX=VX.filter((_,i)=>i%5!==f), tY=VY.filter((_,i)=>i%5!==f), w2=ridge(tX,tY,lam); cv+=mean(VX.map((x,i)=>i%5===f? (pred(w2,x)-VY[i])**2 : null).filter(v=>v!==null))/5; } L.push([l,tr,cv]); } return L; }
+function drawV(){ const pal=P(); if(!curve) curve=vCurve(); const w=ridge(VX,VY,Math.pow(10,vL)), xs=[...Array(161).keys()].map(i=>-1.6+3.2*i/160);
+  const fr=ML.chart(pVf,[{pts:xs.map(x=>[x,truth(x)]),color:pal.muted,width:1.5,dash:[5,4]},{pts:xs.map(x=>[x,pred(w,x)]),color:pal.c1,width:2.6}],{x0:-1.6,x1:1.6,y0:-2.2,y1:2.2,xl:'x'});
+  const c=pVf.ctx; c.save(); VX.forEach((x,i)=>{ c.beginPath(); c.arc(fr.fx(x),fr.fy(VY[i]),4,0,7); c.fillStyle=pal.c4; c.fill(); }); c.restore();
+  const best=curve.reduce((a,b)=>b[2]<a[2]?b:a), ymax=Math.min(1.5,Math.max(...curve.map(r=>r[2])))*1.05;
+  const f2=ML.chart(pVc,[{pts:curve.map(r=>[r[0],r[1]]),color:pal.c3,width:2.2},{pts:curve.map(r=>[r[0],Math.min(r[2],ymax)]),color:pal.c2,width:2.6}],{x0:-6,x1:3,y0:0,y1:ymax,xl:'log₁₀ λ  ·  blue: training error   red: CV error',vline:vL});
+  const c2=pVc.ctx; c2.save(); c2.strokeStyle=pal.c2; c2.lineWidth=2.4; c2.beginPath(); c2.arc(f2.fx(best[0]),f2.fy(best[2]),8,0,7); c2.stroke(); c2.restore();
+  const cur=curve.reduce((a,b)=>Math.abs(b[0]-vL)<Math.abs(a[0]-vL)?b:a);
+  $('#vStats').innerHTML=stat('c3',cur[1].toFixed(3),'training MSE')+stat('c2',cur[2].toFixed(3),'5-fold CV MSE')+stat('c5',best[0].toFixed(2),'best log₁₀ λ by CV'); }
+ML.bindRange('vL', v=>{ vL=v; drawV(); }, v=>v.toFixed(1)); $('#vNew').addEventListener('click',()=>{ vSeed++; vData(); drawV(); });
+
+/* ---------- 2 · grid vs random ---------- */
+const pGr=new ML.Plot('#pGr',{bounds:{x0:-.08,x1:1.02,y0:-.08,y1:1.02}}), pRa=new ML.Plot('#pRa',{bounds:{x0:-.08,x1:1.02,y0:-.08,y1:1.02}}); let gB=3, gSeed=1;
+const obj=(a,b)=>.62+.3*Math.exp(-(((a-.71)/.09)**2))+.05*Math.exp(-(((a-.25)/.12)**2))+.02*(b-.5);
+const BEST=(()=>{ let m=0; for(let i=0;i<=400;i++) for(let j=0;j<=20;j++) m=Math.max(m,obj(i/400,j/20)); return m; })();
+const gridPts=k=>{ const o=[]; for(let i=0;i<k;i++) for(let j=0;j<k;j++) o.push([(i+.5)/k,(j+.5)/k]); return o; };
+function drawG(){ const pal=P(), k=gB, B=k*k, r=ML.rng(gSeed*7+k), R=[...Array(B)].map(()=>[r(),r()]), G=gridPts(k);
+  [[pGr,G,'Grid search'],[pRa,R,'Random search']].forEach(([pl,pts,t])=>{ pl.clear(); const c=pl.ctx, res=5; for(let px=pl.X(0);px<pl.X(1);px+=res) for(let py=pl.Y(1);py<pl.Y(0);py+=res){ const v=(obj(pl.ix(px),pl.iy(py))-.6)/.33; c.fillStyle=pal.c1; c.globalAlpha=Math.max(.04,Math.min(.9,v)); c.fillRect(px,py,res+.5,res+.5); } c.globalAlpha=1;
+    c.save(); c.strokeStyle=pal.line; c.strokeRect(pl.X(0),pl.Y(1),pl.X(1)-pl.X(0),pl.Y(0)-pl.Y(1));
+    const best=pts.reduce((a,p)=>obj(...p)>obj(...a)?p:a);
+    pts.forEach(p=>{ c.beginPath(); c.arc(pl.X(p[0]),pl.Y(p[1]),5,0,7); c.fillStyle=pal.c4; c.fill(); c.lineWidth=1.4; c.strokeStyle=pal.dark?'#0b0d19':'#fff'; c.stroke(); c.fillStyle=pal.c4; c.fillRect(pl.X(p[0])-1.5,pl.Y(-.02),3,pl.Y(-.07)-pl.Y(-.02)); c.fillRect(pl.X(-.07),pl.Y(p[1])-1.5,pl.X(-.02)-pl.X(-.07),3); });
+    c.lineWidth=2.6; c.strokeStyle=pal.ink; c.beginPath(); c.arc(pl.X(best[0]),pl.Y(best[1]),9,0,7); c.stroke();
+    c.font='600 12.5px Inter,system-ui'; c.fillStyle=pal.ink; c.fillText(`${t}: best ${(100*obj(...best)).toFixed(1)}%`,pl.X(0)+6,pl.Y(1)+16); c.font='11px Inter,system-ui'; c.fillStyle=pal.muted; c.fillText('important setting →',pl.X(.55),pl.Y(-.075)+2); c.restore(); });
+  /* repeated comparison */
+  let gs=0, rs=0; const rr=ML.rng(99); const gb=Math.max(...G.map(p=>obj(...p))); for(let t=0;t<300;t++){ let m=0; for(let i=0;i<B;i++) m=Math.max(m,obj(rr(),rr())); rs+=BEST-m; const off=[rr()/k,rr()/k]; gs+=BEST-Math.max(...G.map(p=>obj(p[0]-.5/k+off[0],p[1]-.5/k+off[1]))); } void gb;
+  $('#gStats').innerHTML=stat('c4',B,'trials each')+stat('c1',k,'values of the important setting (grid)')+stat('c2',(100*gs/300).toFixed(2)+' pts','grid: average gap to the best')+stat('c5',(100*rs/300).toFixed(2)+' pts','random: average gap to the best'); }
+ML.bindRange('gB', v=>{ gB=v; drawG(); }, v=>v+'×'+v+' = '+v*v); $('#gNew').addEventListener('click',()=>{ gSeed++; drawG(); });
+
+/* ---------- shared 1-D black box for sections 3 and 4 ---------- */
+const BB=x=>.42+.9*(x-.66)**2*2.2+.05*Math.sin(17*x)-.13*Math.exp(-(((x-.22)/.035)**2));
+const XS=[...Array(201).keys()].map(i=>i/200), lrOf=x=>Math.pow(10,-5+5*x);
+const Phi=z=>.5*(1+erf(z/Math.SQRT2)), phiN=z=>Math.exp(-z*z/2)/Math.sqrt(2*Math.PI);
+function erf(x){ const s=Math.sign(x); x=Math.abs(x); const t=1/(1+.3275911*x); return s*(1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-.284496736)*t+.254829592)*t*Math.exp(-x*x)); }
+const TRUEMIN=Math.min(...XS.map(BB));
+
+/* ---------- 3 · Bayesian optimisation with a GP ---------- */
+const pBo=new ML.Plot('#pBo',{equal:false}), pAq=new ML.Plot('#pAq',{equal:false}); let bL=.1, acq='ei', BO=[];
+function bReset(){ const r=ML.rng(5); BO=[.08,.5,.93].map(x=>x+.02*r.gauss()).map(x=>[x,BB(x)]); drawBo(); }
+function gp(obs, ell){ const n=obs.length, sf=.25, sn=1e-4, k=(a,b)=>sf*sf*Math.exp(-(((a-b)**2)/(2*ell*ell))), ym=mean(obs.map(o=>o[1]));
+  const K=obs.map(a=>obs.map(b=>k(a[0],b[0]))); K.forEach((r,i)=>r[i]+=sn); const alpha=solve(K,obs.map(o=>o[1]-ym));
+  return XS.map(x=>{ const kx=obs.map(o=>k(x,o[0])), m=ym+kx.reduce((s,v,i)=>s+v*alpha[i],0), v=solve(K,kx); return [m, Math.sqrt(Math.max(1e-12, sf*sf-kx.reduce((s,q,i)=>s+q*v[i],0)))]; }); }
+function acqVals(G, best){ return G.map(([m,s])=>{ const z=(best-m)/s; return acq==='ei'? (best-m)*Phi(z)+s*phiN(z) : acq==='pi'? Phi((best-m-.01)/s) : -(m-2*s); }); }
+function drawBo(){ const pal=P(), G=gp(BO,bL), best=Math.min(...BO.map(o=>o[1])), A=acqVals(G,best), nx=XS[A.indexOf(Math.max(...A))];
+  const fr=ML.chart(pBo,[{pts:XS.map((x,i)=>[x,G[i][0]+2*G[i][1]]),color:'transparent',noline:true},{pts:XS.map(x=>[x,BB(x)]),color:pal.muted,width:1.6,dash:[5,4]},{pts:XS.map((x,i)=>[x,G[i][0]]),color:pal.c1,width:2.6}],{x0:0,x1:1,y0:.15,y1:1.4,xl:'search space (log₁₀ learning rate from −5 to 0)'});
+  const c=pBo.ctx; c.save(); c.fillStyle=pal.c1; c.globalAlpha=.15; c.beginPath(); XS.forEach((x,i)=>{ const Y=fr.fy(Math.min(1.4,G[i][0]+2*G[i][1])); i?c.lineTo(fr.fx(x),Y):c.moveTo(fr.fx(x),Y); }); for(let i=XS.length-1;i>=0;i--) c.lineTo(fr.fx(XS[i]),fr.fy(Math.max(.15,G[i][0]-2*G[i][1]))); c.closePath(); c.fill(); c.globalAlpha=1;
+  BO.forEach(([x,y],i)=>{ c.beginPath(); c.arc(fr.fx(x),fr.fy(y),5,0,7); c.fillStyle= y===best? pal.c5 : pal.c4; c.fill(); c.fillStyle=pal.ink; c.font='10.5px Inter,system-ui'; c.fillText(i+1,fr.fx(x)+6,fr.fy(y)-6); });
+  c.strokeStyle=pal.c2; c.setLineDash([4,4]); c.beginPath(); c.moveTo(fr.fx(nx),12); c.lineTo(fr.fx(nx),pBo.h-28); c.stroke(); c.restore();
+  const am=Math.max(...A), an=Math.min(...A); const f2=ML.chart(pAq,[{pts:XS.map((x,i)=>[x,A[i]]),color:pal.c2,width:2.4}],{x0:0,x1:1,y0:an,y1:am+(am-an)*.1+1e-9,xl:'acquisition: next trial at the peak',yfmt:v=>v.toPrecision(2)});
+  $('#bPos').textContent=BO.length+' evaluations'; const bx=BO.find(o=>o[1]===best)[0];
+  $('#bStats').innerHTML=stat('c5',best.toFixed(3),'best loss found')+stat('c3',lrOf(bx).toExponential(1),'its learning rate')+stat('c4',(best-TRUEMIN).toFixed(3),'gap to the true minimum')+stat('c2',lrOf(nx).toExponential(1),'next learning rate to try'); }
+$('#bNext').addEventListener('click',()=>{ if(BO.length>=25) return; const G=gp(BO,bL), best=Math.min(...BO.map(o=>o[1])), A=acqVals(G,best), nx=XS[A.indexOf(Math.max(...A))]; BO.push([nx,BB(nx)]); drawBo(); });
+$('#bReset').addEventListener('click',bReset); ML.bindSeg('bAcq', v=>{ acq=v; drawBo(); }); ML.bindRange('bL', v=>{ bL=v; drawBo(); }, v=>v.toFixed(2));
+
+/* ---------- 4 · TPE ---------- */
+const pTp=new ML.Plot('#pTp',{equal:false}), pTd=new ML.Plot('#pTd',{equal:false}); let tpG=.25, TP=[], tpR=ML.rng(8);
+function tpReset(){ tpR=ML.rng(8); TP=[...Array(6)].map(()=>{ const x=tpR(); return [x,BB(x)]; }); drawTp(); }
+function parzen(pts, bw){ return x=>pts.length? mean(pts.map(p=>Math.exp(-(((x-p)/bw)**2)/2)/(bw*Math.sqrt(2*Math.PI)))) *.9 + .1 : 1; }   /* mixed with a flat prior, as TPE does */
+function tpSplit(){ const s=TP.slice().sort((a,b)=>a[1]-b[1]), nG=Math.max(1,Math.ceil(tpG*s.length)); return {good:s.slice(0,nG), bad:s.slice(nG), cut:s[nG-1][1]}; }
+function tpNext(){ const {good,bad}=tpSplit(), bw=Math.max(.03,.25/Math.sqrt(TP.length)), l=parzen(good.map(p=>p[0]),bw), g=parzen(bad.map(p=>p[0]),bw); let best=null;
+  for(let i=0;i<24;i++){ const base=good[Math.floor(tpR()*good.length)][0], x=Math.min(1,Math.max(0,base+bw*tpR.gauss())), r=l(x)/g(x); if(!best||r>best[1]) best=[x,r]; } return best[0]; }
+function drawTp(){ const pal=P(), {good,bad,cut}=tpSplit(), bw=Math.max(.03,.25/Math.sqrt(TP.length)), l=parzen(good.map(p=>p[0]),bw), g=parzen(bad.map(p=>p[0]),bw);
+  const fr=ML.chart(pTp,[{pts:XS.map(x=>[x,BB(x)]),color:pal.muted,width:1.6,dash:[5,4]},{pts:[[0,cut],[1,cut]],color:pal.ink,width:1,dash:[2,3]}],{x0:0,x1:1,y0:.15,y1:1.4,xl:'search space (log₁₀ learning rate)'});
+  const c=pTp.ctx; c.save(); TP.forEach(([x,y])=>{ c.beginPath(); c.arc(fr.fx(x),fr.fy(y),5,0,7); c.fillStyle= y<=cut? pal.c5 : pal.c2; c.fill(); }); c.restore();
+  const L=XS.map(l), Gd=XS.map(g), R=XS.map((x,i)=>L[i]/Gd[i]), rm=Math.max(...R), ym=Math.max(...L,...Gd);
+  ML.chart(pTd,[{pts:XS.map((x,i)=>[x,L[i]]),color:pal.c5,width:2.4},{pts:XS.map((x,i)=>[x,Gd[i]]),color:pal.c2,width:2.4},{pts:XS.map((x,i)=>[x,R[i]/rm*ym]),color:pal.c1,width:2,dash:[6,4]}],{x0:0,x1:1,y0:0,y1:ym*1.08,xl:'green l(x) · red g(x) · purple l/g (scaled)',yfmt:v=>v.toFixed(1)});
+  const best=Math.min(...TP.map(t=>t[1])); $('#tpPos').textContent=TP.length+' trials';
+  $('#tpStats').innerHTML=stat('c5',good.length,'good trials')+stat('c2',bad.length,'bad trials')+stat('c1',best.toFixed(3),'best loss so far')+stat('c4',(best-TRUEMIN).toFixed(3),'gap to the true minimum'); }
+$('#tpNext').addEventListener('click',()=>{ if(TP.length>=60) return; const x=tpNext(); TP.push([x,BB(x)]); drawTp(); });
+$('#tpRun').addEventListener('click',()=>{ for(let i=0;i<10&&TP.length<60;i++){ const x=tpNext(); TP.push([x,BB(x)]); } drawTp(); });
+$('#tpReset').addEventListener('click',tpReset); ML.bindRange('tpG', v=>{ tpG=v; drawTp(); }, v=>v.toFixed(2));
+
+/* ---------- 5 · successive halving ---------- */
+const pSh=new ML.Plot('#pSh',{equal:false}); let eta=2, shSeed=3;
+function drawSh(){ const pal=P(), r=ML.rng(shSeed), n=27, E=81, C=[...Array(n)].map(()=>({fin:.25+.5*r()**1.4, speed:.03+.25*r(), noise:r()}));
+  const loss=(cf,t)=>cf.fin+(1.4-cf.fin)*Math.exp(-cf.speed*t)+.015*Math.sin(t*.7+cf.noise*9);
+  let alive=[...Array(n).keys()], budget=Math.max(1,Math.floor(E/Math.pow(eta,Math.ceil(Math.log(n)/Math.log(eta))))), stop=new Array(n).fill(E), rungs=[];
+  while(alive.length>1 && budget<E){ rungs.push(budget); const keep=Math.max(1,Math.ceil(alive.length/eta)), s=alive.slice().sort((a,b)=>loss(C[a],budget)-loss(C[b],budget)); s.slice(keep).forEach(i=>stop[i]=budget); alive=s.slice(0,keep); budget=Math.min(E,budget*eta); }
+  const win=alive[0], trueBest=[...Array(n).keys()].reduce((a,b)=>loss(C[b],E)<loss(C[a],E)?b:a), used=stop.reduce((s,v)=>s+v,0);
+  const fr=ML.chart(pSh,[{pts:[[0,.2],[E,1.45]],color:'transparent',noline:true}],{x0:0,x1:E,y0:.2,y1:1.45,xl:'training epochs'});
+  const c=pSh.ctx; c.save(); C.forEach((cf,i)=>{ c.strokeStyle= i===win? pal.c5 : stop[i]<E? pal.muted : pal.c1; c.globalAlpha= stop[i]<E? .45 : 1; c.lineWidth= i===win? 3 : 1.3; c.beginPath(); for(let t=0;t<=stop[i];t++){ const X=fr.fx(t), Y=fr.fy(loss(cf,t)); t?c.lineTo(X,Y):c.moveTo(X,Y); } c.stroke();
+    if(stop[i]<E){ c.globalAlpha=.8; c.fillStyle=pal.muted; c.fillRect(fr.fx(stop[i])-2,fr.fy(loss(cf,stop[i]))-2,4,4); } });
+  c.globalAlpha=1; c.strokeStyle=pal.ink; c.setLineDash([4,4]); rungs.forEach(b=>{ c.beginPath(); c.moveTo(fr.fx(b),12); c.lineTo(fr.fx(b),pSh.h-28); c.stroke(); }); c.restore();
+  $('#shStats').innerHTML=stat('c4',rungs.length,'rungs')+stat('c1',(100*used/(n*E)).toFixed(0)+'%','compute used vs training all')+stat('c5',win===trueBest? 'yes' : 'no','found the true best?'+(win===trueBest?'':' (final loss '+loss(C[win],E).toFixed(3)+' vs '+loss(C[trueBest],E).toFixed(3)+')')); }
+ML.bindSeg('shEta', v=>{ eta=+v; drawSh(); }); $('#shNew').addEventListener('click',()=>{ shSeed++; drawSh(); });
+
+/* ---------- 6 · nested CV on pure-noise labels ---------- */
+const pNe=new ML.Plot('#pNe',{equal:false}), pNd=new ML.Plot('#pNd',{equal:false}); let nC=20, nN=60, nSeed=1, nRes=null;
+function knnAcc(X,y,tr,te,k,w){ let ok=0; te.forEach(i=>{ const d=tr.map(j=>[j,(X[i][0]-X[j][0])**2+(X[i][1]-X[j][1])**2+(X[i][2]-X[j][2])**2]).sort((a,b)=>a[1]-b[1]).slice(0,k); let s=0; d.forEach(([j,dd])=>{ s+=(y[j]?1:-1)*(w? 1/(Math.sqrt(dd)+1e-6) : 1); }); if((s>0?1:0)===y[i]) ok++; }); return ok/te.length; }
+const folds=(idx,K)=>[...Array(K)].map((_,f)=>idx.filter((_,i)=>i%K===f));
+function cvScore(X,y,idx,cfg,K=5){ const F=folds(idx,K); return mean(F.map(te=>{ const s=new Set(te); return knnAcc(X,y,idx.filter(i=>!s.has(i)),te,cfg[0],cfg[1]); })); }
+function runN(){ const cfgs=[]; for(let k=1;k<=29;k+=2) [0,1].forEach(w=>cfgs.push([k,w])); const R=[]; for(let rep=0;rep<12;rep++){ const r=ML.rng(100*nSeed+rep), X=[...Array(nN)].map(()=>[r(),r(),r()]), y=X.map(()=>r()<.5?1:0), idx=r.shuffle([...Array(nN).keys()]);
+    const pick=[...Array(nC)].map((_,i)=>cfgs[(i*7+rep)%cfgs.length]);
+    const flat=Math.max(...pick.map(cf=>cvScore(X,y,idx,cf)));
+    const outer=folds(idx,5).map(te=>{ const s=new Set(te), trn=idx.filter(i=>!s.has(i)); const best=pick.reduce((a,cf)=>{ const sc=cvScore(X,y,trn,cf,4); return sc>a[0]?[sc,cf]:a; },[-1,null])[1]; return knnAcc(X,y,trn,te,best[0],best[1]); });
+    R.push([flat,mean(outer)]); } nRes=R; drawN(); }
+function drawN(){ const pal=P(), R=nRes, fl=mean(R.map(r=>r[0])), ne=mean(R.map(r=>r[1]));
+  const fr=ML.chart(pNe,[{pts:[[0,.5],[R.length+1,.5]],color:pal.ink,width:1.2,dash:[5,4]}],{x0:0,x1:R.length+1,y0:.25,y1:.9,xl:'repeated datasets (labels are coin flips; dashed = the truth, 50%)',yfmt:v=>(100*v).toFixed(0)+'%'});
+  const c=pNe.ctx; c.save(); R.forEach(([f,n],i)=>{ c.fillStyle=pal.c1; c.beginPath(); c.arc(fr.fx(i+1)-4,fr.fy(f),5,0,7); c.fill(); c.fillStyle=pal.c5; c.beginPath(); c.arc(fr.fx(i+1)+4,fr.fy(n),5,0,7); c.fill(); }); c.restore();
+  /* nested folds diagram */
+  pNd.clear(); const d=pNd.ctx, L=86, W=pNd.w-L-14, rh=(pNd.h-26)/5; d.save(); d.font='11.5px Inter,system-ui'; for(let o=0;o<5;o++){ const y0=10+o*rh; d.fillStyle=pal.muted; d.fillText('outer fold '+(o+1),6,y0+rh*.6);
+    for(let b=0;b<5;b++){ const x0=L+b*W/5; if(b===o){ d.fillStyle=pal.c4; d.fillRect(x0+1,y0+2,W/5-2,rh-6); } else { const sub=(W/5-2)/4; const inner=(b>o?b-1:b); for(let q=0;q<4;q++){ d.fillStyle=pal.c1; d.globalAlpha=.35+.5*((q+o)%4===inner%4?1:0); d.fillRect(x0+1+q*sub,y0+2,sub-1,rh-6); } d.globalAlpha=1; } } }
+  d.fillStyle=pal.muted; d.fillText('orange: outer test fold, never seen by the search · purple: outer training data, itself split into inner folds for tuning',6,pNd.h-6); d.restore();
+  $('#nPos').textContent='12 datasets of '+nN+' points';
+  $('#nStats').innerHTML=stat('c1',(100*fl).toFixed(1)+'%','best CV score from the search (average)')+stat('c5',(100*ne).toFixed(1)+'%','nested CV score (average)')+stat('c4','50.0%','true accuracy of any model'); }
+let nT=0; const nGo=()=>{ clearTimeout(nT); nT=setTimeout(runN,60); };
+ML.bindRange('nC', v=>{ nC=v; nGo(); }); ML.bindRange('nN', v=>{ nN=v; nGo(); }); $('#nRun').addEventListener('click',()=>{ nSeed++; runN(); });
+
+/* ---------- first draw ---------- */
+vData(); drawV(); drawG(); bReset(); tpReset(); drawSh();
+const lazy=(sel,fn)=>{ const el=$(sel); if(!('IntersectionObserver' in window)){ fn(); return; } const io=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)){ io.disconnect(); fn(); } },{rootMargin:'300px'}); io.observe(el); };
+lazy('#pNe',runN);
+pVf.onResize=pVc.onResize=()=>drawV(); pGr.onResize=pRa.onResize=()=>drawG(); pBo.onResize=pAq.onResize=()=>drawBo(); pTp.onResize=pTd.onResize=()=>drawTp(); pSh.onResize=()=>drawSh(); pNe.onResize=pNd.onResize=()=>{ if(nRes) drawN(); };
+ML.onTheme && ML.onTheme(()=>{ drawV(); drawG(); drawBo(); drawTp(); drawSh(); if(nRes) drawN(); });
+})();
+</script>
+<script>ML.nav('hyperparameter-tuning'); ML.renderMath(document.body);</script>
+</body>
+</html>

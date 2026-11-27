@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Datasets for machine learning: splits, leakage and benchmarks, explained interactively</title>
+<meta name="description" content="Train, validation and test sets, why reusing the test set inflates scores, stratified splits for rare classes, data leakage and benchmark contamination, distribution shift, learning curves and scaling laws, and the famous datasets from Iris and MNIST to ImageNet and web-scale corpora.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Evaluating models</p>
+  <h1>Datasets: <span class="grad">where honest scores come from</span></h1>
+  <p class="lede">Models learn whatever the data teach them, and a score is only as honest as the data it was measured on. This page covers how to split data, the ways a test score can lie (reuse, leakage, imbalance, shift), how much data you need, and the datasets that shaped the field.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#splits">1 · Splits</a><a href="#imbalance">2 · Rare classes</a><a href="#leak">3 · Leakage</a><a href="#shift">4 · Shift</a><a href="#learning">5 · How much data?</a><a href="#famous">6 · Famous datasets</a><a href="#care">7 · Documenting data</a><a href="#py">8 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>Why datasets need care, in plain words</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>We want to know how a model will do on data it has <i>never</i> seen, because that is what happens once it is used. So we hide some data from it. The <a class="term" data-t="training-set">training set</a> is for learning, the <a class="term" data-t="validation-set">validation set</a> is for choosing between models and settings, and the <a class="term" data-t="test-set">test set</a> is opened once, at the end, to report the final score.</p>
+      <h3>How it works</h3>
+      <ol class="steps2"><li>Collect data that look like what the model will meet in use.</li><li>Split it before looking closely, keeping related examples together and class proportions stable.</li><li>Train on one part, tune on the second, report on the third.</li><li>Check that nothing from the test part leaked into the other two.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>A teacher who hands out the exam questions as homework will see excellent exam results that mean nothing. Every trap on this page is a version of that: the model, or the person tuning it, has already seen the exam.</p>
+      <div class="pc"><div class="pro"><b>Good habits</b><ul><li>Split by user, patient or time, not by row, when rows are related</li><li>Stratify when a class is rare</li><li>Keep a final test set you never tune on</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Duplicates across splits</li><li>Features that are only known after the outcome</li><li>Benchmarks your model may have read during training</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="validation-set">Validation set</a><a class="term" data-t="cross-validation">Cross-validation</a><a class="term" data-t="stratified">Stratified split</a><a class="term" data-t="data-leakage">Leakage</a><a class="term" data-t="contamination">Contamination</a><a class="term" data-t="distribution-shift">Distribution shift</a><a class="term" data-t="learning-curve">Learning curve</a><a class="term" data-t="benchmark">Benchmark</a></div>
+      <p class="hint">How to score a model once the data are right is on the <a href="../metrics/">metrics page</a>.</p>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="splits" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Why a separate test set: the winner's curse</h2>
+    <p class="sub">You try many models that are, in truth, all equally good (70% accurate). You pick the one with the best validation score, then check it on a fresh test set. Purple: the winner's validation score. Orange: the same model on the test set. Repeated 300 times.</p>
+    <div class="plot wide" id="pW"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="wRun">Run again</button><span class="pos" id="wPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Each validation score is the true accuracy plus noise, because the validation set is a finite sample. Pick the maximum of many noisy scores and you pick the luckiest noise. The more models you try and the smaller the validation set, the more optimistic the winner's score. The fresh test set has no such selection, so it tells the truth.</p>
+      <p>This is why there are three sets, not two. It is also why “we tried 500 hyperparameter settings and report the best validation score” is not a result, and why public leaderboards slowly overfit: thousands of teams together make thousands of choices on the same test set.</p>
+      <div class="ctl"><label for="wK"><span>Models compared</span><output id="wKOut"></output></label><input type="range" id="wK" min="1" max="500" step="1" value="50"></div>
+      <div class="ctl"><label for="wN"><span>Validation set size</span><output id="wNOut"></output></label><input type="range" id="wN" min="50" max="5000" step="50" value="300"></div>
+      <div class="stats" id="wStats"></div>
+      <div class="algo"><h5 class="algo-h">Algorithm: stratified train/validation/test split</h5><ol>
+        <li><span class="kw">input</span> examples with labels, fractions \(f_{\text{train}}, f_{\text{val}}, f_{\text{test}}\), random seed</li>
+        <li><span class="kw">group</span> examples that must stay together (same user, patient or document) <span class="cm">avoid leakage between near-twins</span></li>
+        <li><span class="kw">for</span> each class \(c\) <span class="kw">do</span></li>
+        <li class="i1">shuffle the groups of class \(c\) with the seed</li>
+        <li class="i1">cut them at \(f_{\text{train}}\) and \(f_{\text{train}}+f_{\text{val}}\) <span class="cm">each split gets the same class mix</span></li>
+        <li>combine the pieces of every class into train, validation and test</li>
+        <li><span class="kw">return</span> the three sets; lock the test set away until the very end</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: cross-validation, nested CV and time series</summary><div>
+        <p>With little data, holding out 20% twice is expensive. <a href="../compare/">\(K\)-fold cross-validation</a> rotates the validation role through \(K\) parts and averages, so every example is used for both training and validation. If you also tune hyperparameters, wrap it in an outer loop (nested cross-validation) so the reported score never saw the tuning.</p>
+        <p>For time series, random splits let the model peek at the future. Always train on the past and test on a later period, ideally with a gap; scikit-learn's <code>TimeSeriesSplit</code> does a rolling version.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="imbalance" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Rare classes: why stratify</h2>
+    <p class="sub">A dataset of \(n\) examples with a rare positive class is split 80/20 at random 2,000 times. Bars: how many positives land in the test set. The green line is what a stratified split gives every time.</p>
+    <div class="plot wide" id="pS"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>With 1,000 examples and 2% positives there are only 20 positives in total, and a random 20% test set should get 4 of them. It often gets 1, 2, 6 or 7, and occasionally none, in which case recall cannot even be computed. The test score then depends on the luck of the split as much as on the model. A <a class="term" data-t="stratified">stratified split</a> fixes the count in each part.</p>
+      <p>Imbalance also affects training. Common remedies: weight the rare class more in the loss, resample (oversample positives, undersample negatives, or generate synthetic examples with SMOTE), and choose the threshold and metric for the real costs (<a href="../metrics/#curves">precision–recall</a> rather than accuracy).</p>
+      <div class="ctl"><label for="sN"><span>Dataset size \(n\)</span><output id="sNOut"></output></label><input type="range" id="sN" min="200" max="20000" step="100" value="1000"></div>
+      <div class="ctl"><label for="sP"><span>Share of positives</span><output id="sPOut"></output></label><input type="range" id="sP" min="0.005" max="0.3" step="0.005" value="0.02"></div>
+      <div class="stats" id="sStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="leak" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Leakage and contamination: when the model has seen the exam</h2>
+    <p class="sub">A model that has partly memorised its training data is tested on a set where some examples also appear (exactly or nearly) in training. Purple: the score you report. Green: the score it will get on genuinely new data.</p>
+    <div class="plot wide" id="pL"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p><a class="term" data-t="data-leakage">Leakage</a> is anything that lets test information into training. Common forms:</p>
+      <ul>
+        <li><b>Duplicates and near-duplicates</b> across splits: the same photo resized, the same sentence with different punctuation, the same patient scanned twice.</li>
+        <li><b>Target leakage</b>: a feature only known after the outcome, such as “treatment given” when predicting a diagnosis, or “claim paid date” when predicting a claim.</li>
+        <li><b>Preprocessing on all the data</b>: fitting a scaler, imputation or feature selection before splitting lets test statistics shape training.</li>
+        <li><b>Time travel</b>: random splits of time-ordered data.</li>
+        <li><b><a class="term" data-t="contamination">Benchmark contamination</a></b>: large language models are trained on much of the web, which contains many public test sets. A model can then recall answers instead of solving the questions.</li>
+      </ul>
+      <div class="ctl"><label for="lF"><span>Share of test examples also in training</span><output id="lFOut"></output></label><input type="range" id="lF" min="0" max="0.6" step="0.01" value="0.2"></div>
+      <div class="ctl"><label for="lM"><span>How much the model memorises (training accuracy)</span><output id="lMOut"></output></label><input type="range" id="lM" min="0.7" max="1" step="0.01" value="0.99"></div>
+      <div class="stats" id="lStats"></div>
+      <div class="algo"><h5 class="algo-h">Algorithm: checking for train–test overlap</h5><ol>
+        <li><span class="kw">input</span> training documents, test documents, n-gram length \(n\) (e.g. 13 words)</li>
+        <li><span class="kw">for</span> each training document <span class="kw">do</span> add the hash of every \(n\)-gram to a set \(H\) <span class="cm">normalise case and spacing first</span></li>
+        <li><span class="kw">for</span> each test document \(d\) <span class="kw">do</span></li>
+        <li class="i1">overlap\((d)\leftarrow\) share of \(d\)'s \(n\)-grams whose hash is in \(H\)</li>
+        <li class="i1"><span class="kw">if</span> overlap\((d)\) is above a threshold <span class="kw">then</span> flag \(d\) as contaminated</li>
+        <li><span class="kw">return</span> scores on the clean and flagged subsets separately <span class="cm">a big gap means leakage</span></li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="shift" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Distribution shift: the world moves after you train</h2>
+    <p class="sub">The true rule is curved (shaded regions). The model learned a straight-line boundary from training data near the centre (grey dots). Shift where the new data come from (orange dots) and watch accuracy.</p>
+    <div class="plot wide" id="pD"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Test sets are usually drawn from the same pool as training data, so they cannot warn you when the world changes. Three kinds of <a class="term" data-t="distribution-shift">shift</a>:</p>
+      <ul>
+        <li><b>Covariate shift</b>: the inputs change, the rule does not. A model trained on daytime photos meets night photos; the demo above shows this. A model can be perfect where it was trained and wrong just outside.</li>
+        <li><b>Label (prior) shift</b>: the class mix changes, such as fraud rates rising in a crisis. Precision changes even if the model does not.</li>
+        <li><b>Concept drift</b>: the rule itself changes, such as what counts as spam, or how customers react to a new price.</li>
+      </ul>
+      <p>Defences: collect test data from the deployment setting, monitor input statistics and scores over time, keep a recent hold-out set, and retrain on a schedule.</p>
+      <div class="ctl"><label for="dS"><span>Shift of the new data</span><output id="dSOut"></output></label><input type="range" id="dS" min="0" max="3" step="0.05" value="0"></div>
+      <div class="stats" id="dStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="learning" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>How much data do you need? Learning curves and scaling laws</h2>
+    <p class="sub">Test error against training-set size, on log scales. Each curve is a model of a different size. Small models plateau early; larger ones keep improving if they get more data.</p>
+    <div class="plot wide" id="pLc"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A <a class="term" data-t="learning-curve">learning curve</a> answers the most practical question in ML: will more data help? Empirically, test error falls roughly as a power law, \(\text{err}(n)\approx E+A\,n^{-\alpha}\), where \(E\) is the irreducible error (label noise) and \(\alpha\) is often between 0.1 and 0.5. On log scales the curve is close to a straight line until it flattens towards its floor.</p>
+      <p>If the training error is also high, the model is too small (high bias) and more data will not help much; a bigger model will. If training error is low but test error high, the model is overfitting (high variance), and more data will help.</p>
+      <p>Language models made this quantitative. Scaling laws (Kaplan et al., 2020; Hoffmann et al., 2022, “Chinchilla”) show loss falling as a power law in parameters, data and compute together. For a fixed compute budget the Chinchilla result is to grow model and data together, at roughly 20 training tokens per parameter. Current models are trained on far more tokens than that, because a smaller model trained longer is cheaper to run.</p>
+      <div class="ctl"><label for="lcA"><span>Learning rate of improvement \(\alpha\)</span><output id="lcAOut"></output></label><input type="range" id="lcA" min="0.1" max="0.6" step="0.01" value="0.35"></div>
+      <div class="ctl"><label for="lcE"><span>Label noise floor \(E\)</span><output id="lcEOut"></output></label><input type="range" id="lcE" min="0" max="0.2" step="0.005" value="0.03"></div>
+    </div>
+  </div>
+</section>
+
+<section id="famous" class="lab">
+  <div class="card hl">
+    <h2><span class="num">6</span>The datasets that shaped the field</h2>
+    <p class="sub">Each dot is a famous dataset, by year and size (log scale). Sizes count examples, image–text pairs or words/tokens as noted, so compare orders of magnitude only. Tap a dot for details.</p>
+    <div class="plot wide" id="pF"></div>
+    <div class="note" id="fNote"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Progress has repeatedly come from a new dataset rather than a new algorithm: MNIST made neural networks measurable, ImageNet made deep CNNs possible, SQuAD and GLUE drove pre-trained language models, and web-scale corpora made LLMs. Each <a class="term" data-t="benchmark">benchmark</a> then saturates: GLUE was matched by models within about a year, SuperGLUE within two, and recent LLM benchmarks within months, which is why evaluation keeps moving to harder and fresher tests.</p>
+      <div class="tblwrap"><table class="tbl txt" id="fTable"></table></div>
+    </div>
+  </div>
+</section>
+
+<section id="care" class="card">
+  <h2><span class="num">7</span>Documenting and handling data responsibly</h2>
+  <div class="grid2">
+    <div class="prose">
+      <h3>Datasheets and data cards</h3>
+      <p>For every dataset, write down: who collected it, when, and why; what population it covers and who is missing; how labels were made and how much annotators agreed; known errors and biases; the licence; and what it should <i>not</i> be used for. “Datasheets for datasets” (Gebru et al., 2018) and Hugging Face dataset cards are standard templates.</p>
+      <h3>Label quality</h3>
+      <p>Even famous test sets contain label errors (estimates for ImageNet's validation set are a few percent). When models are near the top, errors in the test labels decide the ranking. Tools such as confident learning find likely mislabelled examples for review.</p>
+    </div>
+    <div class="prose">
+      <h3>Privacy, consent and licences</h3>
+      <p>Personal data needs a lawful basis and minimisation (GDPR in Europe, the DPDP Act in India). Web-scraped data raises copyright and consent questions that are still being decided in courts. Keep a record of sources and licences, and remove personal identifiers you do not need.</p>
+      <h3>Bias</h3>
+      <p>A model trained on a skewed sample reproduces the skew: face datasets that under-represent darker skin, credit data that reflect past lending decisions. Report metrics per group, not only overall.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">8</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.model_selection <span class="k">import</span> train_test_split, StratifiedKFold, GroupKFold, TimeSeriesSplit
+X_tmp, X_test, y_tmp, y_test = train_test_split(X, y, test_size=<span class="s">0.2</span>, stratify=y, random_state=<span class="s">0</span>)
+X_tr, X_val, y_tr, y_val = train_test_split(X_tmp, y_tmp, test_size=<span class="s">0.25</span>, stratify=y_tmp, random_state=<span class="s">0</span>)
+GroupKFold(n_splits=<span class="s">5</span>).split(X, y, groups=patient_id)      <span class="c"># keep each patient in one fold</span>
+TimeSeriesSplit(n_splits=<span class="s">5</span>, gap=<span class="s">7</span>).split(X)                  <span class="c"># always train on the past</span>
+
+<span class="k">from</span> sklearn.pipeline <span class="k">import</span> make_pipeline                   <span class="c"># fit preprocessing inside each fold: no leakage</span>
+<span class="k">from</span> sklearn.preprocessing <span class="k">import</span> StandardScaler
+<span class="k">from</span> sklearn.linear_model <span class="k">import</span> LogisticRegression
+<span class="k">from</span> sklearn.model_selection <span class="k">import</span> cross_val_score
+cross_val_score(make_pipeline(StandardScaler(), LogisticRegression(class_weight=<span class="s">"balanced"</span>)), X, y, cv=StratifiedKFold(<span class="s">5</span>))
+
+<span class="k">from</span> datasets <span class="k">import</span> load_dataset                           <span class="c"># Hugging Face Datasets</span>
+ds = load_dataset(<span class="s">"glue"</span>, <span class="s">"sst2"</span>)                         <span class="c"># comes with train / validation / test splits</span></pre>
+</section>
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything runs in your browser.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../dl/assets/evo.js"></script>
+<script>
+(function(){
+const {$} = ML;
+function frame(plot,x0,x1,y0,y1,xl,o={}){ return ML.chart(plot,[{pts:[[x0,y0],[x1,y1]],color:'transparent',noline:true}],Object.assign({x0,x1,y0,y1,xl},o)); }
+function dot(plot,fr,x,y,r,color,a=1){ const c=plot.ctx; c.save(); c.globalAlpha=a; c.fillStyle=color; c.beginPath(); c.arc(fr.fx(x),fr.fy(y),r,0,7); c.fill(); c.restore(); }
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+if(window.EVO) EVO.render('#evoSlot','eval');
+
+/* ---- 1 winner's curse ---- */
+const pW=new ML.Plot('#pW',{equal:false}); const wr=ML.rng(2); let wK=50, wN=300, WV=[], WT=[];
+const binom=(n,p)=>{ if(n>400){ return Math.round(n*p+Math.sqrt(n*p*(1-p))*wr.gauss()); } let k=0; for(let i=0;i<n;i++) if(wr()<p) k++; return k; };
+function runW(){ WV=[]; WT=[]; for(let r=0;r<300;r++){ let best=-1; for(let k=0;k<wK;k++) best=Math.max(best,binom(wN,.7)/wN); WV.push(best); WT.push(binom(2000,.7)/2000); } drawW(); }
+function drawW(){ const P=ML.palette(), lo=.6, hi=.85, nb=50, w=(hi-lo)/nb, h=a=>{ const c=new Array(nb).fill(0); a.forEach(v=>{ const b=Math.floor((v-lo)/w); if(b>=0&&b<nb) c[b]++; }); return c; }, hv=h(WV), ht=h(WT), ym=Math.max(...hv,...ht)*1.1;
+  const fr=frame(pW,lo,hi,0,ym,'accuracy'), c=pW.ctx; [[ht,P.c4],[hv,P.c1]].forEach(([H,col])=>{ c.save(); c.fillStyle=col; c.globalAlpha=.5; H.forEach((k,b)=>{ c.fillRect(fr.fx(lo+b*w)+.5,fr.fy(k),fr.fx(lo+(b+1)*w)-fr.fx(lo+b*w)-1,fr.fy(0)-fr.fy(k)); }); c.restore(); });
+  c.save(); c.strokeStyle=P.ink; c.setLineDash([5,4]); c.beginPath(); c.moveTo(fr.fx(.7),12); c.lineTo(fr.fx(.7),pW.h-28); c.stroke(); c.restore();
+  const m=a=>a.reduce((x,y)=>x+y,0)/a.length; $('#wPos').textContent='dashed = true accuracy 0.700';
+  $('#wStats').innerHTML=stat('c1',m(WV).toFixed(3),'winner on validation (average)')+stat('c4',m(WT).toFixed(3),'same model on the test set')+stat('c2','+'+(100*(m(WV)-.7)).toFixed(1)+' pts','optimism from selection'); }
+ML.bindRange('wK',v=>{wK=v;runW();}); ML.bindRange('wN',v=>{wN=v;runW();}); $('#wRun').addEventListener('click',runW); pW.onResize=drawW;
+
+/* ---- 2 stratify ---- */
+const pS=new ML.Plot('#pS',{equal:false}); const sr=ML.rng(4); let sN=1000, sP=.02;
+function drawS(){ const P=ML.palette(), pos=Math.max(1,Math.round(sN*sP)), nt=Math.round(sN*.2), exp=pos*.2, cnt=new Map();
+  const hv=nt*sP*(1-sP)*(sN-nt)/(sN-1); for(let r=0;r<2000;r++){ let k=0; if(nt>600){ k=Math.max(0,Math.round(exp+Math.sqrt(hv)*sr.gauss())); } else { let left=sN, lp=pos; for(let i=0;i<nt;i++){ if(sr()<lp/left){ k++; lp--; } left--; } } cnt.set(k,(cnt.get(k)||0)+1); } /* hypergeometric draws (normal approximation for large n) */
+  const ks=[...cnt.keys()], k0=Math.min(...ks), k1=Math.max(...ks,Math.round(exp)), ym=Math.max(...cnt.values())*1.12, fr=frame(pS,k0-1,k1+1,0,ym,'positives in the test set'), c=pS.ctx, bw=Math.max(2,Math.min(30,(fr.fx(1)-fr.fx(0))*.7));
+  cnt.forEach((v,k)=>{ c.save(); c.fillStyle=k===0?P.c4:P.c1; c.globalAlpha=.6; c.fillRect(fr.fx(k)-bw/2,fr.fy(v),bw,fr.fy(0)-fr.fy(v)); c.restore(); });
+  c.save(); c.strokeStyle=P.c5; c.lineWidth=3; c.beginPath(); c.moveTo(fr.fx(Math.round(exp)),12); c.lineTo(fr.fx(Math.round(exp)),pS.h-28); c.stroke(); c.restore();
+  let m=0, s2=0, z=0; cnt.forEach((v,k)=>{ m+=k*v; }); m/=2000; cnt.forEach((v,k)=>{ s2+=v*(k-m)**2; if(k===0) z=v; }); const sd=Math.sqrt(s2/2000);
+  $('#sStats').innerHTML=stat('c3',pos,'positives in the whole dataset')+stat('c5',Math.round(exp),'in the test set if stratified')+stat('c1','± '+sd.toFixed(1),'spread with random splits')+stat('c4',(100*z/2000).toFixed(1)+'%','random splits with no positive at all'); }
+ML.bindRange('sN',v=>{sN=v;drawS();}); ML.bindRange('sP',v=>{sP=v;drawS();},v=>(100*v).toFixed(1)+'%'); pS.onResize=drawS;
+
+/* ---- 3 leakage ---- */
+const pL=new ML.Plot('#pL',{equal:false}); let lF=.2, lM=.99; const TRUE=.72;
+function drawL(){ const P=ML.palette(), rep=x=>x*lM+(1-x)*TRUE, fr=ML.chart(pL,[{pts:[[0,TRUE],[.6,TRUE]],color:P.c5,width:3},{pts:[...Array(61).keys()].map(i=>[i/100,rep(i/100)]),color:P.c1,width:3}],{x0:0,x1:.6,y0:.6,y1:1,xl:'share of test examples also in training'});
+  dot(pL,fr,lF,rep(lF),7,P.c1); dot(pL,fr,lF,TRUE,7,P.c5);
+  $('#lStats').innerHTML=stat('c1',(100*rep(lF)).toFixed(1)+'%','reported test accuracy')+stat('c5',(100*TRUE).toFixed(1)+'%','accuracy on truly new data')+stat('c4','+'+(100*(rep(lF)-TRUE)).toFixed(1)+' pts','inflation from leakage'); }
+ML.bindRange('lF',v=>{lF=v;drawL();},v=>(100*v).toFixed(0)+'%'); ML.bindRange('lM',v=>{lM=v;drawL();},v=>(100*v).toFixed(0)+'%'); pL.onResize=drawL;
+
+/* ---- 4 shift ---- */
+const pD=new ML.Plot('#pD',{equal:false}); const dr=ML.rng(6), TR=[], TE0=[]; for(let i=0;i<300;i++){ TR.push([.8*dr.gauss(),.8*dr.gauss()]); TE0.push([.8*dr.gauss(),.8*dr.gauss()]); } let dS=0;
+const truth=(x,y)=>y>0.35*x*x-0.6?1:0, model=(x,y)=>y>-0.25?1:0; /* tangent-ish line fitted near the centre */
+function drawD(){ const P=ML.palette(), fr=frame(pD,-4,6,-3,4,'x₁'), c=pD.ctx, TE=TE0.map(([x,y])=>[x+dS,y+dS*.3]);
+  c.save(); c.globalAlpha=.12; for(let gx=0;gx<60;gx++) for(let gy=0;gy<40;gy++){ const x=-4+gx/6, y=-3+gy*7/40; c.fillStyle=truth(x,y)?P.c1:P.c3; c.fillRect(fr.fx(x),fr.fy(y+7/40),fr.fx(x+1/6)-fr.fx(x)+1,fr.fy(y)-fr.fy(y+7/40)+1); } c.restore();
+  c.save(); c.strokeStyle=P.ink; c.lineWidth=2.5; c.beginPath(); c.moveTo(fr.fx(-4),fr.fy(-.25)); c.lineTo(fr.fx(6),fr.fy(-.25)); c.stroke(); c.font='12px Inter,system-ui'; c.fillStyle=P.ink; c.fillText('model boundary',fr.fx(3.6),fr.fy(-.25)-6); c.restore();
+  TR.forEach(([x,y])=>dot(pD,fr,x,y,2.5,P.muted,.7)); TE.forEach(([x,y])=>dot(pD,fr,x,y,3,P.c4,.85));
+  const acc=a=>a.reduce((s,[x,y])=>s+(truth(x,y)===model(x,y)?1:0),0)/a.length;
+  $('#dStats').innerHTML=stat('c3',(100*acc(TR)).toFixed(1)+'%','accuracy where it was trained')+stat('c4',(100*acc(TE)).toFixed(1)+'%','accuracy on the shifted data'); }
+ML.bindRange('dS',v=>{dS=v;drawD();},v=>v.toFixed(2)); pD.onResize=drawD;
+
+/* ---- 5 learning curves ---- */
+const pLc=new ML.Plot('#pLc',{equal:false}); let lcA=.35, lcE=.03;
+function drawLc(){ const P=ML.palette(), ns=[...Array(61).keys()].map(i=>Math.pow(10,1+i*5/60)), caps=[[.18,P.c3,'small model'],[.08,P.c2,'medium model'],[0,P.c1,'large model']];
+  const ser=caps.map(([cap,col])=>({pts:ns.map(n=>[n,lcE+cap+(1-lcE-cap)*Math.min(1,2.2*Math.pow(n/10,-lcA))*(cap?1:1)]),color:col,width:2.6}));
+  ser.push({pts:[[10,lcE],[1e6,lcE]],color:P.ink,dash:[5,4],width:1.2});
+  const fr=ML.chart(pLc,ser,{logx:true,x0:10,x1:1e6,y0:0,y1:1,xl:'training examples (log scale)'}); const c=pLc.ctx; c.save(); c.font='12px Inter,system-ui'; caps.forEach(([cap,col,l],i)=>{ c.fillStyle=col; c.fillText(l+(cap?` (floor ${(lcE+cap).toFixed(2)})`:''),54,22+16*i); }); c.fillStyle=P.ink; c.fillText('noise floor E',pLc.w-110,fr.fy(lcE)-6); c.restore(); }
+ML.bindRange('lcA',v=>{lcA=v;drawLc();},v=>v.toFixed(2)); ML.bindRange('lcE',v=>{lcE=v;drawLc();},v=>v.toFixed(3)); pLc.onResize=drawLc;
+
+/* ---- 6 famous datasets ---- */
+const FAM=[['Iris',1936,150,'flower measurements','150 flowers, 3 species, 4 measurements; Fisher’s LDA paper.','tabular'],['UCI Adult',1996,48842,'census records','Predict income above $50k; a staple of fairness research.','tabular'],['MNIST',1998,70000,'handwritten digits','28×28 greyscale digits; 60k train, 10k test.','vision'],['CIFAR-10',2009,60000,'small images','32×32 colour images in 10 classes.','vision'],['ImageNet',2009,14000000,'images','About 14 million images in 21k categories; the ILSVRC subset has 1.28 million training images in 1,000 classes.','vision'],['COCO',2014,330000,'images','About 330k images with object boxes, masks and captions.','vision'],['SQuAD',2016,100000,'questions','100k+ reading-comprehension questions on Wikipedia.','text'],['GLUE',2018,1000000,'sentences (approx.)','Nine language-understanding tasks, about a million labelled examples in all.','text'],['C4',2019,156e9,'tokens (approx.)','Cleaned Common Crawl used to train T5.','text'],['MMLU',2020,15908,'questions','Multiple-choice exam questions in 57 subjects.','text'],['HumanEval',2021,164,'coding problems','Hand-written Python problems with unit tests; reported as pass@k.','text'],['LAION-5B',2022,5.85e9,'image–text pairs','5.85 billion image–text pairs scraped from the web, used for open CLIP and diffusion models.','vision'],['SWE-bench',2023,2294,'GitHub issues','Real issues from Python repositories; the model must write a patch that passes the tests.','text'],['FineWeb',2024,15e12,'tokens','About 15 trillion tokens of filtered web text for LLM pre-training.','text']];
+const pF=new ML.Plot('#pF',{equal:false}); let fSel=4;
+function drawF(){ const P=ML.palette(), col={tabular:P.c3,vision:P.c4,text:P.c1}, fr=frame(pF,1930,2028,1,14,'year',{yfmt:v=>'10^'+v}), c=pF.ctx;
+  FAM.forEach((d,i)=>{ const y=Math.log10(d[2]); dot(pF,fr,d[1],y,i===fSel?8:5.5,col[d[5]]); c.save(); c.font=(i===fSel?'600 ':'')+'11px Inter,system-ui'; c.fillStyle=P.ink; c.textAlign=d[1]>2015?'right':'left'; c.fillText(d[0],fr.fx(d[1])+(d[1]>2015?-9:9),fr.fy(y)+4); c.restore(); });
+  c.save(); c.font='11px Inter,system-ui'; [['tabular',P.c3],['vision',P.c4],['text',P.c1]].forEach(([k,cl],i)=>{ c.fillStyle=cl; c.fillText('● '+k,54+70*i,22); }); c.restore();
+  const d=FAM[fSel]; $('#fNote').innerHTML=`<b>${d[0]} (${d[1]})</b>: ${d[3]} ≈ ${d[2]>=1e9?(d[2]/1e9).toLocaleString()+' billion':d[2]>=1e6?(d[2]/1e6).toLocaleString()+' million':d[2].toLocaleString()}. ${d[4]}`; pF._fr=fr; }
+pF.cv.addEventListener('click',e=>{ const r=pF.cv.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top, fr=pF._fr; if(!fr) return; let best=-1, bd=1e9; FAM.forEach((d,i)=>{ const dd=Math.hypot(fr.fx(d[1])-x,fr.fy(Math.log10(d[2]))-y); if(dd<bd){ bd=dd; best=i; } }); if(bd<30){ fSel=best; drawF(); } });
+$('#fTable').innerHTML='<tr><th>Dataset</th><th>Year</th><th>Size</th><th>Used for</th></tr>'+FAM.map(d=>`<tr><td><b>${d[0]}</b></td><td>${d[1]}</td><td>${d[2]>=1e9?(d[2]/1e9).toLocaleString()+' B':d[2]>=1e6?(d[2]/1e6).toLocaleString()+' M':d[2].toLocaleString()} ${d[3]}</td><td>${d[4]}</td></tr>`).join('');
+pF.onResize=drawF;
+
+ML.onTheme(()=>{ drawW(); drawS(); drawL(); drawD(); drawLc(); drawF(); });
+runW(); drawS(); drawL(); drawD(); drawLc(); drawF();
+})();
+</script>
+<script>ML.nav('datasets'); ML.renderMath(document.body);</script>
+</body>
+</html>

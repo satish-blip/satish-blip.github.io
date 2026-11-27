@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maximum likelihood estimation, explained interactively</title>
+<meta name="description" content="Maximum likelihood estimation from scratch: likelihood versus probability on coin flips, closed-form estimators for Poisson, exponential, Normal and uniform models, why loss functions are negative log-likelihoods, Fisher information and standard errors, Newton's method, and where MLE goes wrong.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-math">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Mathematical concepts &middot; Statistics</p>
+  <h1>Maximum likelihood: <span class="grad">let the data choose</span></h1>
+  <p class="lede">Almost every model in machine learning is trained the same way: pick the parameters under which the data you actually saw would have been most probable. That one principle produces the sample mean, least squares, cross-entropy loss and logistic regression. This page builds it up from coin flips.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#lik">1 · Likelihood</a><a href="#models">2 · The recipe</a><a href="#loss">3 · Losses are likelihoods</a><a href="#fisher">4 · How sure?</a><a href="#newton">5 · No formula</a><a href="#limits">6 · Where it fails</a><a href="#py">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is maximum likelihood, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>A model has knobs, its <a class="term" data-t="parameter">parameters</a>: the bias of a coin, the mean of a bell curve, the weights of a network. We cannot see the knobs, only data the model produced. <a class="term" data-t="mle">Maximum likelihood estimation</a> (MLE) asks, for each possible setting of the knobs, "how probable would my data be if this were the truth?", and picks the setting that gives the highest answer.</p>
+      <p>That "how probable would my data be" number is the <a class="term" data-t="likelihood">likelihood</a>. It is the same formula as a probability, read the other way round: the data are fixed, and the parameter is what varies.</p>
+      <h3>How it works</h3>
+      <ol class="steps2"><li>Write down a model: the probability of one data point given parameters \(\theta\).</li><li>Multiply over all the (independent) data points to get the likelihood \(L(\theta)\).</li><li>Take logs, so the product becomes a sum: the log-likelihood \(\ell(\theta)\).</li><li>Find the \(\theta\) that makes \(\ell\) largest: set the derivative to zero, or climb it numerically.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>You find a coin and flip it 10 times: 7 heads. Is it fair? A fair coin gives exactly 7 heads in 10 flips about 12% of the time. A coin with a 70% heads chance does it 27% of the time, more than any other coin. So 0.7 is the maximum-likelihood guess. It is not certain, just the explanation under which what you saw is least surprising.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>One recipe for any model you can write down</li><li>Becomes the best possible estimator as data grows</li><li>Comes with its own error bars (Fisher information)</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Small data: 3 heads in 3 flips gives "always heads"</li><li>Many parameters: it fits noise (overfitting)</li><li>It is only as good as the model you assumed</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="likelihood">Likelihood</a><a class="term" data-t="log-likelihood">Log-likelihood</a><a class="term" data-t="mle">MLE</a><a class="term" data-t="nll">Negative log-likelihood</a><a class="term" data-t="estimator">Estimator</a><a class="term" data-t="fisher-information">Fisher information</a><a class="term" data-t="standard-error">Standard error</a><a class="term" data-t="newton">Newton's method</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. The Bayesian alternative, which adds prior beliefs, is on the <a href="../bayesian/">next page</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="lik" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Probability or likelihood? Same formula, read two ways</h2>
+    <p class="sub">The data: \(k\) heads in \(n\) flips. Top: each flip's probability under your guess \(p\). Bottom: the likelihood of all the flips together as \(p\) varies. The orange line marks \(\hat p=k/n\).</p>
+    <div class="coins" id="coins"></div>
+    <div class="plot short" id="pL"></div>
+    <div class="plot short" id="pLL" style="margin-top:8px"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Say flip \(i\) gives \(x^{(i)}=1\) for heads and \(0\) for tails. Under a coin with heads probability \(p\), one flip has probability \(p^{x}(1-p)^{1-x}\): that is \(p\) for heads and \(1-p\) for tails. Flips are independent, so the probability of the whole sequence is a product:</p>
+      <div class="mathbox c1">$$L(p)=\prod_{i=1}^{n}p^{x^{(i)}}(1-p)^{1-x^{(i)}}=p^{k}(1-p)^{n-k}.$$</div>
+      <p>Read as a function of the data with \(p\) fixed, this is a probability: summed over all \(2^n\) possible sequences it gives 1. Read as a function of \(p\) with the data fixed, it is the <b>likelihood</b>. It does not integrate to 1 over \(p\) and it is not "the probability that \(p\) is right". It only ranks the candidates.</p>
+      <p>Products of many numbers below 1 underflow quickly (try \(n=50\)), and products are awkward to differentiate. The log turns the product into a sum and keeps the same peak, because \(\log\) only ever goes up:</p>
+      <ol class="derive">
+        <li><div class="eq">\(\ell(p)=\log L(p)=k\log p+(n-k)\log(1-p)\)</div><div class="why">The log-likelihood: one term per flip, added up.</div></li>
+        <li><div class="eq">\(\ell'(p)=\dfrac{k}{p}-\dfrac{n-k}{1-p}=0\)</div><div class="why">At the peak the slope is zero.</div></li>
+        <li><div class="eq">\(k(1-p)=(n-k)p\;\Rightarrow\;\hat p=\dfrac{k}{n}\)</div><div class="why">The maximum-likelihood estimate is the fraction of heads, which is what intuition said.</div></li>
+        <li><div class="eq">\(\ell''(p)=-\dfrac{k}{p^2}-\dfrac{n-k}{(1-p)^2}&lt;0\)</div><div class="why">The curve bends down everywhere, so this flat point is the maximum, not a minimum.</div></li>
+      </ol>
+      <div class="ctl"><label for="ln"><span>Flips \(n\)</span><output id="lnOut"></output></label><input type="range" id="ln" min="1" max="50" step="1" value="10"></div>
+      <div class="ctl"><label for="lk"><span>Heads \(k\)</span><output id="lkOut"></output></label><input type="range" id="lk" min="0" max="50" step="1" value="7"></div>
+      <div class="ctl"><label for="lp"><span>Your guess \(p\)</span><output id="lpOut"></output></label><input type="range" id="lp" min="0.01" max="0.99" step="0.01" value="0.5"></div>
+      <div class="stats" id="lStats"></div>
+      <p class="hint">Move \(n\) from 10 to 50 with \(k/n\) fixed: the peak stays put but gets narrower. More data, more certainty. Section 4 turns that width into an error bar.</p>
+    </div>
+  </div>
+</section>
+
+<section id="models" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>The recipe, on four different models</h2>
+    <p class="sub">Data drawn from a model with a true parameter (dashed). The purple curve is the maximum-likelihood fit. Below: the log-likelihood \(\ell(\theta)\), with its peak at \(\hat\theta\).</p>
+    <div class="ctl"><span class="lbl">Model</span><div class="seg" id="mSeg"><button data-v="pois" class="on">Poisson</button><button data-v="expo">Exponential</button><button data-v="norm">Normal</button><button data-v="unif">Uniform(0, θ)</button></div></div>
+    <div class="plot short" id="pM"></div>
+    <div class="plot short" id="pMl" style="margin-top:8px"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="mNew">New data</button><span class="pos" id="mPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The same four steps work for any model whose probability you can write down. Here they are, with the answer for each model above:</p>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Model</th><th>One point</th><th>Log-likelihood</th><th>MLE</th></tr>
+        <tr><td><b>Poisson</b> (counts: emails per hour)</td><td>\(\frac{\lambda^{x}e^{-\lambda}}{x!}\)</td><td>\(\sum x_i\log\lambda-n\lambda\)</td><td>\(\hat\lambda=\bar x\)</td></tr>
+        <tr><td><b>Exponential</b> (waiting times)</td><td>\(\lambda e^{-\lambda x}\)</td><td>\(n\log\lambda-\lambda\sum x_i\)</td><td>\(\hat\lambda=1/\bar x\)</td></tr>
+        <tr><td><b>Normal</b> (heights, errors)</td><td>\(\frac{1}{\sqrt{2\pi}\sigma}e^{-(x-\mu)^2/2\sigma^2}\)</td><td>\(-n\log\sigma-\frac{\sum(x_i-\mu)^2}{2\sigma^2}\)</td><td>\(\hat\mu=\bar x,\ \hat\sigma^2=\frac1n\sum(x_i-\bar x)^2\)</td></tr>
+        <tr><td><b>Uniform</b> on \([0,\theta]\)</td><td>\(\frac1\theta\) if \(x\le\theta\)</td><td>\(-n\log\theta\) if \(\theta\ge\max x_i\)</td><td>\(\hat\theta=\max_i x_i\)</td></tr>
+      </table></div>
+      <p>The uniform model is the odd one out, and worth a look. Its log-likelihood \(-n\log\theta\) keeps rising as \(\theta\) shrinks, until \(\theta\) falls below the largest data point, where the data become impossible and the likelihood drops to zero. So the peak is at a corner, not where a derivative is zero. "Set the derivative to zero" is a tool, not the definition. The definition is "the largest likelihood".</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: the maximum-likelihood recipe</h5><ol>
+        <li><span class="kw">input</span> data \(x^{(1..n)}\), a model \(p(x;\theta)\)</li>
+        <li>\(\ell(\theta)\leftarrow\sum_{i=1}^{n}\log p(x^{(i)};\theta)\) <span class="cm">independence turns the product into a sum</span></li>
+        <li>solve \(\ell'(\theta)=0\) for \(\theta\) <span class="cm">the score equation</span></li>
+        <li><span class="kw">check</span> \(\ell''(\hat\theta)&lt;0\) and compare with the boundaries <span class="cm">a maximum, not a minimum or a corner</span></li>
+        <li><span class="kw">return</span> \(\hat\theta\), with standard error \(1/\sqrt{-\ell''(\hat\theta)}\) <span class="cm">see section 4</span></li>
+      </ol></div>
+      <div class="ctl"><label for="mn"><span>Sample size \(n\)</span><output id="mnOut"></output></label><input type="range" id="mn" min="5" max="300" step="5" value="30"></div>
+      <div class="ctl"><label for="mt"><span>True parameter</span><output id="mtOut"></output></label><input type="range" id="mt" min="0.2" max="1" step="0.01" value="0.5"></div>
+      <div class="stats" id="mStats"></div>
+      <details class="deeper"><summary>Going deeper: invariance, and why the uniform MLE is biased</summary><div>
+        <p><b>Invariance.</b> If \(\hat\theta\) is the MLE of \(\theta\), then \(g(\hat\theta)\) is the MLE of \(g(\theta)\) for any function \(g\). The MLE of an exponential's mean \(1/\lambda\) is \(1/\hat\lambda=\bar x\); the MLE of \(\sigma\) is \(\sqrt{\hat\sigma^2}\). Reparametrising never changes the answer, because it only relabels the points on the likelihood curve.</p>
+        <p><b>Bias.</b> The largest of \(n\) uniform draws is always below \(\theta\), so \(\hat\theta=\max x_i\) is too small on average: \(\mathbb E[\hat\theta]=\frac{n}{n+1}\theta\). The same happens with \(\hat\sigma^2\) for the Normal, which divides by \(n\) rather than \(n-1\). MLE is not designed to be unbiased. It is designed to be the most plausible value, and the bias vanishes as \(n\) grows.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="loss" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Every loss function is a likelihood in disguise</h2>
+    <p class="sub">Twenty points and one outlier you can move. Purple: the line that maximises the likelihood under Gaussian noise (least squares). Green: the same under Laplace noise (least absolute deviations).</p>
+    <div class="plot wide" id="pR"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A regression model says \(y=\theta_0+\theta_1x+\varepsilon\), where \(\varepsilon\) is noise. To get a likelihood we must say what the noise looks like. If it is Gaussian with spread \(\sigma\):</p>
+      <ol class="derive">
+        <li><div class="eq">\(p(y^{(i)}\mid x^{(i)};\theta)=\dfrac{1}{\sqrt{2\pi}\sigma}\exp\!\Big(-\dfrac{(y^{(i)}-\theta^\top x^{(i)})^2}{2\sigma^2}\Big)\)</div><div class="why">Each \(y\) is a bell curve centred on the line.</div></li>
+        <li><div class="eq">\(\ell(\theta)=-n\log(\sqrt{2\pi}\sigma)-\dfrac{1}{2\sigma^2}\sum_i\big(y^{(i)}-\theta^\top x^{(i)}\big)^2\)</div><div class="why">Take logs and add. Only the second term depends on \(\theta\).</div></li>
+        <li><div class="eq">\(\arg\max_\theta\ell(\theta)=\arg\min_\theta\sum_i\big(y^{(i)}-\theta^\top x^{(i)}\big)^2\)</div><div class="why">Maximising the likelihood is minimising the sum of squared errors. Least squares <i>is</i> MLE under Gaussian noise.</div></li>
+      </ol>
+      <p>Change the noise assumption and the loss changes with it. Laplace noise, \(p(\varepsilon)\propto e^{-|\varepsilon|/b}\), has heavier tails, so a far-away point is not shocking, and the loss becomes \(\sum|y^{(i)}-\theta^\top x^{(i)}|\). Drag the outlier: the purple line chases it, because squared errors punish it heavily. The green line barely moves.</p>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Assume the target is…</th><th>Negative log-likelihood is…</th><th>Known in ML as</th></tr>
+        <tr><td>Gaussian around the prediction</td><td>\(\frac1{2\sigma^2}\sum(y-\hat y)^2\)</td><td>MSE, <a href="../../ml/linear-regression/">linear regression</a></td></tr>
+        <tr><td>Laplace around the prediction</td><td>\(\frac1b\sum|y-\hat y|\)</td><td>MAE, robust regression</td></tr>
+        <tr><td>Bernoulli with \(P(y=1)=\hat p\)</td><td>\(-\sum[y\log\hat p+(1-y)\log(1-\hat p)]\)</td><td>log loss, <a href="../../ml/logistic-regression/">logistic regression</a></td></tr>
+        <tr><td>Categorical with probabilities \(\hat p_k\)</td><td>\(-\sum\log\hat p_{y}\)</td><td>cross-entropy, every classifier network</td></tr>
+        <tr><td>Poisson with rate \(\hat\lambda\)</td><td>\(\sum(\hat\lambda-y\log\hat\lambda)\)</td><td>Poisson loss for counts</td></tr>
+      </table></div>
+      <div class="ctl"><label for="ro"><span>Outlier height</span><output id="roOut"></output></label><input type="range" id="ro" min="-6" max="14" step="0.1" value="11"></div>
+      <div class="stats" id="rStats"></div>
+      <p class="hint">So when a network "minimises cross-entropy", it is doing maximum likelihood. Choosing a loss is choosing a noise model.</p>
+    </div>
+  </div>
+</section>
+
+<section id="fisher" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>How sure is the estimate? Fisher information</h2>
+    <p class="sub">Repeat the whole experiment many times: flip a coin with true \(p\) \(n\) times, and compute \(\hat p\) each time. Bars: where the estimates land. Curve: the prediction from the curvature of the log-likelihood.</p>
+    <div class="plot wide" id="pF"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="f1000">Run 1,000 experiments</button><button class="btn" id="fR">Clear</button><span class="pos" id="fPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Look back at section 1: with more flips, the log-likelihood peak became sharper. A sharp peak means that moving away from \(\hat p\) quickly makes the data implausible, so the data pin \(p\) down tightly. The sharpness is measured by the curvature, \(-\ell''\). Its expected value is the <a class="term" data-t="fisher-information">Fisher information</a>:</p>
+      <div class="mathbox c1">$$I_n(\theta)=-\mathbb E\big[\ell''(\theta)\big],\qquad \hat\theta\;\approx\;\mathcal N\!\Big(\theta,\;\frac{1}{I_n(\theta)}\Big)\ \text{ for large } n.$$</div>
+      <p>For the coin, \(\ell''(p)=-k/p^2-(n-k)/(1-p)^2\) and \(\mathbb E[k]=np\), so</p>
+      <ol class="derive">
+        <li><div class="eq">\(I_n(p)=\dfrac{np}{p^2}+\dfrac{n(1-p)}{(1-p)^2}=\dfrac{n}{p(1-p)}\)</div><div class="why">Information grows linearly with \(n\): every flip adds the same amount.</div></li>
+        <li><div class="eq">\(\operatorname{SE}(\hat p)=\sqrt{1/I_n(\hat p)}=\sqrt{\hat p(1-\hat p)/n}\)</div><div class="why">The familiar standard error of a proportion, derived from curvature alone.</div></li>
+      </ol>
+      <div class="ctl"><label for="fp"><span>True \(p\)</span><output id="fpOut"></output></label><input type="range" id="fp" min="0.05" max="0.95" step="0.01" value="0.3"></div>
+      <div class="ctl"><label for="fn"><span>Flips per experiment \(n\)</span><output id="fnOut"></output></label><input type="range" id="fn" min="5" max="400" step="5" value="40"></div>
+      <div class="stats" id="fStats"></div>
+      <details class="deeper"><summary>Going deeper: why the MLE is approximately Normal, and the Cramér–Rao bound</summary><div>
+        <p><b>Sketch.</b> Expand the score around the truth: \(0=\ell'(\hat\theta)\approx\ell'(\theta)+(\hat\theta-\theta)\ell''(\theta)\), so \(\hat\theta-\theta\approx\ell'(\theta)/(-\ell''(\theta))\). The score \(\ell'(\theta)=\sum_i\partial_\theta\log p(x^{(i)};\theta)\) is a sum of independent terms with mean 0 and variance \(I_1(\theta)\) each, so by the <a href="../inference/#sampling">central limit theorem</a> it is approximately \(\mathcal N(0,nI_1)\). The denominator is close to its mean \(nI_1\) by the law of large numbers. Dividing gives \(\hat\theta-\theta\approx\mathcal N(0,1/(nI_1))\).</p>
+        <p><b>Cramér–Rao.</b> Any unbiased estimator has variance at least \(1/I_n(\theta)\). The MLE reaches that bound as \(n\to\infty\), so asymptotically no estimator does better. This is why MLE is the default.</p>
+        <p><b>Many parameters.</b> With a vector \(\theta\), \(-\ell''\) becomes the negative Hessian matrix \(-H\), and \(\operatorname{Cov}(\hat\theta)\approx(-H)^{-1}\). The standard errors printed next to logistic regression coefficients are the square roots of its diagonal.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="newton" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>When there is no formula: climb the log-likelihood</h2>
+    <p class="sub">A one-weight logistic model \(P(y=1\mid x)=\sigma(wx)\) on 40 points. Its log-likelihood \(\ell(w)\) has no closed-form peak. Newton's method fits a parabola (dashed) at the current point and jumps to its top.</p>
+    <div class="plot short" id="pN"></div>
+    <div class="plot short" id="pNd" style="margin-top:8px"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="nNewton">Newton step</button><button class="btn" id="nGrad">Gradient step</button><button class="btn" id="nR">Reset</button><span class="pos" id="nPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>For most models, the score equation \(\ell'(\theta)=0\) cannot be solved by algebra. Logistic regression is the classic case:</p>
+      <div class="mathbox c1">$$\ell(w)=\sum_i\Big[y^{(i)}\log\sigma(wx^{(i)})+(1-y^{(i)})\log\big(1-\sigma(wx^{(i)})\big)\Big],\qquad \ell'(w)=\sum_i\big(y^{(i)}-\sigma(wx^{(i)})\big)x^{(i)}.$$</div>
+      <p>Setting \(\ell'(w)=0\) mixes \(w\) inside many sigmoids, so we climb instead. <b>Gradient ascent</b> takes a small step uphill, \(w\leftarrow w+\alpha\ell'(w)\), and needs many of them. <b><a class="term" data-t="newton">Newton's method</a></b> uses the curvature too. Near the current \(w\), approximate \(\ell\) by a parabola, \(\ell(w+d)\approx\ell(w)+\ell'(w)d+\frac12\ell''(w)d^2\), and jump to the parabola's top, \(d=-\ell'(w)/\ell''(w)\). Close to the peak the parabola is almost exact, so each step roughly doubles the number of correct digits.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: maximum likelihood by Newton's method</h5><ol>
+        <li><span class="kw">input</span> data, log-likelihood \(\ell(\theta)\), starting guess \(\theta\)</li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1">\(g\leftarrow\nabla\ell(\theta)\) <span class="cm">slope: which way is uphill</span></li>
+        <li class="i1">\(H\leftarrow\nabla^2\ell(\theta)\) <span class="cm">curvature: how fast the slope changes</span></li>
+        <li class="i1">\(\theta\leftarrow\theta-H^{-1}g\) <span class="cm">jump to the top of the local parabola</span></li>
+        <li><span class="kw">until</span> \(\|g\|\) is tiny</li>
+        <li><span class="kw">return</span> \(\hat\theta\) and \(\operatorname{Cov}(\hat\theta)\approx(-H)^{-1}\) <span class="cm">the error bars come for free</span></li>
+      </ol></div>
+      <div class="stats" id="nStats"></div>
+      <details class="deeper"><summary>Going deeper: IRLS, Fisher scoring and why deep learning uses gradients</summary><div>
+        <p>For logistic regression, \(H=-X^\top SX\) with \(S=\operatorname{diag}(\hat p_i(1-\hat p_i))\), and a Newton step is a weighted least-squares fit. That is why it is called iteratively reweighted least squares (IRLS); the <a href="../../ml/logistic-regression/#maths">logistic regression page</a> runs it live. Fisher scoring replaces \(H\) by its expectation \(-I(\theta)\); for logistic regression the two coincide.</p>
+        <p>A network with \(d\) weights has a \(d\times d\) Hessian. With \(d=10^8\) that is \(10^{16}\) numbers, impossible to store or invert. So deep learning keeps only the gradient, and tools such as <a href="../../dl/nn/optimisers/">Adam</a> approximate a little curvature per weight. The objective, though, is still the log-likelihood.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="limits" class="card">
+  <h2><span class="num">6</span>Where maximum likelihood goes wrong</h2>
+  <div class="grid2">
+    <div class="prose">
+      <h3>Too little data</h3>
+      <p>Flip a new coin three times and see three heads. The MLE is \(\hat p=1\): "this coin never lands tails". The estimate is the best explanation of the three flips and a terrible prediction for the fourth. The same thing happens in a naive Bayes spam filter: a word never seen in a spam email gets probability zero, and one such word vetoes everything else.</p>
+      <h3>Perfectly separable data</h3>
+      <p>If one line separates the classes perfectly, logistic regression's likelihood keeps rising as the weights grow: \(\ell(w)\to0\) from below as \(\|w\|\to\infty\), and there is no maximum. Newton's method and gradient ascent run off to infinity, giving infinitely confident predictions.</p>
+      <h3>Too many parameters</h3>
+      <p>A polynomial of degree 9 through 10 points has likelihood as high as possible: it passes through every point. That is <a class="term" data-t="overfitting">overfitting</a>, and MLE has no brake against it.</p>
+    </div>
+    <div class="prose">
+      <h3>The fix: add what you believed beforehand</h3>
+      <p>Each failure has the same cure: refuse to believe extreme parameter values unless the data really insist. Write that belief as a <a class="term" data-t="prior">prior</a> \(p(\theta)\) and maximise \(\log p(\text{data}\mid\theta)+\log p(\theta)\) instead. The result is the <a class="term" data-t="map">MAP estimate</a>:</p>
+      <ul>
+        <li>A Beta prior on the coin adds imaginary flips: three heads now gives something like \(4/5\), not 1. That is Laplace smoothing.</li>
+        <li>A Gaussian prior on the weights adds \(-\lambda\|w\|^2\): <a href="../../ml/regularisation/">ridge, or weight decay</a>. Separable data then has a finite answer.</li>
+        <li>Keep the whole posterior rather than its peak, and you also get honest uncertainty.</li>
+      </ul>
+      <p class="note">Next: <a href="../bayesian/">Bayesian estimation: priors, posteriors, MAP and MCMC</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">7</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> scipy <span class="k">import</span> stats, optimize
+rng = np.random.default_rng(<span class="s">0</span>)
+
+<span class="c"># closed forms</span>
+x = rng.poisson(<span class="s">3.0</span>, size=<span class="s">200</span>);   lam_hat = x.mean()
+t = rng.exponential(<span class="s">2.0</span>, size=<span class="s">200</span>); rate_hat = <span class="s">1</span> / t.mean()
+mu_hat, sigma_hat = stats.norm.fit(rng.normal(<span class="s">5</span>, <span class="s">2</span>, size=<span class="s">200</span>))   <span class="c"># sigma with 1/n</span>
+
+<span class="c"># no closed form: minimise the negative log-likelihood numerically</span>
+data = stats.gamma(a=<span class="s">2.5</span>, scale=<span class="s">1.5</span>).rvs(<span class="s">500</span>, random_state=<span class="s">1</span>)
+nll = <span class="k">lambda</span> th: -stats.gamma(a=np.exp(th[<span class="s">0</span>]), scale=np.exp(th[<span class="s">1</span>])).logpdf(data).sum()
+res = optimize.minimize(nll, x0=[<span class="s">0.0</span>, <span class="s">0.0</span>], method=<span class="s">"BFGS"</span>)
+np.exp(res.x)                       <span class="c"># about (2.5, 1.5)</span>
+np.sqrt(np.diag(res.hess_inv))      <span class="c"># standard errors of the log-parameters (inverse Hessian)</span>
+
+<span class="c"># logistic regression by maximum likelihood, with standard errors</span>
+<span class="k">import</span> statsmodels.api <span class="k">as</span> sm
+X = sm.add_constant(rng.normal(size=(<span class="s">300</span>, <span class="s">2</span>)))
+y = (rng.random(<span class="s">300</span>) &lt; <span class="s">1</span> / (<span class="s">1</span> + np.exp(-X @ [<span class="s">0.5</span>, <span class="s">1.0</span>, -<span class="s">2.0</span>]))).astype(int)
+sm.Logit(y, X).fit().summary()       <span class="c"># Newton's method; SEs from the Hessian</span></pre>
+</section>
+<p class="foot">Part of the <a href="../">Mathematical concepts</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script>
+(function(){
+const {$} = ML;
+function frame(plot,x0,x1,y0,y1,xl){ return ML.chart(plot,[{pts:[[x0,y0],[x1,y1]],color:'transparent',noline:true}],{x0,x1,y0,y1,xl}); }
+function curve(plot,fr,f,x0,x1,color,width=2.5,dash){ const c=plot.ctx,{fx,fy}=fr; c.save(); c.strokeStyle=color; c.lineWidth=width; if(dash) c.setLineDash(dash); c.beginPath(); let st=false; for(let i=0;i<=300;i++){ const x=x0+(x1-x0)*i/300, y=f(x); if(!isFinite(y)){ st=false; continue; } st?c.lineTo(fx(x),fy(y)):c.moveTo(fx(x),fy(y)); st=true; } c.stroke(); c.restore(); }
+function vline(plot,fr,x,color,dash,w=2){ const c=plot.ctx,{fx}=fr; c.save(); c.strokeStyle=color; c.lineWidth=w; if(dash) c.setLineDash(dash); c.beginPath(); c.moveTo(fx(x),12); c.lineTo(fx(x),plot.h-28); c.stroke(); c.restore(); }
+function dot(plot,fr,x,y,r,color){ const c=plot.ctx; c.save(); c.fillStyle=color; c.beginPath(); c.arc(fr.fx(x),fr.fy(y),r,0,7); c.fill(); c.restore(); }
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+const lg=x=>x>0?Math.log(x):-Infinity;
+
+/* ---- 1. likelihood of coin flips ---- */
+const pL=new ML.Plot('#pL',{equal:false}), pLL=new ML.Plot('#pLL',{equal:false}); let ln=10, lk=7, lp=0.5;
+function seqOf(n,k){ const s=[]; for(let i=0;i<n;i++) s.push(Math.floor((i+1)*k/n)-Math.floor(i*k/n)); return s; }
+function drawL(){ const P=ML.palette(), ph=lk/ln, ll=p=>(lk?lk*lg(p):0)+(ln-lk?(ln-lk)*lg(1-p):0), L=p=>Math.exp(ll(p));
+  const seq=seqOf(ln,lk); $('#coins').innerHTML=seq.map(x=>`<span class="coin ${x?'h':'t'}"><b>${x?'H':'T'}</b><i>${(x?lp:1-lp).toFixed(2)}</i></span>`).join('')+`<span class="coinprod">product = ${L(lp).toExponential(2)}</span>`;
+  const ym=Math.max(L(ph),L(lp))*1.15||1; let fr=frame(pL,0,1,0,ym,'p  →  likelihood L(p)'); curve(pL,fr,L,0.001,0.999,P.c1); vline(pL,fr,ph,P.c4,[5,4]); dot(pL,fr,lp,L(lp),6,P.c2);
+  const lmin=Math.max(ll(ph)-25,Math.min(ll(0.01),ll(0.99))), fr2=frame(pLL,0,1,lmin,ll(ph)+1.5,'p  →  log-likelihood ℓ(p)'); curve(pLL,fr2,p=>Math.max(lmin,ll(p)),0.002,0.998,P.c3); vline(pLL,fr2,ph,P.c4,[5,4]); dot(pLL,fr2,lp,Math.max(lmin,ll(lp)),6,P.c2);
+  $('#lStats').innerHTML=stat('c2',L(lp).toExponential(2),'L(p) at your guess')+stat('c3',ll(lp).toFixed(2),'ℓ(p) = log L(p)')+stat('c4',ph.toFixed(3),'p̂ = k/n')+stat('c5',L(ph).toExponential(2),'L(p̂), the maximum'); }
+const lkEl=$('#lk');
+ML.bindRange('ln',v=>{ ln=v; lkEl.max=v; if(lk>v){ lk=v; lkEl.value=v; $('#lkOut').textContent=v; } drawL(); }); ML.bindRange('lk',v=>{ lk=Math.min(v,ln); drawL(); }); ML.bindRange('lp',v=>{ lp=v; drawL(); },v=>v.toFixed(2));
+lkEl.max=ln; pL.onResize=drawL; pLL.onResize=drawL;
+
+/* ---- 2. four models ---- */
+const pM=new ML.Plot('#pM',{equal:false}), pMl=new ML.Plot('#pMl',{equal:false}); const mrng=ML.rng(5); let model='pois', mn=30, mt=0.5, DATA=[];
+const MOD={
+  pois:{name:'λ',map:t=>1+t*7,disc:true,samp:l=>{ let k=0,p=Math.exp(-l),s=p,u=mrng(); while(u>s){ k++; p*=l/k; s+=p; } return k; },pdf:(x,l)=>Math.exp(x*Math.log(l)-l-MX.lgamma(x+1)),fit:d=>d.reduce((a,b)=>a+b,0)/d.length,ll:(d,l)=>d.reduce((a,x)=>a+x*Math.log(l)-l-MX.lgamma(x+1),0),rng:(t)=>[0,Math.max(10,Math.ceil(t*2.2+4))],prng:t=>[0.2,t*2+2]},
+  expo:{name:'λ',map:t=>0.3+t*2.7,samp:l=>-Math.log(1-mrng())/l,pdf:(x,l)=>x<0?0:l*Math.exp(-l*x),fit:d=>d.length/d.reduce((a,b)=>a+b,0),ll:(d,l)=>d.length*Math.log(l)-l*d.reduce((a,b)=>a+b,0),rng:t=>[0,Math.max(3,5/t)],prng:t=>[0.05,t*2.5+.3]},
+  norm:{name:'μ',map:t=>t*10,samp:m=>m+1.5*mrng.gauss(),pdf:(x,m)=>MX.normPdf(x,m,1.5),fit:d=>d.reduce((a,b)=>a+b,0)/d.length,ll:(d,m)=>d.reduce((a,x)=>a+Math.log(MX.normPdf(x,m,1.5)),0),rng:t=>[t-6,t+6],prng:t=>[t-3,t+3]},
+  unif:{name:'θ',map:t=>1+t*9,samp:th=>th*mrng(),pdf:(x,th)=>x>=0&&x<=th?1/th:0,fit:d=>Math.max(...d),ll:(d,th)=>th<Math.max(...d)?-Infinity:-d.length*Math.log(th),rng:t=>[0,t*1.3+.5],prng:t=>[t*.5,t*1.6]}};
+function newM(){ const M=MOD[model], th=M.map(mt); DATA=[]; for(let i=0;i<mn;i++) DATA.push(M.samp(th)); drawMd(); }
+function drawMd(){ const P=ML.palette(), M=MOD[model], th=M.map(mt), hat=M.fit(DATA), [x0,x1]=M.rng(th);
+  let dens=[], w; if(M.disc){ w=1; for(let k=x0;k<=x1;k++) dens.push([k,DATA.filter(x=>x===k).length/DATA.length]); } else { const nb=24; w=(x1-x0)/nb; for(let b=0;b<nb;b++){ const a=x0+b*w; dens.push([a,DATA.filter(x=>x>=a&&x<a+w).length/DATA.length/w]); } }
+  const f=x=>M.disc?M.pdf(Math.round(x),hat):M.pdf(x,hat), ft=x=>M.disc?M.pdf(Math.round(x),th):M.pdf(x,th);
+  let ym=0; for(let i=0;i<=200;i++){ const x=x0+(x1-x0)*i/200; ym=Math.max(ym,f(x),ft(x)); } ym=Math.max(ym,...dens.map(d=>d[1]))*1.12;
+  const fr=frame(pM,M.disc?x0-.5:x0,M.disc?x1+.5:x1,0,ym,'x'), c=pM.ctx; c.save(); c.fillStyle=P.c3; c.globalAlpha=.45;
+  dens.forEach(([a,d])=>{ const L=M.disc?fr.fx(a-.4):fr.fx(a)+.5, R=M.disc?fr.fx(a+.4):fr.fx(a+w)-.5; c.fillRect(L,fr.fy(d),R-L,fr.fy(0)-fr.fy(d)); }); c.restore();
+  if(M.disc){ for(let k=x0;k<=x1;k++){ dot(pM,fr,k,M.pdf(k,th),3,P.muted); dot(pM,fr,k,M.pdf(k,hat),4.5,P.c1); } }
+  else { curve(pM,fr,ft,x0,x1,P.muted,2,[5,4]); curve(pM,fr,f,x0,x1,P.c1,2.5); }
+  const [p0,p1]=M.prng(th), pts=[]; for(let i=0;i<=300;i++){ const t=p0+(p1-p0)*i/300; pts.push([t,M.ll(DATA,t)]); } const fin=pts.filter(p=>isFinite(p[1])).map(p=>p[1]), top=M.ll(DATA,hat), lo=Math.max(top-40,Math.min(...fin));
+  const fr2=frame(pMl,p0,p1,lo,top+(top-lo)*.08+.5,M.name+'  →  ℓ'); curve(pMl,fr2,t=>{ const v=M.ll(DATA,t); return isFinite(v)?Math.max(lo,v):NaN; },p0,p1,P.c2); vline(pMl,fr2,th,P.muted,[5,4],1.5); vline(pMl,fr2,hat,P.c1); dot(pMl,fr2,hat,top,5,P.c1);
+  $('#mPos').textContent=`${DATA.length} points`; $('#mtOut').textContent=M.name+' = '+th.toFixed(2);
+  $('#mStats').innerHTML=stat('c4',th.toFixed(3),'true '+M.name)+stat('c1',hat.toFixed(3),'MLE '+M.name+'̂')+stat('c2',top.toFixed(1),'ℓ at the peak'); }
+ML.bindSeg('mSeg',v=>{ model=v; newM(); }); ML.bindRange('mn',v=>{ mn=v; newM(); }); ML.bindRange('mt',v=>{ mt=v; newM(); },v=>v.toFixed(2)); $('#mNew').addEventListener('click',newM); pM.onResize=drawMd; pMl.onResize=drawMd;
+
+/* ---- 3. regression: Gaussian vs Laplace noise ---- */
+const pR=new ML.Plot('#pR',{equal:false}); const rr=ML.rng(21), RX=[], RY=[]; for(let i=0;i<20;i++){ const x=0.5+9*i/19; RX.push(x); RY.push(1+0.6*x+0.7*rr.gauss()); } const OX=8.5; let oy=11;
+function lsq(X,Y,W){ let sw=0,sx=0,sy=0,sxx=0,sxy=0; X.forEach((x,i)=>{ const w=W?W[i]:1; sw+=w; sx+=w*x; sy+=w*Y[i]; sxx+=w*x*x; sxy+=w*x*Y[i]; }); const b=(sw*sxy-sx*sy)/(sw*sxx-sx*sx); return [(sy-b*sx)/sw,b]; }
+function lad(X,Y){ let t=lsq(X,Y); for(let it=0;it<60;it++){ const W=X.map((x,i)=>1/Math.max(1e-4,Math.abs(Y[i]-t[0]-t[1]*x))); t=lsq(X,Y,W); } return t; }
+function drawR(){ const P=ML.palette(), X=[...RX,OX], Y=[...RY,oy], g=lsq(X,Y), l=lad(X,Y), g0=lsq(RX,RY);
+  const fr=frame(pR,0,10,-6,14,'x'), c=pR.ctx; X.forEach((x,i)=>dot(pR,fr,x,Y[i],i===X.length-1?7:4,i===X.length-1?P.c4:P.ink));
+  const ln_=(t,col,w,d)=>{ c.save(); c.strokeStyle=col; c.lineWidth=w; if(d) c.setLineDash(d); c.beginPath(); c.moveTo(fr.fx(0),fr.fy(t[0])); c.lineTo(fr.fx(10),fr.fy(t[0]+10*t[1])); c.stroke(); c.restore(); };
+  ln_(g0,P.muted,1.5,[4,4]); ln_(g,P.c1,3); ln_(l,P.c5,3);
+  c.save(); c.font='12px Inter,system-ui'; c.fillStyle=P.c1; c.fillText('Gaussian noise → least squares',54,22); c.fillStyle=P.c5; c.fillText('Laplace noise → least |error|',54,40); c.fillStyle=P.muted; c.fillText('dashed: fit without the outlier',54,58); c.restore();
+  $('#rStats').innerHTML=stat('c1',g[1].toFixed(3),'slope, Gaussian MLE')+stat('c5',l[1].toFixed(3),'slope, Laplace MLE')+stat('c3',g0[1].toFixed(3),'slope without the outlier'); }
+ML.bindRange('ro',v=>{ oy=v; drawR(); },v=>v.toFixed(1)); pR.onResize=drawR;
+
+/* ---- 4. Fisher information: sampling distribution of p-hat ---- */
+const pF=new ML.Plot('#pF',{equal:false}); const frng=ML.rng(13); let fp=0.3, fn=40, PH=[];
+function drawF(){ const P=ML.palette(), se=Math.sqrt(fp*(1-fp)/fn), cnt=new Map(); PH.forEach(v=>cnt.set(v,(cnt.get(v)||0)+1));
+  const w=1/fn, nd=x=>MX.normPdf(x,fp,se); let ym=nd(fp); cnt.forEach(c=>{ ym=Math.max(ym,c/PH.length/w); }); ym*=1.12;
+  const fr=frame(pF,0,1,0,ym,'p̂'), c=pF.ctx; c.save(); c.fillStyle=P.c1; c.globalAlpha=.45; cnt.forEach((k,v)=>{ const d=k/PH.length/w, L=fr.fx(v-w*.42), R=fr.fx(v+w*.42); c.fillRect(L,fr.fy(d),Math.max(1,R-L),fr.fy(0)-fr.fy(d)); }); c.restore();
+  curve(pF,fr,nd,0,1,P.c4,2.5); vline(pF,fr,fp,P.c4,[5,4]);
+  const m=PH.length?PH.reduce((a,b)=>a+b,0)/PH.length:NaN, sd=PH.length>1?Math.sqrt(PH.reduce((a,b)=>a+(b-m)**2,0)/(PH.length-1)):NaN;
+  $('#fPos').textContent=`${PH.length} experiments`;
+  $('#fStats').innerHTML=stat('c2',(fn/(fp*(1-fp))).toFixed(1),'Fisher information I_n(p)')+stat('c4',se.toFixed(4),'predicted SE = 1/√I')+stat('c1',isNaN(sd)?'–':sd.toFixed(4),'actual spread of p̂')+stat('c3',isNaN(m)?'–':m.toFixed(4),'average p̂'); }
+function runF(){ for(let r=0;r<1000;r++){ let k=0; for(let i=0;i<fn;i++) if(frng()<fp) k++; PH.push(k/fn); } drawF(); }
+ML.bindRange('fp',v=>{ fp=v; PH=[]; drawF(); },v=>v.toFixed(2)); ML.bindRange('fn',v=>{ fn=v; PH=[]; drawF(); }); $('#f1000').addEventListener('click',runF); $('#fR').addEventListener('click',()=>{ PH=[]; drawF(); }); pF.onResize=drawF;
+
+/* ---- 5. Newton vs gradient on logistic log-likelihood ---- */
+const pN=new ML.Plot('#pN',{equal:false}), pNd=new ML.Plot('#pNd',{equal:false}); const nr=ML.rng(4), NX=[], NY=[]; for(let i=0;i<40;i++){ const x=-3+6*nr(); NX.push(x); NY.push(nr()<1/(1+Math.exp(-1.6*x))?1:0); }
+const sg=z=>1/(1+Math.exp(-z)), Lw=w=>NX.reduce((a,x,i)=>{ const p=sg(w*x); return a+(NY[i]?Math.log(p+1e-300):Math.log(1-p+1e-300)); },0), d1=w=>NX.reduce((a,x,i)=>a+(NY[i]-sg(w*x))*x,0), d2=w=>-NX.reduce((a,x)=>{ const p=sg(w*x); return a+p*(1-p)*x*x; },0);
+let NW=[-1.5], nKind=null, nSteps=0; const W0=-2.5, W1=5;
+function drawN(){ const P=ML.palette(), w=NW[NW.length-1], top=Math.max(...[...Array(201).keys()].map(i=>Lw(W0+(W1-W0)*i/200))), lo=Lw(W0)-2;
+  const fr=frame(pN,W0,W1,lo,top+(top-lo)*.08,'w  →  ℓ(w)'); curve(pN,fr,Lw,W0,W1,P.c1,2.5);
+  if(nKind!=='grad'){ const a=Lw(w), b=d1(w), c2=d2(w); curve(pN,fr,v=>{ const y=a+b*(v-w)+.5*c2*(v-w)**2; return y<lo?NaN:y; },W0,W1,P.c4,1.8,[5,4]); }
+  for(let i=1;i<NW.length;i++){ const c=pN.ctx; c.save(); c.strokeStyle=P.c2; c.lineWidth=1.5; c.beginPath(); c.moveTo(fr.fx(NW[i-1]),fr.fy(Lw(NW[i-1]))); c.lineTo(fr.fx(NW[i]),fr.fy(Lw(NW[i]))); c.stroke(); c.restore(); }
+  NW.forEach((v,i)=>dot(pN,fr,v,Lw(v),i===NW.length-1?6:3.5,i===NW.length-1?P.c2:P.muted));
+  const fr2=frame(pNd,-3.2,3.2,-.1,1.1,'x  →  data and fitted σ(wx)'); NX.forEach((x,i)=>dot(pNd,fr2,x,NY[i]?1-.03*(i%3):.03*(i%3),3.5,NY[i]?P.c4:P.c3)); curve(pNd,fr2,x=>sg(w*x),-3.2,3.2,P.c2,2.5);
+  $('#nPos').textContent=`${nSteps} steps${nKind?' ('+nKind+')':''}`;
+  $('#nStats').innerHTML=stat('c2',w.toFixed(4),'current w')+stat('c1',Lw(w).toFixed(3),'ℓ(w)')+stat('c4',d1(w).toExponential(1),'slope ℓ′(w)')+stat('c3',(1/Math.sqrt(-d2(w))).toFixed(3),'SE ≈ 1/√(−ℓ″)'); }
+$('#nNewton').addEventListener('click',()=>{ const w=NW[NW.length-1]; if(nKind==='grad'){ NW=[w]; nSteps=0; } nKind='Newton'; NW.push(w-d1(w)/d2(w)); nSteps++; drawN(); });
+$('#nGrad').addEventListener('click',()=>{ const w=NW[NW.length-1]; if(nKind==='Newton'){ NW=[w]; nSteps=0; } nKind='grad'; NW.push(w+0.02*d1(w)); nSteps++; drawN(); });
+$('#nR').addEventListener('click',()=>{ NW=[-1.5]; nKind=null; nSteps=0; drawN(); }); pN.onResize=drawN; pNd.onResize=drawN;
+
+ML.onTheme(()=>{ drawL(); drawMd(); drawR(); drawF(); drawN(); });
+drawL(); newM(); drawR(); runF(); drawN();
+})();
+</script>
+<script>NLP.nav('math','mle'); ML.renderMath(document.body);</script>
+</body>
+</html>

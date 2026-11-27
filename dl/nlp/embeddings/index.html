@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Embeddings: from bag of words to BERT</title>
+<meta name="description" content="How words become vectors: one-hot codes, bag of words and TF-IDF document vectors with live search, word2vec skip-gram trained in your browser with a moving map of meaning, and why contextual embeddings like BERT give "bank" different vectors in different sentences.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP</p>
+  <h1>Embeddings: <span class="grad">bag of words to BERT</span></h1>
+  <p class="lede">After tokenisation every word is just an id. An embedding turns that id into a list of numbers, and the whole history of NLP is a search for better lists: ones where similar meanings get similar numbers. This page walks the path from counting words, through word2vec, to vectors that change with context.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#onehot">1 · One-hot</a><a href="#bow">2 · Bag of words and TF-IDF</a><a href="#w2v">3 · word2vec, trained live</a><a href="#context">4 · Context changes meaning</a><a href="#timeline">5 · The timeline</a><a href="#code">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is an embedding, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>To a computer, "cat" and "kitten" are just two different ids, exactly as different as "cat" and "carburettor". A model that learns something about cats learns nothing about kittens. We want each word to be a point in space where similar words sit close together, and we want the space learned automatically from raw text, since nobody can hand-label the meaning of a million words.</p>
+      <h3>The idea</h3><p>An <a class="term" data-t="embedding">embedding</a> is a list of numbers that stands for a word (or a sentence), chosen so that words with similar meanings get similar lists. Early methods counted words (<a class="term" data-t="one-hot">one-hot</a>, <a class="term" data-t="bag-of-words">bag of words</a>, <a class="term" data-t="tf-idf">TF-IDF</a>); <a class="term" data-t="word2vec">word2vec</a> learned one vector per word by predicting its neighbours; <a class="term" data-t="contextual">contextual</a> models such as <a class="term" data-t="bert">BERT</a> give a word a different vector in every sentence.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Give every word a vector (random at first).</li><li>Train on a simple job, such as predicting nearby words.</li><li>Words used in similar contexts drift together; closeness is measured by <a class="term" data-t="cosine">cosine similarity</a>.</li><li>Contextual models then adjust each vector using the rest of the sentence.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A map of a city: cafés cluster near other cafés, banks near banks. A word’s position tells you what neighbourhood of meaning it lives in.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Turns meaning into geometry you can compute with</li><li>Learned from raw text, no labels needed</li><li>Feeds every later NLP model</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Static vectors blur words with two meanings ("bank")</li><li>Learns the biases present in its training text</li><li>Toy corpora give fragile analogies</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="embedding">Embedding</a><a class="term" data-t="one-hot">One-hot</a><a class="term" data-t="bag-of-words">Bag of words</a><a class="term" data-t="tf-idf">TF-IDF</a><a class="term" data-t="word2vec">word2vec</a><a class="term" data-t="cosine">Cosine similarity</a><a class="term" data-t="contextual">Contextual embedding</a><a class="term" data-t="bert">BERT</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="onehot" class="card">
+  <h2><span class="num">1</span>One-hot: every word is equally different</h2>
+  <div class="grid2">
+    <div><input class="txt" id="ohIn" value="the cat sat on the mat"><div id="ohHeat" style="margin-top:10px"></div></div>
+    <div class="prose">
+      <p>The simplest vector for word number \(k\) in a vocabulary of size \(V\) is all zeros with a single 1 in position \(k\). It is exact and needs no training, but:</p>
+      <ul><li>it is as long as the vocabulary (tens of thousands of numbers, almost all zero);</li><li>every pair of different words has <a class="term" data-t="cosine">cosine similarity</a> 0 and distance \(\sqrt2\): "cat" is exactly as far from "kitten" as from "democracy".</li></ul>
+      <div class="stats" id="ohStats"></div>
+      <p>Every method below tries to fix the second problem: put related words near each other.</p>
+    </div>
+  </div>
+</section>
+
+<section id="bow" class="card hl">
+  <h2><span class="num">2</span>Bag of words and TF-IDF: vectors for documents</h2>
+  <p class="sub">Add up the one-hot vectors of a document's words and you get its <a class="term" data-t="bag-of-words">bag of words</a>: word counts, order thrown away. Edit the documents (one per line) and search them.</p>
+  <div class="grid2">
+    <div>
+      <textarea class="txt" id="docs" rows="6">the cat sat on the mat
+the dog chased the cat around the garden
+stock markets fell as the bank raised interest rates
+the bank approved a loan at a low interest rate
+my dog and my cat sleep on the mat
+investors watched rates and markets closely</textarea>
+      <div class="row" style="margin-top:8px"><div class="seg" id="wSeg"><button data-v="count">Counts</button><button data-v="tfidf" class="on">TF-IDF</button></div></div>
+      <input class="txt" id="query" value="cat on a mat" style="margin-top:10px">
+      <div id="ranked" style="margin-top:8px"></div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Document × word matrix</h3><div id="dtHeat"></div>
+      <h3>Document similarity (cosine)</h3><div id="ddHeat"></div>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:8px">
+    <div><div class="mathbox c1">$$\text{tf-idf}(w,d)=\underbrace{\frac{\text{count}(w,d)}{|d|}}_{\text{term frequency}}\times\underbrace{\Big(\log\frac{1+N}{1+\text{df}(w)}+1\Big)}_{\text{inverse document frequency}}$$</div></div>
+    <div><p><a class="term" data-t="tf-idf">TF-IDF</a> down-weights words that appear in every document ("the", "a") and boosts words that are distinctive. It is still the backbone of classic search engines (BM25 is a refinement). Its weakness: "cat" and "kitten" are still unrelated columns, and "bank" means one thing in every document.</p></div>
+  </div>
+</section>
+
+<section id="w2v" class="card hl">
+  <h2><span class="num">3</span>word2vec, trained live in your browser</h2>
+  <p class="sub">Skip-gram with negative sampling (Mikolov et al. 2013) on a small generated corpus about royalty, people, pets, fruit, money and rivers. Each word gets a 16-number vector; the map shows them squashed to 2-D with <a class="term" data-t="pca">PCA</a>. Press Train and watch related words pull together.</p>
+  <div class="grid2">
+    <div><div class="plot sq" id="mapP"></div><p class="hint">Colours show the topic each word was generated from (the model never sees them). Click a word to see its nearest neighbours.</p></div>
+    <div>
+      <div class="player"><button class="btn primary" id="wRun">Train</button><button class="btn" id="wReset">Reset</button><span class="pos" id="wIt"></span></div>
+      <div class="plot short" id="wLoss" style="margin-top:8px"></div>
+      <h3>Nearest to "<span id="nnWord"></span>"</h3><div id="nnList"></div>
+      <h3>Analogy</h3>
+      <div class="row"><select id="a1"></select><span>−</span><select id="a2"></select><span>+</span><select id="a3"></select><span>≈</span><b id="aRes" class="mono"></b></div>
+      <p class="hint">On a toy corpus analogies are fragile; the <a href="../../../word2vec/">word2vec playground</a> does this with 100,000 real Google News vectors.</p>
+    </div>
+  </div>
+  <div class="grid2 prose">
+    <div><p><b>The idea:</b> "you shall know a word by the company it keeps" (Firth, 1957). For each word in the text, the model is asked to tell its real neighbours (within 2 positions) from random words. To do that well, words that appear in similar contexts must get similar vectors.</p></div>
+    <div><div class="mathbox c3">$$\mathcal L=-\log\sigma(u_{o}^\top v_{c})-\sum_{k=1}^{K}\log\sigma(-u_{k}^\top v_{c})$$</div><p class="hint">\(v_c\): centre word's vector, \(u_o\): a real context word, \(u_k\): \(K=5\) random "negative" words drawn by frequency\(^{0.75}\).</p></div>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: word2vec skip-gram with negative sampling</h5><ol>
+        <li><span class="kw">input</span> a long text, window size \(c\), dimension \(d\), \(k\) negatives, learning rate \(\eta\)</li>
+        <li>give every word two random vectors: \(v_w\) (as centre word) and \(u_w\) (as context word)</li>
+        <li><span class="kw">for</span> each position \(t\) in the text <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">for</span> each context word \(o\) within \(c\) words of the centre \(w_t\) <span class="kw">do</span></li>
+        <li class="i2">draw \(k\) random "negative" words \(n_1..n_k\) <span class="cm">usually unrelated to w</span></li>
+        <li class="i2">\(\mathcal L\leftarrow-\log\sigma(u_o^\top v_{w_t})-\sum_j\log\sigma(-u_{n_j}^\top v_{w_t})\)</li>
+        <li class="i2">nudge \(v_{w_t}\) and \(u_o\) together; push \(u_{n_j}\) and \(v_{w_t}\) apart <span class="cm">one SGD step</span></li>
+        <li><span class="kw">return</span> the vectors \(v_w\) as the embeddings</li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: what the vectors are secretly learning</summary><div>
+        <p>The loss is logistic regression: "is this (centre, context) pair real or random?". Its gradients are short and intuitive. For the true pair, \(\partial\mathcal L/\partial v=-(1-\sigma(u_o^\top v))\,u_o\), so \(v\) moves toward \(u_o\), more strongly the less sure the model was. For each negative, \(v\) moves away from \(u_{n}\) by \(\sigma(u_n^\top v)\,u_n\).</p>
+        <p>Levy and Goldberg (2014) showed that at the optimum, \(u_o^\top v_w=\operatorname{PMI}(w,o)-\log k\), where \(\operatorname{PMI}(w,o)=\log\frac{P(w,o)}{P(w)P(o)}\) measures how much more often the two words co-occur than chance. So skip-gram is implicitly factorising a word–context PMI matrix, much like an SVD. Two words get similar vectors when they have similar PMI rows, that is, when they appear in similar contexts: the distributional hypothesis, "you shall know a word by the company it keeps".</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="context" class="card">
+  <h2><span class="num">4</span>Context changes meaning: from static to contextual</h2>
+  <div class="grid2">
+    <div><div class="plot sq" id="ctxP"></div><p class="hint">Grey dots: the trained word vectors from section 3. Black ring: the single static vector for "bank". Coloured stars: "bank" after mixing in its sentence’s other words with one round of <a class="term" data-t="attention">attention</a>.</p></div>
+    <div class="prose">
+      <p>word2vec gives "bank" <b>one</b> vector, a blend of its money sense and its river sense. A contextual model produces a different vector for every occurrence, computed from the whole sentence.</p>
+      <div id="ctxSents"></div>
+      <p>Here "bank" keeps half of its static vector and takes the other half from a weighted average of the other content words in its sentence, weighted by similarity: \(c_i=\tfrac12 v_i+\tfrac12\sum_{j\ne i}\operatorname{softmax}_j(v_i^\top v_j/\tau)\,v_j\). The half it keeps is a <a class="term" data-t="residual">residual connection</a>. This is one untrained attention step, but it already pulls "bank" towards money words or river words depending on the sentence.</p>
+      <p><b>ELMo</b> (2018) did this with a two-layer bidirectional <a href="../memory/">LSTM</a>; <b>BERT</b> (2018) with 12 to 24 layers of <a href="../self-attention/">self-attention</a> trained to fill in masked words. Each layer refines every token's vector using all the others.</p>
+    </div>
+  </div>
+</section>
+
+<section id="timeline" class="card">
+  <h2><span class="num">5</span>The timeline</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Method</th><th>Year</th><th>Vector for</th><th>Size</th><th>Knows context?</th><th>Key idea</th></tr>
+    <tr><td>One-hot</td><td>–</td><td>word</td><td>\(V\) (sparse)</td><td>no</td><td>an index, nothing more</td></tr>
+    <tr><td>Bag of words / TF-IDF</td><td>1970s</td><td>document</td><td>\(V\) (sparse)</td><td>no (order lost)</td><td>count words, down-weight common ones</td></tr>
+    <tr><td>LSA</td><td>1990</td><td>word and document</td><td>~300</td><td>no</td><td>SVD of the document × word matrix</td></tr>
+    <tr><td>word2vec</td><td>2013</td><td>word</td><td>100 to 300</td><td>no</td><td>predict neighbours (skip-gram / CBOW)</td></tr>
+    <tr><td>GloVe</td><td>2014</td><td>word</td><td>50 to 300</td><td>no</td><td>factorise global co-occurrence counts</td></tr>
+    <tr><td>fastText</td><td>2016</td><td>word (from character n-grams)</td><td>300</td><td>no</td><td>handles rare and unseen words</td></tr>
+    <tr><td>ELMo</td><td>2018</td><td>token in context</td><td>1024</td><td>yes</td><td>bidirectional LSTM language model</td></tr>
+    <tr><td>BERT</td><td>2018</td><td>token in context</td><td>768 / 1024</td><td>yes</td><td>transformer encoder, masked language modelling</td></tr>
+    <tr><td>Sentence embeddings</td><td>2019+</td><td>sentence / passage</td><td>384 to 3072</td><td>yes</td><td>contrastive training so similar texts are close: the basis of semantic search and RAG</td></tr>
+  </table></div>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.feature_extraction.text <span class="k">import</span> CountVectorizer, TfidfVectorizer
+X = TfidfVectorizer().fit_transform(docs)                 <span class="c"># documents × words, sparse</span>
+
+<span class="k">from</span> gensim.models <span class="k">import</span> Word2Vec
+w2v = Word2Vec(sentences, vector_size=<span class="s">100</span>, window=<span class="s">5</span>, sg=<span class="s">1</span>, negative=<span class="s">5</span>)
+w2v.wv.most_similar(positive=[<span class="s">"king"</span>, <span class="s">"woman"</span>], negative=[<span class="s">"man"</span>])
+
+<span class="k">from</span> transformers <span class="k">import</span> AutoTokenizer, AutoModel
+tok, bert = AutoTokenizer.from_pretrained(<span class="s">"bert-base-uncased"</span>), AutoModel.from_pretrained(<span class="s">"bert-base-uncased"</span>)
+vecs = bert(**tok(<span class="s">"we sat on the river bank"</span>, return_tensors=<span class="s">"pt"</span>)).last_hidden_state   <span class="c"># one 768-d vector per token</span></pre>
+</section>
+
+<p class="foot">Part of the <a href="../">NLP series</a>. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML; const esc=NLP.esc;
+const words=s=>(s.toLowerCase().match(/[a-z]+/g)||[]);
+
+/* ---------- 1. one-hot ---------- */
+function drawOH(){ const w=words($('#ohIn').value).slice(0,12), V=[...new Set(w)].sort();
+  NLP.heat('#ohHeat',w.map(x=>V.map(v=>v===x?1:0)),w,V,{max:1,fmt:v=>v?'1':'0',rowW:'60px'});
+  $('#ohStats').innerHTML=[['c1',V.length,'vocabulary size here'],['c3','0','cosine between any two different words'],['c4','√2 ≈ 1.41','distance between any two different words']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+$('#ohIn').addEventListener('input',drawOH);
+
+/* ---------- 2. bag of words / tf-idf ---------- */
+let wmode='tfidf';
+function drawBow(){ const D=$('#docs').value.split('\n').map(words).filter(d=>d.length).slice(0,8), N=D.length; if(!N) return;
+  const V=[...new Set(D.flat())].sort(), df={}; V.forEach(v=>df[v]=D.filter(d=>d.includes(v)).length);
+  const idf=v=>Math.log((1+N)/(1+df[v]))+1;
+  const vec=d=>V.map(v=>{ const c=d.filter(x=>x===v).length; return wmode==='count'?c:(c/d.length)*idf(v); });
+  const M=D.map(vec);
+  const top=V.map((v,j)=>[v,j,M.reduce((s,r)=>s+r[j],0)]).sort((a,b)=>b[2]-a[2]).slice(0,10);
+  NLP.heat('#dtHeat',M.map(r=>top.map(t=>r[t[1]])),D.map((_,i)=>'doc '+(i+1)),top.map(t=>t[0]),{fmt:v=>v?(wmode==='count'?v.toFixed(0):v.toFixed(2)):'',rowW:'48px'});
+  const S=M.map(a=>M.map(b=>NLP.cos(a,b))); NLP.heat('#ddHeat',S,D.map((_,i)=>'doc '+(i+1)),D.map((_,i)=>String(i+1)),{max:1,rowW:'48px'});
+  const q=vec(words($('#query').value)), rk=M.map((r,i)=>[i,NLP.cos(q,r)]).sort((a,b)=>b[1]-a[1]);
+  $('#ranked').innerHTML='<b>Search results</b>'+NLP.bars(rk.map(([i,s])=>({label:'doc '+(i+1)+': '+D[i].join(' '),value:s,color:'var(--c1)'})),{lw:'minmax(0,1fr)',max:1,fmt:v=>v.toFixed(2)}); }
+['#docs','#query'].forEach(id=>$(id).addEventListener('input',drawBow)); ML.bindSeg('wSeg',v=>{ wmode=v; ML.setSeg('wSeg',v); drawBow(); });
+
+/* ---------- 3. word2vec ---------- */
+const TEMPL=[
+ ['royal','the king wears the crown in the palace','the queen wears the crown in the palace','the king rules the kingdom','the queen rules the kingdom','the prince lives in the palace','the princess lives in the palace','the king is a man','the queen is a woman','the prince is a boy','the princess is a girl','he is the king','she is the queen'],
+ ['people','the man walks to work','the woman walks to work','the boy plays outside','the girl plays outside','he is a man','she is a woman','the man and the woman talk','the boy and the girl talk'],
+ ['pets','the dog barks at the cat','the cat chases the mouse','the puppy is a young dog','the kitten is a young cat','a dog is a loyal pet','a cat is a quiet pet','the dog sleeps','the cat sleeps'],
+ ['fruit','i eat a sweet apple','the banana is a sweet fruit','the mango is a juicy fruit','an apple is a fruit','she eats a ripe mango','he eats a ripe banana'],
+ ['money','i deposit money at the bank','the bank gives a loan','i pay cash at the bank','the bank charges interest on the loan','save money and pay the loan'],
+ ['river','fish swim in the river','the boat floats on the river','we sat on the river bank','the river bank is muddy','water flows in the river','the fish swim near the bank of the river']];
+const TOPIC={}, TCOL={royal:'#7c3aed',people:'#db2777',pets:'#ca8a04',fruit:'#16a34a',money:'#0891b2',river:'#2563eb'};
+TEMPL.forEach(([t,...ss])=>ss.forEach(s=>words(s).forEach(w=>{ if(!TOPIC[w]) TOPIC[w]=t; })));
+const STOP=new Set(['the','a','an','in','is','at','on','to','and','of','i','we','near']);
+const SENTS=TEMPL.flatMap(([,...ss])=>ss).map(words);
+const VOC=[...new Set(SENTS.flat())], IDX={}; VOC.forEach((w,i)=>IDX[w]=i);
+const cnt=new Array(VOC.length).fill(0); SENTS.flat().forEach(w=>cnt[IDX[w]]++);
+const negTable=[]; VOC.forEach((w,i)=>{ const k=Math.round(Math.pow(cnt[i],0.75)*20); for(let j=0;j<k;j++) negTable.push(i); });
+const D=16, W={v:null,u:null,r:null,it:0,loss:[],timer:null,sel:'king'};
+const sig=x=>1/(1+Math.exp(-x));
+function wReset(){ wStop(); const r=ML.rng(7); W.v=VOC.map(()=>Array.from({length:D},()=>(r()-0.5)/D)); W.u=VOC.map(()=>new Array(D).fill(0)); W.r=ML.rng(11); W.it=0; W.loss=[]; wDraw(); }
+function trainSentence(s,lr){ let L=0,n=0; for(let i=0;i<s.length;i++){ const c=IDX[s[i]]; for(let j=Math.max(0,i-2);j<=Math.min(s.length-1,i+2);j++){ if(j===i) continue; const vc=W.v[c], grad=new Array(D).fill(0);
+    const pairs=[[IDX[s[j]],1]]; for(let k=0;k<5;k++) pairs.push([negTable[Math.floor(W.r()*negTable.length)],0]);
+    pairs.forEach(([o,lab])=>{ const uo=W.u[o]; let z=0; for(let d=0;d<D;d++) z+=uo[d]*vc[d]; const p=sig(z), g=(p-lab)*lr; L+=lab?-Math.log(p+1e-9):-Math.log(1-p+1e-9); for(let d=0;d<D;d++){ grad[d]+=g*uo[d]; uo[d]-=g*vc[d]; } });
+    for(let d=0;d<D;d++) vc[d]-=grad[d]; n++; } } return [L,n]; }
+const unit=v=>{ const n=Math.hypot(...v)||1; return v.map(x=>x/n); };
+/* centre on the mean vector first: removes the shared 'frequency' direction so cosine reflects meaning */
+const UN=()=>{ const m=new Array(D).fill(0); let n=0; W.v.forEach((v,i)=>{ if(STOP.has(VOC[i])) return; n++; v.forEach((x,d)=>m[d]+=x); }); return W.v.map(v=>unit(v.map((x,d)=>x-m[d]/n))); };
+function pca2(X){ const n=X.length, m=new Array(D).fill(0); X.forEach(x=>x.forEach((v,d)=>m[d]+=v/n)); const Z=X.map(x=>x.map((v,d)=>v-m[d]));
+  const C=Array.from({length:D},(_,a)=>Array.from({length:D},(_,b)=>Z.reduce((s,z)=>s+z[a]*z[b],0)/n)); const comps=[];
+  for(let k=0;k<2;k++){ let v=Array.from({length:D},(_,i)=>Math.sin(i+1+k)); for(let it=0;it<100;it++){ let w=NLP.mv(C,v); comps.forEach(c=>{ const p=NLP.dot(w,c); w=w.map((x,i)=>x-p*c[i]); }); v=unit(w); } comps.push(v); }
+  return {m,comps,proj:x=>comps.map(c=>NLP.dot(x.map((v,d)=>v-m[d]),c))}; }
+const mapP=new ML.Plot('#mapP'), lP=new ML.Plot('#wLoss',{equal:false}); let PC=null;
+function wDraw(){ const P=ML.palette(), U=UN(); PC=pca2(U); const pts=U.map(PC.proj); const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
+  const pad=0.15, x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys), sx=(x1-x0)||1, sy=(y1-y0)||1; mapP.setBounds({x0:x0-pad*sx,x1:x1+pad*sx,y0:y0-pad*sy,y1:y1+pad*sy}); mapP.clear();
+  const c=mapP.ctx; VOC.forEach((w,i)=>{ if(STOP.has(w)) return; const col=TCOL[TOPIC[w]]; c.save(); c.fillStyle=col; c.beginPath(); c.arc(mapP.X(pts[i][0]),mapP.Y(pts[i][1]),w===W.sel?7:4.5,0,7); c.fill(); c.restore(); mapP.text(w,pts[i][0],pts[i][1],{dx:7,dy:4,color:col,halo:true,font:(w===W.sel?'700 ':'600 ')+'12px Inter,system-ui,sans-serif'}); });
+  if(W.loss.length>1) ML.chart(lP,[{pts:W.loss,color:P.c1,width:2.4}],{y0:0,xl:'sentences seen'}); else { lP.clear(); const c=lP.ctx; c.save(); c.fillStyle=P.muted; c.font='14px Inter,system-ui,sans-serif'; c.textAlign='center'; c.fillText('Already pre-trained on 3,000 sentences.',lP.w/2,lP.h/2-10); c.fillText('Press Train to keep going and watch the loss.',lP.w/2,lP.h/2+12); c.restore(); } $('#wIt').textContent=W.it+' sentences';
+  const sv=U[IDX[W.sel]], nn=VOC.map((w,i)=>[w,NLP.dot(sv,U[i])]).filter(([w])=>w!==W.sel&&!STOP.has(w)).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  $('#nnWord').textContent=W.sel; $('#nnList').innerHTML=NLP.bars(nn.map(([w,s])=>({label:w,value:s,color:TCOL[TOPIC[w]]})),{max:1,fmt:v=>v.toFixed(2)});
+  analogy(U); drawCtx(U); }
+function analogy(U){ U=U||UN(); const [a,b,c]=['#a1','#a2','#a3'].map(id=>IDX[$(id).value]); const q=unit(U[a].map((x,d)=>x-U[b][d]+U[c][d]));
+  const best=VOC.map((w,i)=>[w,NLP.dot(q,U[i])]).filter(([w,],i)=>![a,b,c].includes(IDX[w])&&!STOP.has(w)).sort((x,y)=>y[1]-x[1]).slice(0,3); $('#aRes').innerHTML=best.map(([w,s],k)=>k?`<span style="color:var(--muted);font-weight:500">${w}</span>`:w).join(', '); }
+const CONTENT=VOC.filter(w=>!STOP.has(w)).sort();
+['#a1','#a2','#a3'].forEach((id,k)=>{ $(id).innerHTML=CONTENT.map(w=>`<option${w===['king','man','woman'][k]?' selected':''}>${w}</option>`).join(''); $(id).onchange=()=>analogy(); });
+function wStop(){ if(W.timer){ clearInterval(W.timer); W.timer=null; $('#wRun').textContent='Train'; } }
+$('#wRun').onclick=()=>{ if(W.timer){ wStop(); return; } $('#wRun').textContent='Pause';
+  W.timer=setInterval(()=>{ let L=0,n=0; for(let k=0;k<60;k++){ const s=SENTS[Math.floor(W.r()*SENTS.length)], lr=0.05*Math.max(0.1,1-W.it/30000); const [a,b]=trainSentence(s,lr); L+=a; n+=b; W.it++; } W.loss.push([W.it,L/n/6]); wDraw(); if(W.it>=30000) wStop(); },40); };
+$('#wReset').onclick=wReset;
+mapP.pointer({down(x,y){ if(!PC) return; const U=UN(); let best=null,bd=1e9; VOC.forEach((w,i)=>{ if(STOP.has(w)) return; const p=PC.proj(U[i]); const d=Math.hypot(mapP.X(p[0])-mapP.X(x),mapP.Y(p[1])-mapP.Y(y)); if(d<bd){ bd=d; best=w; } }); if(best&&bd<30){ W.sel=best; wDraw(); } }});
+mapP.onResize=wDraw; lP.onResize=wDraw;
+
+/* ---------- 4. contextual ---------- */
+const CS=[['i deposit money at the bank','#0891b2'],['the bank gives a loan','#0e7490'],['we sat on the river bank','#2563eb'],['fish swim near the bank of the river','#1d4ed8']];
+const ctxP=new ML.Plot('#ctxP');
+function drawCtx(U){ if(!PC) return; const P=ML.palette(), all=U.map(PC.proj), c=ctxP.ctx; ctxP.setBounds(mapP.v); ctxP.clear();
+  VOC.forEach((w,i)=>{ if(STOP.has(w)) return; const col=['money','river'].includes(TOPIC[w])?TCOL[TOPIC[w]]:P.muted; c.save(); c.globalAlpha=.45; c.fillStyle=col; c.beginPath(); c.arc(ctxP.X(all[i][0]),ctxP.Y(all[i][1]),3.5,0,7); c.fill(); c.restore(); if(['money','loan','river','fish','water','cash','boat'].includes(w)) ctxP.text(w,all[i][0],all[i][1],{dx:6,dy:4,color:col,halo:true}); });
+  const b=all[IDX.bank]; c.save(); c.strokeStyle=P.ink; c.lineWidth=2.5; c.beginPath(); c.arc(ctxP.X(b[0]),ctxP.Y(b[1]),9,0,7); c.stroke(); c.restore(); ctxP.text('bank (static)',b[0],b[1],{dx:12,dy:-8,halo:true});
+  let html=''; CS.forEach(([s,col],k)=>{ const ws=words(s), V=ws.map(w=>U[IDX[w]]), bi=ws.indexOf('bank'), sc=V.map((v,j)=>j===bi||STOP.has(ws[j])?-1e9:NLP.dot(V[bi],v)/0.25), a=NLP.softmax(sc), cv=unit(V[0].map((_,d)=>0.5*V[bi][d]+0.5*V.reduce((s,v,j)=>s+a[j]*v[d],0))), p=PC.proj(cv);
+    ctxP.arrow(b[0],b[1],p[0],p[1],{color:col,width:2,head:8}); c.save(); c.fillStyle=col; c.font='700 18px Inter,system-ui'; c.textAlign='center'; c.fillText('★',ctxP.X(p[0]),ctxP.Y(p[1])+6); c.restore();
+    html+=`<div style="margin:4px 0"><span class="sw" style="background:${col}"></span> <span class="mono" style="font-size:13px">${ws.map((w,j)=>`<span style="background:${NLP.seq(a[j]*1.5,col)};border-radius:4px;padding:0 2px">${w}</span>`).join(' ')}</span></div>`; });
+  $('#ctxSents').innerHTML=html+'<p class="hint">Shading: how much "bank" attends to each other word (little words like "the" are skipped).</p>'; }
+ctxP.onResize=()=>wDraw();
+
+ML.onTheme(()=>{ drawOH(); drawBow(); wDraw(); });
+drawOH(); drawBow(); wReset();
+/* pre-train a little so the maps are not empty on arrival */
+for(let k=0;k<3000;k++){ trainSentence(SENTS[Math.floor(W.r()*SENTS.length)],0.05); W.it++; } W.loss.push([W.it,0]); W.loss=[]; wDraw();
+})();
+</script>
+<script>NLP.nav('nlp','embeddings'); ML.renderMath(document.body);</script>
+</body>
+</html>

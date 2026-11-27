@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bayesian estimation: priors, posteriors, MAP and MCMC, explained interactively</title>
+<meta name="description" content="Bayesian posterior estimates from scratch: prior times likelihood on a coin with MLE, MAP, posterior mean and credible intervals, shrinkage when estimating a mean, Bayesian linear regression and its link to ridge, Metropolis–Hastings sampling, and Bayesian ideas across machine learning.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-math">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Mathematical concepts &middot; Statistics</p>
+  <h1>Bayesian estimation: <span class="grad">beliefs that update</span></h1>
+  <p class="lede">Maximum likelihood gives one best guess. The Bayesian approach keeps a whole distribution of plausible values, the posterior, and updates it as data arrive. From that one object you can read a best guess, an error bar, and a prediction that knows how unsure it is.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#update">1 · Prior × likelihood</a><a href="#mean">2 · Shrinkage</a><a href="#blr">3 · Regression with error bars</a><a href="#mcmc">4 · Sampling: MCMC</a><a href="#ml">5 · In ML</a><a href="#py">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is Bayesian estimation, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>Treat the unknown parameter \(\theta\) as something you are uncertain about, and describe that uncertainty with a probability distribution. Before the data, that is the <a class="term" data-t="prior">prior</a> \(p(\theta)\). The data enter through the same <a class="term" data-t="likelihood">likelihood</a> \(p(\text{data}\mid\theta)\) that <a href="../mle/">maximum likelihood</a> uses. <a class="term" data-t="bayes-rule">Bayes' theorem</a> combines them into the <a class="term" data-t="posterior">posterior</a>:</p>
+      <div class="mathbox c1">$$p(\theta\mid\text{data})=\frac{p(\text{data}\mid\theta)\,p(\theta)}{p(\text{data})}\;\propto\;\text{likelihood}\times\text{prior}.$$</div>
+      <h3>How it works</h3>
+      <ol class="steps2"><li>Choose a prior: what values of \(\theta\) are plausible before you look.</li><li>Write the likelihood, exactly as for MLE.</li><li>Multiply and rescale so it integrates to 1: the posterior.</li><li>Summarise it: its peak (<a class="term" data-t="map">MAP</a>), its mean, and an interval holding 95% of it (a <a class="term" data-t="credible-interval">credible interval</a>).</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>A new restaurant has one review: 5 stars. Another has 400 reviews averaging 4.6. Which is better? Maximum likelihood says the first: its average is higher. Most people pick the second, because one review is weak evidence and most restaurants are not perfect. That instinct, "start from what is typical, move as far as the evidence justifies", is Bayesian estimation.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Small data: the prior stops wild estimates</li><li>Honest uncertainty, including for predictions</li><li>Updating one observation at a time</li></ul></div><div class="con"><b>Watch out for</b><ul><li>The prior is a choice, and with little data it matters</li><li>The posterior rarely has a formula: sampling or approximation is needed</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="prior">Prior</a><a class="term" data-t="posterior">Posterior</a><a class="term" data-t="conjugate-prior">Conjugate prior</a><a class="term" data-t="map">MAP</a><a class="term" data-t="posterior-mean">Posterior mean</a><a class="term" data-t="credible-interval">Credible interval</a><a class="term" data-t="shrinkage">Shrinkage</a><a class="term" data-t="posterior-predictive">Posterior predictive</a><a class="term" data-t="mcmc">MCMC</a></div>
+      <p class="hint">Dotted-underlined words are clickable definitions. The <a href="../probability/#bayes">probability page</a> introduces Bayes' theorem with a medical test, if you want a gentler start.</p>
+    </div>
+  </div>
+</section>
+
+<section id="update" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Prior × likelihood = posterior, on a coin</h2>
+    <p class="sub">Grey dashed: the prior. Orange: the likelihood of the flips (rescaled). Purple: the posterior, with its 95% credible interval shaded. Markers: MLE (orange), MAP (purple) and posterior mean (green).</p>
+    <div class="ctl"><span class="lbl">Prior</span><div class="seg" id="pSeg"><button data-v="1,1">Flat: no idea</button><button data-v="2,2" class="on">Mild: probably not extreme</button><button data-v="20,20">Strong: almost surely fair</button><button data-v="2,8">Sceptic: tails-heavy</button></div></div>
+    <div class="plot wide" id="pU"></div>
+    <div class="legend"><span><i style="background:var(--muted)"></i>prior</span><span><i style="background:var(--c4)"></i>likelihood</span><span><i style="background:var(--c1)"></i>posterior</span><span><i style="background:var(--c5)"></i>posterior mean</span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The unknown is the coin's heads probability \(\theta\). For a prior on a number between 0 and 1, the natural choice is a Beta distribution, \(p(\theta)\propto\theta^{a-1}(1-\theta)^{b-1}\). Read \(a-1\) and \(b-1\) as heads and tails you imagine having seen already. With \(h\) heads and \(t\) tails, the likelihood is \(\theta^{h}(1-\theta)^{t}\), so</p>
+      <ol class="derive">
+        <li><div class="eq">\(p(\theta\mid h,t)\propto\theta^{h}(1-\theta)^{t}\cdot\theta^{a-1}(1-\theta)^{b-1}=\theta^{a+h-1}(1-\theta)^{b+t-1}\)</div><div class="why">Multiplying adds the exponents: real counts plus imaginary counts.</div></li>
+        <li><div class="eq">\(\theta\mid\text{data}\sim\operatorname{Beta}(a+h,\;b+t)\)</div><div class="why">The posterior is again a Beta. A prior with this property is called <a class="term" data-t="conjugate-prior">conjugate</a>: updating is just adding counts.</div></li>
+        <li><div class="eq">\(\hat\theta_{\text{MLE}}=\dfrac{h}{h+t},\quad\hat\theta_{\text{MAP}}=\dfrac{a+h-1}{a+b+h+t-2},\quad\mathbb E[\theta\mid\text{data}]=\dfrac{a+h}{a+b+h+t}\)</div><div class="why">Three point estimates. The two Bayesian ones pull the MLE towards the prior's centre, more when data are scarce.</div></li>
+      </ol>
+      <div class="ctl"><label for="uh"><span>Heads \(h\)</span><output id="uhOut"></output></label><input type="range" id="uh" min="0" max="60" step="1" value="3"></div>
+      <div class="ctl"><label for="ut"><span>Tails \(t\)</span><output id="utOut"></output></label><input type="range" id="ut" min="0" max="60" step="1" value="0"></div>
+      <div class="stats" id="uStats"></div>
+      <p class="hint">Start with 3 heads and 0 tails. MLE says \(\theta=1\). Each prior gives a more sensible answer. Then raise both counts to 60 and 40: all the priors agree. With enough data, the data win.</p>
+      <details class="deeper"><summary>Going deeper: which single number? And credible versus confidence intervals</summary><div>
+        <p><b>Point estimates are decisions.</b> If a wrong guess costs \((\hat\theta-\theta)^2\), the best guess on average under the posterior is its mean. If it costs \(|\hat\theta-\theta|\), the median. If you are only rewarded for being exactly right (0–1 loss), the mode, which is MAP. For a symmetric posterior they coincide. For a skewed one (few flips, near 0 or 1) they differ, and the mean is usually the safest.</p>
+        <p><b>Credible interval.</b> "Given the data and the prior, \(\theta\) lies in \([0.41,0.78]\) with probability 95%." That is the sentence people want a confidence interval to mean, and it is true for a credible interval. A <a href="../inference/#ci">confidence interval</a> instead promises that the procedure captures the fixed true value in 95% of repeated experiments. With a flat prior and plenty of data the two intervals are almost the same numbers; with little data or a strong prior they differ.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="mean" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Estimating a mean: the posterior is a weighted compromise</h2>
+    <p class="sub">Measurements with known noise \(\sigma=2\) of an unknown mean \(\mu\) (true value: dashed). Grey: prior. Orange: what the data alone say. Purple: the posterior. The bar shows how much weight each side gets.</p>
+    <div class="plot wide" id="pS"></div>
+    <div class="wbar" id="wBar"><span class="wp" id="wP"></span><span class="wd" id="wD"></span></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="s1">Add a measurement</button><button class="btn" id="s10">Add 10</button><button class="btn" id="sR">Clear data</button><span class="pos" id="sPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Each measurement is \(x_i\sim\mathcal N(\mu,\sigma^2)\). Put a Normal prior on the unknown mean, \(\mu\sim\mathcal N(m_0,s_0^2)\). Gaussians multiply into a Gaussian, and the cleanest way to say how is with <b>precision</b>, one over variance, which measures how much information something carries:</p>
+      <ol class="derive">
+        <li><div class="eq">\(\dfrac{1}{s_n^2}=\dfrac{1}{s_0^2}+\dfrac{n}{\sigma^2}\)</div><div class="why">Information adds up: the prior's precision plus \(1/\sigma^2\) from each measurement.</div></li>
+        <li><div class="eq">\(m_n=s_n^2\Big(\dfrac{m_0}{s_0^2}+\dfrac{n\bar x}{\sigma^2}\Big)=w\,\bar x+(1-w)\,m_0,\quad w=\dfrac{n/\sigma^2}{n/\sigma^2+1/s_0^2}\)</div><div class="why">The posterior mean is a weighted average of the data mean and the prior mean, weighted by their precisions.</div></li>
+        <li><div class="eq">\(n\to\infty:\;w\to1,\;m_n\to\bar x,\;s_n\to0\)</div><div class="why">With enough data, the prior stops mattering and the estimate becomes the MLE.</div></li>
+      </ol>
+      <p>Pulling an estimate towards a fixed point is called <a class="term" data-t="shrinkage">shrinkage</a>. It trades a little bias for much less variance, and on average lands closer to the truth, which is the same trade that <a href="../../ml/regularisation/">regularisation</a> makes.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: Bayesian estimate of a mean (Normal prior, known noise)</h5><ol>
+        <li><span class="kw">input</span> prior mean \(m_0\) and spread \(s_0\), noise \(\sigma\)</li>
+        <li><span class="kw">for</span> each new measurement \(x\) <span class="kw">do</span></li>
+        <li class="i1">\(\tau\leftarrow1/s^2+1/\sigma^2\) <span class="cm">precision goes up by one measurement's worth</span></li>
+        <li class="i1">\(m\leftarrow\big(m/s^2+x/\sigma^2\big)/\tau\) <span class="cm">move towards \(x\), by its share of the precision</span></li>
+        <li class="i1">\(s\leftarrow1/\sqrt\tau\) <span class="cm">today's posterior is tomorrow's prior</span></li>
+        <li><span class="kw">return</span> posterior \(\mathcal N(m,s^2)\); 95% credible interval \(m\pm1.96\,s\)</li>
+      </ol></div>
+      <div class="ctl"><label for="sm"><span>Prior mean \(m_0\)</span><output id="smOut"></output></label><input type="range" id="sm" min="-6" max="6" step="0.1" value="-3"></div>
+      <div class="ctl"><label for="ss"><span>Prior spread \(s_0\) (how sure)</span><output id="ssOut"></output></label><input type="range" id="ss" min="0.2" max="8" step="0.1" value="1"></div>
+      <div class="ctl"><label for="st"><span>True \(\mu\) (hidden from the learner)</span><output id="stOut"></output></label><input type="range" id="st" min="-6" max="6" step="0.1" value="2"></div>
+      <div class="stats" id="sStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="blr" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Bayesian linear regression: MAP is ridge, and you get error bars</h2>
+    <p class="sub">A polynomial fit to noisy points. Grey dashed: the maximum-likelihood fit. Purple: the posterior mean. Shaded: the 95% band for a new observation, which widens where there is no data.</p>
+    <div class="plot wide" id="pB"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="bNew">New data</button><span class="pos" id="bPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The model is \(y=w^\top\phi(x)+\varepsilon\), with features \(\phi(x)=(1,x,x^2,\dots)\) and Gaussian noise of precision \(\beta\). Put a Gaussian prior on the weights, \(w\sim\mathcal N(0,\alpha^{-1}I)\): "weights are probably small". Take the log of the posterior:</p>
+      <ol class="derive">
+        <li><div class="eq">\(\log p(w\mid\mathcal D)=-\dfrac{\beta}{2}\sum_i\big(y^{(i)}-w^\top\phi(x^{(i)})\big)^2-\dfrac{\alpha}{2}\|w\|^2+\text{const}\)</div><div class="why">Log-likelihood (squared errors) plus log-prior (squared weights).</div></li>
+        <li><div class="eq">\(\hat w_{\text{MAP}}=\arg\min_w\;\|y-\Phi w\|^2+\lambda\|w\|^2,\quad\lambda=\alpha/\beta\)</div><div class="why">Maximising the posterior is <a class="term" data-t="ridge">ridge regression</a>. The penalty is the prior, and \(\lambda\) is noise variance divided by prior variance.</div></li>
+        <li><div class="eq">\(w\mid\mathcal D\sim\mathcal N(m_N,S_N),\quad S_N=(\alpha I+\beta\Phi^\top\Phi)^{-1},\quad m_N=\beta S_N\Phi^\top y\)</div><div class="why">The whole posterior is Gaussian, so we also know how unsure each weight is.</div></li>
+        <li><div class="eq">\(y_*\mid x_*,\mathcal D\sim\mathcal N\big(m_N^\top\phi_*,\;\tfrac1\beta+\phi_*^\top S_N\phi_*\big)\)</div><div class="why">The <a class="term" data-t="posterior-predictive">posterior predictive</a>: noise we can never remove, plus uncertainty about \(w\), which is large far from the data.</div></li>
+      </ol>
+      <div class="algo"><h5 class="algo-h">Algorithm: Bayesian linear regression</h5><ol>
+        <li><span class="kw">input</span> features \(\Phi\) (n × d), targets \(y\), prior precision \(\alpha\), noise precision \(\beta\)</li>
+        <li>\(S_N\leftarrow(\alpha I+\beta\Phi^\top\Phi)^{-1}\) <span class="cm">posterior covariance of the weights</span></li>
+        <li>\(m_N\leftarrow\beta S_N\Phi^\top y\) <span class="cm">posterior mean = ridge solution with λ = α/β</span></li>
+        <li><span class="kw">for</span> each new input \(x_*\) <span class="kw">do</span></li>
+        <li class="i1">mean \(\leftarrow m_N^\top\phi(x_*)\); variance \(\leftarrow1/\beta+\phi(x_*)^\top S_N\phi(x_*)\)</li>
+        <li><span class="kw">return</span> predictions with error bars mean \(\pm1.96\sqrt{\text{variance}}\)</li>
+      </ol></div>
+      <div class="ctl"><label for="bd"><span>Polynomial degree</span><output id="bdOut"></output></label><input type="range" id="bd" min="1" max="9" step="1" value="9"></div>
+      <div class="ctl"><label for="ba"><span>Prior strength \(\log_{10}\alpha\)</span><output id="baOut"></output></label><input type="range" id="ba" min="-6" max="2" step="0.1" value="-1"></div>
+      <div class="ctl"><label for="bn"><span>Data points</span><output id="bnOut"></output></label><input type="range" id="bn" min="3" max="40" step="1" value="10"></div>
+      <div class="stats" id="bStats"></div>
+      <p class="hint">At degree 9 with 10 points, the MLE wiggles through every point. The posterior mean stays calm. Turn \(\alpha\) down to \(10^{-6}\) and it starts to wiggle too: a prior that is too weak gives no protection.</p>
+    </div>
+  </div>
+</section>
+
+<section id="mcmc" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>No formula? Draw samples: Metropolis–Hastings</h2>
+    <p class="sub">A coin with a two-part prior, "probably a fair coin, but possibly a trick one", has no closed-form posterior. A random walker proposes moves and accepts or rejects them. Top: its path. Bottom: where it spent its time, against the exact posterior (computed on a grid, for checking).</p>
+    <div class="plot short" id="pT"></div>
+    <div class="plot short" id="pH" style="margin-top:8px"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="mRun">Run</button><button class="btn" id="m100">+100 steps</button><button class="btn" id="mR">Reset</button><span class="pos" id="mPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Conjugate priors are the lucky case. Change the prior to something more honest, such as a mixture, \(p(\theta)=0.7\cdot\operatorname{Beta}(40,40)+0.3\cdot\operatorname{Beta}(1,1)\), and the posterior \(\propto\theta^h(1-\theta)^t p(\theta)\) has a shape but no clean formula: in particular, we cannot compute the constant \(p(\text{data})\) that makes it integrate to 1 in a model with many parameters.</p>
+      <p><a class="term" data-t="mcmc">Markov chain Monte Carlo</a> gets around this. It never needs the constant, only ratios of the posterior at two points, where the constant cancels. The walker proposes a nearby value. If it is more plausible, it moves. If it is less plausible, it moves only sometimes, with probability equal to the ratio. Run long enough, the time it spends in each region is proportional to the posterior there.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: Metropolis–Hastings sampling</h5><ol>
+        <li><span class="kw">input</span> unnormalised posterior \(\tilde p(\theta)=p(\text{data}\mid\theta)p(\theta)\), step size \(s\), start \(\theta\)</li>
+        <li><span class="kw">for</span> \(t=1\) <span class="kw">to</span> \(T\) <span class="kw">do</span></li>
+        <li class="i1">\(\theta'\leftarrow\theta+s\cdot\mathcal N(0,1)\) <span class="cm">propose a nearby value</span></li>
+        <li class="i1">\(r\leftarrow\tilde p(\theta')/\tilde p(\theta)\) <span class="cm">the unknown constant cancels</span></li>
+        <li class="i1"><span class="kw">if</span> \(u\sim U(0,1)&lt;r\) <span class="kw">then</span> \(\theta\leftarrow\theta'\) <span class="cm">uphill: always; downhill: sometimes</span></li>
+        <li class="i1">record \(\theta\) <span class="cm">a rejected move records the old value again</span></li>
+        <li><span class="kw">return</span> the recorded values after a burn-in: a sample from the posterior</li>
+      </ol></div>
+      <div class="ctl"><label for="mh"><span>Heads \(h\) (of 20 flips)</span><output id="mhOut"></output></label><input type="range" id="mh" min="0" max="20" step="1" value="15"></div>
+      <div class="ctl"><label for="ms"><span>Step size \(s\)</span><output id="msOut"></output></label><input type="range" id="ms" min="0.005" max="0.6" step="0.005" value="0.08"></div>
+      <div class="stats" id="mStats"></div>
+      <details class="deeper"><summary>Going deeper: tuning, diagnostics and modern samplers</summary><div>
+        <p><b>Step size.</b> Try 0.005: almost every move is accepted, but the walker crawls and the histogram is lumpy for a long time. Try 0.6: most proposals land in implausible places and are rejected, so the walker sits still. A common target is accepting roughly a quarter to a half of the proposals.</p>
+        <p><b>Why it works.</b> The acceptance rule makes the chain satisfy <i>detailed balance</i>: \(\tilde p(\theta)q(\theta'\mid\theta)\min(1,r)=\tilde p(\theta')q(\theta\mid\theta')\min(1,1/r)\). A chain that balances every pair of moves this way has the posterior as its long-run distribution.</p>
+        <p><b>In practice.</b> Discard an initial burn-in, run several chains from different starts and check they agree (\(\hat R\approx1\)), and report the effective sample size, since successive values are correlated. Libraries such as PyMC and Stan use Hamiltonian Monte Carlo (NUTS), which uses gradients of \(\log\tilde p\) to make long, well-aimed moves, and scales to thousands of parameters. When even that is too slow, variational inference fits a simple distribution to the posterior by optimisation instead; that is what a <a class="term" data-t="vae">VAE</a> does.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="ml" class="card">
+  <h2><span class="num">5</span>Bayesian ideas across machine learning</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Where</th><th>The prior or posterior in it</th><th>What it buys</th></tr>
+    <tr><td><b>Laplace smoothing</b> in <a href="../../ml/lda-gda/">naive Bayes</a></td><td>Dirichlet prior on word frequencies: add 1 to every count</td><td>An unseen word no longer has probability 0</td></tr>
+    <tr><td><b>Ridge and lasso</b> (<a href="../../ml/regularisation/">regularisation</a>), weight decay</td><td>Gaussian prior on weights gives L2; Laplace prior gives L1</td><td>MAP estimates that do not overfit</td></tr>
+    <tr><td><b>Bayesian optimisation</b> of hyperparameters</td><td>A Gaussian-process posterior over "validation score as a function of settings"</td><td>Tries the setting most likely to improve, using few expensive runs</td></tr>
+    <tr><td><b>Thompson sampling</b> (A/B tests, bandits)</td><td>Beta posterior per option, as in section 1; sample one value from each and play the best</td><td>Explores while the posterior is wide, exploits once it is narrow</td></tr>
+    <tr><td><b>Deep ensembles, MC dropout</b></td><td>Several trained networks, or dropout kept on at test time, as rough samples from a posterior over weights</td><td>Uncertainty estimates for deep networks</td></tr>
+    <tr><td><b>VAEs</b> and diffusion models</td><td>Variational posterior \(q(z\mid x)\) over latent variables</td><td>Generative models trained by a likelihood bound</td></tr>
+    <tr><td><b>Hierarchical models</b></td><td>Groups (shops, regions, risk classes) share a prior whose parameters are also learned</td><td>Small groups borrow strength from large ones, which is shrinkage again; actuaries know it as credibility</td></tr>
+  </table></div>
+  <p class="note" style="margin-top:12px">Previous: <a href="../mle/">maximum likelihood estimation</a>. Bayesian estimation reduces to it when the prior is flat and the data are plentiful.</p>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> scipy <span class="k">import</span> stats
+
+<span class="c"># 1. conjugate coin: Beta(2, 2) prior, 7 heads and 3 tails</span>
+post = stats.beta(<span class="s">2</span> + <span class="s">7</span>, <span class="s">2</span> + <span class="s">3</span>)
+post.mean(), post.interval(<span class="s">0.95</span>)          <span class="c"># posterior mean and 95% credible interval</span>
+(<span class="s">2</span> + <span class="s">7</span> - <span class="s">1</span>) / (<span class="s">2</span> + <span class="s">2</span> + <span class="s">10</span> - <span class="s">2</span>)                  <span class="c"># MAP</span>
+
+<span class="c"># 3. Bayesian linear regression: learns alpha and beta from the data too</span>
+<span class="k">from</span> sklearn.linear_model <span class="k">import</span> BayesianRidge
+x = np.linspace(<span class="s">0</span>, <span class="s">1</span>, <span class="s">10</span>); y = np.sin(<span class="s">2</span> * np.pi * x) + <span class="s">0.2</span> * np.random.randn(<span class="s">10</span>)
+X = np.vander(x, <span class="s">10</span>, increasing=True)
+m = BayesianRidge().fit(X, y)
+mean, std = m.predict(X, return_std=True)   <span class="c"># predictions with error bars</span>
+
+<span class="c"># 4. a mixture prior with no formula: sample the posterior with PyMC (NUTS)</span>
+<span class="k">import</span> pymc <span class="k">as</span> pm
+<span class="k">with</span> pm.Model():
+    theta = pm.Mixture(<span class="s">"theta"</span>, w=[<span class="s">0.7</span>, <span class="s">0.3</span>],
+                       comp_dists=[pm.Beta.dist(<span class="s">40</span>, <span class="s">40</span>), pm.Beta.dist(<span class="s">1</span>, <span class="s">1</span>)])
+    pm.Binomial(<span class="s">"heads"</span>, n=<span class="s">20</span>, p=theta, observed=<span class="s">15</span>)
+    trace = pm.sample(<span class="s">2000</span>, chains=<span class="s">4</span>)
+pm.summary(trace)                            <span class="c"># mean, credible interval, r_hat, effective sample size</span></pre>
+</section>
+<p class="foot">Part of the <a href="../">Mathematical concepts</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script>
+(function(){
+const {$} = ML;
+function frame(plot,x0,x1,y0,y1,xl){ return ML.chart(plot,[{pts:[[x0,y0],[x1,y1]],color:'transparent',noline:true}],{x0,x1,y0,y1,xl}); }
+function curve(plot,fr,f,x0,x1,color,width=2.5,dash){ const c=plot.ctx,{fx,fy}=fr; c.save(); c.strokeStyle=color; c.lineWidth=width; if(dash) c.setLineDash(dash); c.beginPath(); let st=false; for(let i=0;i<=300;i++){ const x=x0+(x1-x0)*i/300, y=f(x); if(!isFinite(y)){ st=false; continue; } st?c.lineTo(fx(x),fy(y)):c.moveTo(fx(x),fy(y)); st=true; } c.stroke(); c.restore(); }
+function shade(plot,fr,f,a,b,color,alpha=.3){ const c=plot.ctx,{fx,fy}=fr; if(b<=a) return; c.save(); c.fillStyle=color; c.globalAlpha=alpha; c.beginPath(); c.moveTo(fx(a),fy(0)); for(let i=0;i<=150;i++){ const x=a+(b-a)*i/150; c.lineTo(fx(x),fy(f(x))); } c.lineTo(fx(b),fy(0)); c.closePath(); c.fill(); c.restore(); }
+function vline(plot,fr,x,color,dash,w=2){ const c=plot.ctx,{fx}=fr; c.save(); c.strokeStyle=color; c.lineWidth=w; if(dash) c.setLineDash(dash); c.beginPath(); c.moveTo(fx(x),12); c.lineTo(fx(x),plot.h-28); c.stroke(); c.restore(); }
+function dot(plot,fr,x,y,r,color){ const c=plot.ctx; c.save(); c.fillStyle=color; c.beginPath(); c.arc(fr.fx(x),fr.fy(y),r,0,7); c.fill(); c.restore(); }
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+const bq=(q,a,b)=>{ let lo=0,hi=1; for(let i=0;i<60;i++){ const m=(lo+hi)/2; if(MX.ibeta(m,a,b)<q) lo=m; else hi=m; } return (lo+hi)/2; };
+const bpdf=(x,a,b)=>{ const v=MX.betaPdf(Math.min(1-1e-9,Math.max(1e-9,x)),a,b); return isFinite(v)?v:NaN; };
+
+/* ---- 1. Beta-Binomial ---- */
+const pU=new ML.Plot('#pU',{equal:false}); let pa=2, pb=2, uh=3, ut=0;
+function drawU(){ const P=ML.palette(), A=pa+uh, B=pb+ut, pri=x=>bpdf(x,pa,pb), lik=x=>bpdf(x,uh+1,ut+1), post=x=>bpdf(x,A,B);
+  let ym=0; for(let i=1;i<200;i++){ const x=i/200; ym=Math.max(ym,pri(x)||0,lik(x)||0,post(x)||0); } ym=Math.min(ym*1.1,30);
+  const fr=frame(pU,0,1,0,ym,'θ = P(heads)'), lo=bq(.025,A,B), hi=bq(.975,A,B), cap=f=>x=>Math.min(ym,f(x));
+  shade(pU,fr,cap(post),lo,hi,P.c1,.25); curve(pU,fr,cap(pri),.001,.999,P.muted,2,[6,4]); curve(pU,fr,cap(lik),.001,.999,P.c4,2); curve(pU,fr,cap(post),.001,.999,P.c1,3);
+  const mle=uh+ut?uh/(uh+ut):NaN, map=(A>1&&B>1)?(A-1)/(A+B-2):(A>=B?1:0), mean=A/(A+B);
+  if(isFinite(mle)) vline(pU,fr,mle,P.c4,[3,3],1.5); vline(pU,fr,map,P.c1,null,1.5); vline(pU,fr,mean,P.c5,null,2);
+  $('#uStats').innerHTML=stat('c4',isFinite(mle)?mle.toFixed(3):'–','MLE h/(h+t)')+stat('c1',map.toFixed(3),'MAP (posterior peak)')+stat('c5',mean.toFixed(3),'posterior mean')+stat('c2',`[${lo.toFixed(2)}, ${hi.toFixed(2)}]`,'95% credible interval')+stat('c3',`Beta(${+A.toFixed(1)}, ${+B.toFixed(1)})`,'posterior'); }
+ML.bindSeg('pSeg',v=>{ [pa,pb]=v.split(',').map(Number); drawU(); }); ML.bindRange('uh',v=>{ uh=v; drawU(); }); ML.bindRange('ut',v=>{ ut=v; drawU(); }); pU.onResize=drawU;
+
+/* ---- 2. Normal-Normal shrinkage ---- */
+const pS=new ML.Plot('#pS',{equal:false}); const srng=ML.rng(17), SIG=2; let m0=-3, s0=1, mt=2, SX=[];
+function postN(){ const n=SX.length, xb=n?SX.reduce((a,b)=>a+b,0)/n:0, tau=1/(s0*s0)+n/(SIG*SIG), m=(m0/(s0*s0)+n*xb/(SIG*SIG))/tau; return {n,xb,m,s:1/Math.sqrt(tau),w:(n/(SIG*SIG))/tau}; }
+function drawS(){ const P=ML.palette(), Q=postN(), f0=x=>MX.normPdf(x,m0,s0), fl=x=>Q.n?MX.normPdf(x,Q.xb,SIG/Math.sqrt(Q.n)):NaN, fp=x=>MX.normPdf(x,Q.m,Q.s);
+  let ym=Math.max(f0(m0),Q.n?fl(Q.xb):0,fp(Q.m))*1.12; ym=Math.min(ym,4);
+  const fr=frame(pS,-10,10,0,ym,'μ'), cap=f=>x=>Math.min(ym,f(x));
+  shade(pS,fr,cap(fp),Q.m-1.96*Q.s,Q.m+1.96*Q.s,P.c1,.22); curve(pS,fr,cap(f0),-10,10,P.muted,2,[6,4]); if(Q.n) curve(pS,fr,cap(fl),-10,10,P.c4,2); curve(pS,fr,cap(fp),-10,10,P.c1,3); vline(pS,fr,mt,P.ink,[3,4],1.2);
+  SX.slice(-60).forEach(x=>dot(pS,fr,Math.max(-10,Math.min(10,x)),ym*.03,3,P.c4));
+  $('#wP').style.width=(100*(1-Q.w))+'%'; $('#wD').style.width=(100*Q.w)+'%'; $('#wP').textContent=Q.w<.85?'prior '+Math.round(100*(1-Q.w))+'%':''; $('#wD').textContent=Q.w>.15?'data '+Math.round(100*Q.w)+'%':'';
+  $('#sPos').textContent=`${Q.n} measurements`;
+  $('#sStats').innerHTML=stat('c4',Q.n?Q.xb.toFixed(3):'–','x̄ (the MLE)')+stat('c1',Q.m.toFixed(3),'posterior mean m_n')+stat('c2','± '+(1.96*Q.s).toFixed(3),'95% credible half-width')+stat('c3',(100*Q.w).toFixed(1)+'%','weight on the data'); }
+const addS=k=>{ for(let i=0;i<k;i++) SX.push(mt+SIG*srng.gauss()); drawS(); };
+$('#s1').addEventListener('click',()=>addS(1)); $('#s10').addEventListener('click',()=>addS(10)); $('#sR').addEventListener('click',()=>{ SX=[]; drawS(); });
+ML.bindRange('sm',v=>{ m0=v; drawS(); },v=>v.toFixed(1)); ML.bindRange('ss',v=>{ s0=v; drawS(); },v=>v.toFixed(1)); ML.bindRange('st',v=>{ mt=v; SX=[]; drawS(); },v=>v.toFixed(1)); pS.onResize=drawS;
+
+/* ---- 3. Bayesian linear regression ---- */
+const pB=new ML.Plot('#pB',{equal:false}); let brng=ML.rng(3), bd=9, la=-1, bn=10, BX=[], BY=[]; const BETA=1/(0.25*0.25), ftrue=x=>Math.sin(2*Math.PI*x);
+function newB(){ BX=[]; BY=[]; for(let i=0;i<bn;i++){ const x=0.05+0.9*brng(); BX.push(x); BY.push(ftrue(x)+0.25*brng.gauss()); } drawB(); }
+const phi=x=>{ const v=[]; let p=1; const z=2*x-1; for(let j=0;j<=bd;j++){ v.push(p); p*=z; } return v; };
+function solve(A,b){ const n=b.length, M=A.map((r,i)=>[...r,b[i]]); for(let c=0;c<n;c++){ let p=c; for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c])) p=r; [M[c],M[p]]=[M[p],M[c]]; const d=M[c][c]||1e-300; for(let r=0;r<n;r++){ if(r===c) continue; const f=M[r][c]/d; for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k]; } } return M.map((r,i)=>r[n]/(r[i]||1e-300)); }
+function inv(A){ const n=A.length; return A.map((_,j)=>solve(A,A.map((__,i)=>i===j?1:0))).reduce((R,col,j)=>{ col.forEach((v,i)=>{ R[i][j]=v; }); return R; },A.map(()=>new Array(n).fill(0))); }
+function drawB(){ const P=ML.palette(), d=bd+1, alpha=Math.pow(10,la), F=BX.map(phi);
+  const G=[...Array(d)].map((_,i)=>[...Array(d)].map((__,j)=>F.reduce((a,f)=>a+f[i]*f[j],0))), Fy=[...Array(d)].map((_,i)=>F.reduce((a,f,k)=>a+f[i]*BY[k],0));
+  const A=G.map((r,i)=>r.map((v,j)=>BETA*v+(i===j?alpha:0))), S=inv(A), mN=solve(A,Fy.map(v=>BETA*v));
+  const wM=solve(G.map((r,i)=>r.map((v,j)=>v+(i===j?1e-9:0))),Fy);
+  const mean=x=>{ const f=phi(x); return f.reduce((a,v,i)=>a+v*mN[i],0); }, vr=x=>{ const f=phi(x); let s=1/BETA; for(let i=0;i<d;i++) for(let j=0;j<d;j++) s+=f[i]*S[i][j]*f[j]; return s; }, mle=x=>{ const f=phi(x); return f.reduce((a,v,i)=>a+v*wM[i],0); };
+  const fr=frame(pB,0,1,-2.5,2.5,'x'), c=pB.ctx; c.save(); c.fillStyle=P.c1; c.globalAlpha=.18; c.beginPath(); for(let i=0;i<=200;i++){ const x=i/200; c.lineTo(fr.fx(x),fr.fy(Math.min(2.5,mean(x)+1.96*Math.sqrt(vr(x))))); } for(let i=200;i>=0;i--){ const x=i/200; c.lineTo(fr.fx(x),fr.fy(Math.max(-2.5,mean(x)-1.96*Math.sqrt(vr(x))))); } c.closePath(); c.fill(); c.restore();
+  curve(pB,fr,ftrue,0,1,P.c5,1.5,[2,4]); curve(pB,fr,x=>Math.max(-2.5,Math.min(2.5,mle(x))),0,1,P.muted,2,[6,4]); curve(pB,fr,mean,0,1,P.c1,3); BX.forEach((x,i)=>dot(pB,fr,x,BY[i],4.5,P.c4));
+  const wn=Math.sqrt(mN.reduce((a,v)=>a+v*v,0)), wm=Math.sqrt(wM.reduce((a,v)=>a+v*v,0));
+  $('#bPos').textContent=`${BX.length} points; dotted green = true curve`;
+  $('#bStats').innerHTML=stat('c2',(alpha/BETA).toExponential(1),'equivalent ridge λ = α/β')+stat('c1',wn.toFixed(2),'‖w‖ posterior mean')+stat('c3',wm>1e4?wm.toExponential(1):wm.toFixed(1),'‖w‖ maximum likelihood'); }
+ML.bindRange('bd',v=>{ bd=v; drawB(); }); ML.bindRange('ba',v=>{ la=v; drawB(); },v=>'α = '+Math.pow(10,v).toExponential(1)); ML.bindRange('bn',v=>{ bn=v; brng=ML.rng(3); newB(); }); $('#bNew').addEventListener('click',newB); pB.onResize=drawB;
+
+/* ---- 4. Metropolis–Hastings ---- */
+const pT=new ML.Plot('#pT',{equal:false}), pH=new ML.Plot('#pH',{equal:false}); const mr=ML.rng(8); let mh=15, ms=0.08, CH=[], acc=0, tries=0, timer=null;
+const lpri=th=>Math.log(0.7*MX.betaPdf(th,40,40)+0.3), lpost=th=>th<=0||th>=1?-Infinity:mh*Math.log(th)+(20-mh)*Math.log(1-th)+lpri(th);
+let GRID=null; function grid(){ const xs=[...Array(400)].map((_,i)=>(i+.5)/400), lp=xs.map(lpost), m=Math.max(...lp), w=lp.map(v=>Math.exp(v-m)), Z=w.reduce((a,b)=>a+b,0)/400; GRID={xs,d:w.map(v=>v/Z)}; GRID.mean=xs.reduce((a,x,i)=>a+x*GRID.d[i],0)/400; }
+function steps(k){ let th=CH.length?CH[CH.length-1]:0.2; for(let i=0;i<k;i++){ const pr=th+ms*mr.gauss(); tries++; if(Math.log(mr())<lpost(pr)-lpost(th)){ th=pr; acc++; } CH.push(th); } }
+function drawMC(){ const P=ML.palette(); if(!GRID) grid(); const n=CH.length, show=CH.slice(-400), off=n-show.length;
+  const fr=frame(pT,Math.max(0,off),Math.max(off+400,1),0,1,'step  →  θ'); const c=pT.ctx; c.save(); c.strokeStyle=P.c1; c.lineWidth=1.3; c.beginPath(); show.forEach((v,i)=>{ const X=fr.fx(off+i),Y=fr.fy(v); i?c.lineTo(X,Y):c.moveTo(X,Y); }); c.stroke(); c.restore(); if(n) dot(pT,fr,n-1,CH[n-1],4.5,P.c4);
+  const nb=50, cnt=new Array(nb).fill(0), burn=Math.min(100,Math.floor(n/5)), use=CH.slice(burn); use.forEach(v=>{ cnt[Math.min(nb-1,Math.floor(v*nb))]++; }); const dens=cnt.map(k=>use.length?k/use.length*nb:0);
+  const ym=Math.max(...GRID.d,...dens)*1.1, fr2=frame(pH,0,1,0,ym,'θ'), c2=pH.ctx; c2.save(); c2.fillStyle=P.c1; c2.globalAlpha=.45; dens.forEach((d,b)=>{ c2.fillRect(fr2.fx(b/nb)+.5,fr2.fy(d),fr2.fx((b+1)/nb)-fr2.fx(b/nb)-1,fr2.fy(0)-fr2.fy(d)); }); c2.restore();
+  curve(pH,fr2,x=>{ const i=Math.min(399,Math.max(0,Math.floor(x*400))); return GRID.d[i]; },0.0025,0.9975,P.c4,2.5);
+  const mean=use.length?use.reduce((a,b)=>a+b,0)/use.length:NaN;
+  $('#mPos').textContent=`${n} steps`;
+  $('#mStats').innerHTML=stat('c2',tries?(100*acc/tries).toFixed(0)+'%':'–','proposals accepted')+stat('c1',isNaN(mean)?'–':mean.toFixed(3),'posterior mean from samples')+stat('c4',GRID.mean.toFixed(3),'exact posterior mean')+stat('c3',(mh/20).toFixed(2),'MLE h/20'); }
+function resetMC(){ CH=[]; acc=0; tries=0; GRID=null; drawMC(); }
+$('#mRun').addEventListener('click',()=>{ if(timer){ clearInterval(timer); timer=null; $('#mRun').textContent='Run'; return; } $('#mRun').textContent='Pause'; timer=setInterval(()=>{ steps(8); drawMC(); if(CH.length>=6000){ clearInterval(timer); timer=null; $('#mRun').textContent='Run'; } },40); });
+$('#m100').addEventListener('click',()=>{ steps(100); drawMC(); }); $('#mR').addEventListener('click',resetMC);
+ML.bindRange('mh',v=>{ mh=v; resetMC(); }); ML.bindRange('ms',v=>{ ms=v; drawMC(); },v=>v.toFixed(3)); pT.onResize=drawMC; pH.onResize=drawMC;
+
+ML.onTheme(()=>{ drawU(); drawS(); drawB(); drawMC(); });
+drawU(); addS(3); newB(); steps(300); drawMC();
+})();
+</script>
+<script>NLP.nav('math','bayesian'); ML.renderMath(document.body);</script>
+</body>
+</html>

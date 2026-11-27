@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Visual tokenisation</title>
+<meta name="description" content="How an image becomes tokens a transformer can read: cut it into patches (the vision transformer), detect object regions (VisualBERT, LXMERT), or quantise patches into a codebook of visual words (DALL-E, BEiT). Interactive, in your browser.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP &middot; Multimodal (part 1 of 5)</p>
+  <h1>Visual tokenisation: <span class="grad">turning a picture into words</span></h1>
+  <p class="lede">A transformer reads a list of vectors. For text, the tokeniser cuts the sentence into pieces and looks each one up. To let the same machinery read an image, we need the visual version of that step: cut the picture into pieces, and turn each piece into a vector. There are three main ways to do it, and this page lets you try all three.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#patch">1 · Patches</a><a href="#vit">2 · Patch to vector: the vision transformer</a><a href="#regions">3 · Object regions</a><a href="#codes">4 · A codebook of visual words</a><a href="#compare">5 · Side by side</a><a href="#py">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is visual tokenisation, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A 224 × 224 colour photo is 150,528 numbers. A sentence is a handful of tokens. If we want one model to read both (to answer "what colour is the bus?", or to write a caption), the image has to arrive in the same form as the text: a short sequence of vectors, each standing for a meaningful piece. Feeding every pixel as its own token would give 50,176 tokens, and self-attention over them would need 2.5 billion scores per layer. We need a way to group pixels into a few hundred pieces that still carry what matters.</p>
+      <h3>The idea</h3><p>A <a class="term" data-t="visual-token">visual token</a> is one vector that stands for a piece of an image. The piece can be a fixed square <a class="term" data-t="patch">patch</a> (the <a class="term" data-t="vit">vision transformer</a>), a box around a detected object (<a class="term" data-t="region-features">region features</a>), or a patch replaced by the id of its nearest entry in a learned <a class="term" data-t="codebook">codebook</a>, which makes images look exactly like text: a list of integers from a fixed vocabulary.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Choose the pieces: a grid of patches, or detected object boxes.</li><li>Turn each piece into a vector: a linear projection of its pixels, or a detector's feature for the box.</li><li>Add where the piece came from: a position embedding (or the box coordinates).</li><li>Optionally snap each vector to its nearest codebook entry, giving a discrete id.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Describing a photo over the phone. You might go square by square ("top left is sky, next to it more sky, then the sun"), or object by object ("a dog, a red ball, a tree"), or with a fixed set of agreed words ("blue, blue, yellow, green"). Those are patches, regions and codebook tokens.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Lets one transformer read text and images together</li><li>Patches need no extra model and cover every pixel</li><li>Codebook tokens let a language model also <i>write</i> images</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Small patches mean many tokens and quadratic attention cost</li><li>Region detectors miss things they were not trained on</li><li>Quantising throws away detail</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="visual-token">Visual token</a><a class="term" data-t="patch">Patch</a><a class="term" data-t="vit">Vision transformer</a><a class="term" data-t="cls-token">[CLS] token</a><a class="term" data-t="positional-encoding">Positional encoding</a><a class="term" data-t="region-features">Region features</a><a class="term" data-t="faster-rcnn">Faster R-CNN</a><a class="term" data-t="codebook">Codebook</a><a class="term" data-t="multimodal">Multimodal</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="patch" class="card hl">
+  <h2><span class="num">1</span>Patches: cut the picture into a grid</h2>
+  <p class="sub">The simplest visual tokeniser does not look at the content at all: it cuts the image into equal squares and reads them left to right, top to bottom, like words on a page. Pick a scene and a patch size, then tap any patch to find it in the sequence.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot sq" id="pImg"></div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px"><div class="seg" id="pScene"><button data-v="park" class="on">Park</button><button data-v="kitchen">Kitchen</button><button data-v="street">Street</button></div></div>
+    </div>
+    <div>
+      <div class="ctl"><label for="pP"><span>Patch size \(P\) (pixels, image is 192 × 192)</span><output id="pPOut"></output></label><input type="range" id="pP" min="0" max="5" value="2"></div>
+      <div class="stats" id="pStats"></div>
+      <h3>The image as a sequence</h3>
+      <div class="plot" id="pSeq" style="aspect-ratio:16/6"></div>
+      <p class="hint">The first tile is the <a class="term" data-t="cls-token">[CLS]</a> token, a learned extra token whose output will summarise the whole picture. Every other tile is one patch, in raster order.</p>
+      <div class="note" id="pNote"></div>
+    </div>
+  </div>
+  <div class="prose" style="margin-top:8px">
+    <p><b>Counting tokens.</b> An image of \(H\times W\) pixels cut into \(P\times P\) patches gives \(N=\frac{H}{P}\cdot\frac{W}{P}\) tokens. The standard ViT-B/16 uses \(224\times224\) images and \(P=16\), so \(N=14\times14=196\) tokens, each made of \(16\cdot16\cdot3=768\) numbers. Halve the patch size and you get four times as many tokens and sixteen times as many attention scores, because attention compares every token with every other one (\(N^2\)).</p>
+  </div>
+</section>
+
+<section id="vit" class="card">
+  <h2><span class="num">2</span>From patch to vector: the vision transformer</h2>
+  <p class="sub">A patch is still just pixels. The vision transformer (ViT) flattens each one into a long vector and multiplies it by one learned matrix \(E\), the same for every patch, exactly as a word is looked up in an embedding table. Then it adds a position embedding so the model knows where the patch was, and hands the sequence to an ordinary transformer.</p>
+  <div class="grid2">
+    <div class="prose">
+      <h3>Step by step</h3>
+      <p><b>Flatten.</b> Patch \(p\) becomes \(x_p\in\mathbb R^{P^2C}\): its \(P\times P\) pixels, each with \(C=3\) colour values, in a row.</p>
+      <p><b>Project.</b> One shared linear map gives the patch embedding \(Ex_p\in\mathbb R^{D}\), with \(E\) of shape \(D\times P^2C\). This is the visual analogue of a token embedding. In code it is a convolution with kernel size and stride both equal to \(P\).</p>
+      <p><b>Add position.</b> Attention ignores order, so each grid position gets a learned vector \(e^{\text{pos}}_p\). Without it, a shuffled image would look identical to the model.</p>
+      <div class="mathbox c1">$$z_0=\big[\,x_{\text{cls}};\;Ex_1;\;Ex_2;\;\dots;\;Ex_N\,\big]+E_{\text{pos}}$$</div>
+      <p><b>Transform.</b> \(z_0\) goes through \(L\) standard transformer blocks (the same ones as on the <a href="../transformers/">transformers page</a>). The output above \(x_{\text{cls}}\) is the image's summary vector; a linear layer on it gives class scores, or it becomes the image embedding in a multimodal model.</p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Your selected patch, as numbers</h3>
+      <div id="vVec"></div>
+      <div class="row" style="margin-top:10px"><div class="seg" id="vSeg"><button data-v="img" class="on">Image</button><button data-v="sim">Similarity to selected patch</button></div></div>
+      <div class="plot sq" id="vImg" style="margin-top:8px;max-width:360px"></div>
+      <p class="hint">Here the projection is hand-made so you can read it: 8 numbers per patch that measure colour, brightness, contrast and edges. A trained ViT learns \(D=768\) such directions by itself. "Similarity" colours every patch by the cosine similarity of its vector to the selected one: patches of sky find other sky, patches of grass find grass.</p>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: ViT patch tokenisation</h5><ol>
+        <li><span class="kw">input</span> image \(I\) (\(H\times W\times C\)), patch size \(P\), projection \(E\) (\(D\times P^2C\)), position table \(E_{\text{pos}}\)</li>
+        <li>cut \(I\) into \(N=HW/P^2\) patches, row by row <span class="cm">raster order, like reading a page</span></li>
+        <li><span class="kw">for</span> each patch \(p=1..N\) <span class="kw">do</span></li>
+        <li class="i1">\(x_p\leftarrow\) flatten the patch to \(P^2C\) numbers</li>
+        <li class="i1">\(t_p\leftarrow Ex_p\) <span class="cm">same E for every patch</span></li>
+        <li class="i1">\(t_p\leftarrow t_p+E_{\text{pos}}[p]\) <span class="cm">remember where it came from</span></li>
+        <li>prepend the learned \(x_{\text{cls}}\) <span class="cm">its output summarises the image</span></li>
+        <li><span class="kw">return</span> the \(N+1\) tokens to the transformer</li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: why one linear map is enough, and what ViT gives up</summary><div>
+        <p>The projection is linear, so on its own it can only detect patterns that are weighted sums of pixels (a colour, an edge at a fixed place). That is enough because everything clever happens later: the first attention layer already lets each patch look at every other patch in the image, something a convolutional network only achieves after many layers. Visualising the learned rows of \(E\) shows smooth colour blobs and edge detectors, very like the first layer of a CNN.</p>
+        <p>The price is <b>inductive bias</b>. A CNN is built to assume that nearby pixels belong together and that a cat is a cat wherever it appears. ViT only has the patch grid; it must learn locality from data. That is why the original ViT lost to ResNets when trained on ImageNet alone (1.3 M images) and won only after pre-training on 300 M images. Data-efficient tricks (DeiT: strong augmentation and distillation) and hybrid designs (a CNN stem, or Swin's windowed attention) narrow the gap.</p>
+        <p><b>Resolution.</b> The position table is learned for one grid size. To run on larger images, ViT keeps \(P\) fixed (so it gets more tokens) and interpolates \(E_{\text{pos}}\) in 2-D to the new grid.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="regions" class="card">
+  <h2><span class="num">3</span>Object regions: tokens that are already things</h2>
+  <p class="sub">Before ViT, vision-and-language models (VisualBERT, ViLBERT, LXMERT, UNITER) used an object detector as their tokeniser. A <a class="term" data-t="faster-rcnn">Faster R-CNN</a> finds boxes around objects, and each box becomes one token: a feature vector for what is inside it, plus where the box is. Compare the two kinds of tokens on the same scene.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot sq" id="rImg"></div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px"><div class="seg" id="rSeg"><button data-v="reg" class="on">Regions</button><button data-v="patch">Patches</button></div><div class="seg" id="rScene"><button data-v="park" class="on">Park</button><button data-v="kitchen">Kitchen</button><button data-v="street">Street</button></div></div>
+    </div>
+    <div>
+      <div class="stats" id="rStats"></div>
+      <h3>Region tokens</h3>
+      <div id="rList"></div>
+      <p class="hint">Each token here is the box's average colour (4 numbers) followed by its geometry: left, top, right, bottom and area as fractions of the image (5 numbers). A real detector gives 2,048 learned numbers per box instead of the colour, and the same 5 geometry numbers.</p>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:8px">
+    <div>
+      <p><b>Why it was popular.</b> A region token already means something: "dog", "ball". Captions mention objects, so linking words to regions is easy to learn. Ten to a hundred boxes are also far fewer tokens than hundreds of patches.</p>
+      <p><b>Why it faded.</b> The detector is a separate, frozen model trained on a fixed list of object classes (Visual Genome's 1,600). Anything it does not know (a logo, text in the image, the sky, the spatial layout between boxes) is partly lost, it is slow, and the whole system cannot be trained end to end. Patch-based encoders such as CLIP's ViT replaced it from about 2021.</p>
+    </div>
+    <div>
+      <details class="deeper"><summary>Going deeper: how a detector turns a box into a vector (RoI pooling)</summary><div>
+        <p>Faster R-CNN first runs a CNN (for example ResNet-101) over the whole image, giving a feature map that is about 1/16 of the image size with 1,024 or 2,048 channels. A small region proposal network slides over this map and proposes boxes that probably contain an object. For each kept box, <b>RoI pooling</b> (or RoIAlign) cuts the box out of the feature map and resamples it to a fixed \(7\times7\) grid, whatever the box's size; a few more layers and an average give one fixed-length vector per box. That vector, plus the box coordinates, is the region token.</p>
+        <p>Because every box goes through the same pooling, a tiny ball and a huge tree both become vectors of the same length, which is exactly what a transformer needs.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="codes" class="card hl">
+  <h2><span class="num">4</span>A codebook of visual words</h2>
+  <p class="sub">Patches and regions give continuous vectors. Text tokens are integers from a fixed vocabulary. Vector quantisation closes the gap: learn \(K\) prototype vectors (the <a class="term" data-t="codebook">codebook</a>) and replace every patch by the id of the closest one. Now an image is a list of integers, and a language model can read and even generate it. Drag \(K\) and watch the image rebuilt from its tokens.</p>
+  <div class="grid2">
+    <div>
+      <div class="row" style="gap:10px"><div style="flex:1"><div class="plot sq" id="cOrig"></div><p class="hint" style="text-align:center">original</p></div><div style="flex:1"><div class="plot sq" id="cQuant"></div><p class="hint" style="text-align:center">rebuilt from tokens</p></div></div>
+      <div class="row" style="margin-top:4px"><div class="seg" id="cScene"><button data-v="park" class="on">Park</button><button data-v="kitchen">Kitchen</button><button data-v="street">Street</button></div></div>
+    </div>
+    <div>
+      <div class="ctl"><label for="cK"><span>Codebook size \(K\)</span><output id="cKOut"></output></label><input type="range" id="cK" min="2" max="24" value="6"></div>
+      <div class="stats" id="cStats"></div>
+      <h3>The codebook</h3><div id="cBook"></div>
+      <h3>The image, as token ids</h3><div id="cIds" class="mono" style="font-size:11px;line-height:1.35;overflow-x:auto"></div>
+    </div>
+  </div>
+  <p class="hint">Here each patch (12 × 12 pixels, 256 patches) is described by its average colour, and the codebook is found with k-means. Real image tokenisers (VQ-VAE, VQGAN, DALL-E's dVAE) quantise learned feature vectors instead, with \(K=8{,}192\) or more, and train a decoder that redraws fine detail from the ids.</p>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: vector-quantising image patches into a codebook</h5><ol>
+        <li><span class="kw">input</span> patch vectors \(z_1..z_N\) from many images, codebook size \(K\)</li>
+        <li>pick \(K\) starting codes \(c_1..c_K\) <span class="cm">e.g. random patches</span></li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1"><span class="kw">for</span> each patch: \(\text{id}_i\leftarrow\arg\min_k\lVert z_i-c_k\rVert^2\) <span class="cm">nearest code</span></li>
+        <li class="i1"><span class="kw">for</span> each code: \(c_k\leftarrow\) mean of the patches assigned to it</li>
+        <li><span class="kw">until</span> the assignments stop changing</li>
+        <li><span class="kw">to tokenise</span> an image: replace each patch by its \(\text{id}\) <span class="cm">a list of integers</span></li>
+        <li><span class="kw">to decode</span>: look up \(c_{\text{id}}\) for each token and redraw the patch</li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: VQ-VAE, and passing gradients through argmin</summary><div>
+        <p>In a VQ-VAE the patch vectors \(z_e(x)\) come from a trainable encoder, the quantised vectors \(z_q=c_{\text{id}}\) go into a trainable decoder, and the codebook itself is learned. The loss has three parts:</p>
+        <div class="mathbox c3">$$\mathcal L=\lVert x-\hat x\rVert^2+\lVert\operatorname{sg}[z_e]-c\rVert^2+\beta\,\lVert z_e-\operatorname{sg}[c]\rVert^2$$</div>
+        <p>The first term rebuilds the image. The second pulls each used code toward the encoder outputs assigned to it (this is the k-means step above, done by gradient descent). The third, the <i>commitment</i> loss with \(\beta\approx0.25\), stops the encoder outputs drifting away from the codes. \(\operatorname{sg}\) means stop-gradient: treat it as a constant.</p>
+        <p>The argmin has no useful gradient, so the encoder is trained with the <b>straight-through estimator</b>: in the backward pass, copy the gradient arriving at \(z_q\) directly to \(z_e\), as if quantisation were the identity. DALL-E's dVAE uses a Gumbel-softmax relaxation instead. Either way, once trained, a transformer can model images as sequences of ids with the same next-token loss used for text.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="compare" class="card">
+  <h2><span class="num">5</span>Side by side</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th></th><th>Patches (continuous)</th><th>Object regions</th><th>Codebook ids (discrete)</th></tr>
+    <tr><td>One token is</td><td>a projected \(P\times P\) square</td><td>a detector feature for one box, plus its coordinates</td><td>the index of the nearest code</td></tr>
+    <tr><td>Tokens per image</td><td>196 (224 px, \(P=16\)) to 576</td><td>10 to 100</td><td>256 to 1,024 (e.g. a 32 × 32 grid)</td></tr>
+    <tr><td>Extra model needed</td><td>none, trained end to end</td><td>a frozen object detector</td><td>a pre-trained VQ tokeniser and decoder</td></tr>
+    <tr><td>Covers</td><td>every pixel</td><td>only what the detector finds</td><td>every pixel, at reduced detail</td></tr>
+    <tr><td>Can the model generate images?</td><td>not directly</td><td>no</td><td>yes, by predicting ids</td></tr>
+    <tr><td>Used by</td><td>ViT, CLIP, LLaVA, most current models</td><td>VisualBERT, ViLBERT, LXMERT, UNITER</td><td>DALL-E (2021), BEiT, Parti, Chameleon</td></tr>
+  </table></div>
+  <p class="hint">Next: <a href="../visualbert/">part 2, VisualBERT</a>, puts region tokens and word tokens into one BERT and lets self-attention connect them.</p>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> torch, torch.nn <span class="k">as</span> nn
+img = torch.randn(<span class="s">1</span>, <span class="s">3</span>, <span class="s">224</span>, <span class="s">224</span>)                  <span class="c"># batch, channels, height, width</span>
+P, D = <span class="s">16</span>, <span class="s">768</span>
+patchify = nn.Conv2d(<span class="s">3</span>, D, kernel_size=P, stride=P)       <span class="c"># = one shared linear map E per patch</span>
+tok = patchify(img).flatten(<span class="s">2</span>).transpose(<span class="s">1</span>, <span class="s">2</span>)       <span class="c"># (1, 196, 768): 14 x 14 patches</span>
+cls = nn.Parameter(torch.zeros(<span class="s">1</span>, <span class="s">1</span>, D))
+pos = nn.Parameter(torch.zeros(<span class="s">1</span>, <span class="s">197</span>, D))
+z0 = torch.cat([cls, tok], dim=<span class="s">1</span>) + pos                 <span class="c"># (1, 197, 768) -> transformer</span>
+
+<span class="c"># a pre-trained ViT from Hugging Face</span>
+<span class="k">from</span> transformers <span class="k">import</span> ViTImageProcessor, ViTModel
+proc  = ViTImageProcessor.from_pretrained(<span class="s">"google/vit-base-patch16-224"</span>)
+model = ViTModel.from_pretrained(<span class="s">"google/vit-base-patch16-224"</span>)
+<span class="c"># out = model(**proc(images=pil_image, return_tensors="pt"))</span>
+<span class="c"># out.last_hidden_state: (1, 197, 768); [:, 0] is the [CLS] summary</span>
+
+<span class="c"># vector quantisation: nearest code for each patch vector</span>
+codebook = torch.randn(<span class="s">8192</span>, D)
+ids = torch.cdist(tok[<span class="s">0</span>], codebook).argmin(dim=<span class="s">1</span>)      <span class="c"># (196,) integers, like word ids</span></pre>
+</section>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/vis.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette(); const N=192, SIZES=[8,12,16,24,32,48];
+const st={scene:'park',P:16,sel:null,view:'img',rScene:'park',rView:'reg',cScene:'park',K:6};
+/* canvas host helper */
+function cv(host){ host=typeof host==='string'?$(host):host; let c=host.querySelector('canvas'); if(!c){ c=document.createElement('canvas'); c.style.width='100%'; c.style.height='100%'; c.style.display='block'; host.appendChild(c); }
+  const r=host.getBoundingClientRect(), dpr=Math.min(2,window.devicePixelRatio||1); const w=Math.max(10,r.width), h=Math.max(10,r.height); c.width=Math.round(w*dpr); c.height=Math.round(h*dpr); const x=c.getContext('2d'); x.setTransform(dpr,0,0,dpr,0,0); return {c,x,w,h}; }
+function drawImg(host, scene, o={}){ const {c,x,w,h}=cv(host), s=Math.min(w,h), P=o.P||st.P, g=N/P, cs=s/g; x.imageSmoothingEnabled=false;
+  x.clearRect(0,0,w,h); x.drawImage(VIS.canvas(scene,N),0,0,s,s);
+  if(o.paint){ o.paint.forEach((col,i)=>{ const r=Math.floor(i/g), cc=i%g; x.fillStyle=col; x.fillRect(cc*cs,r*cs,cs+.5,cs+.5); }); }
+  if(o.grid!==false){ x.strokeStyle='rgba(255,255,255,.75)'; x.lineWidth=1; x.beginPath(); for(let k=1;k<g;k++){ x.moveTo(k*cs,0); x.lineTo(k*cs,s); x.moveTo(0,k*cs); x.lineTo(s,k*cs); } x.stroke(); }
+  if(o.sel!=null){ const r=Math.floor(o.sel/g), cc=o.sel%g; x.strokeStyle=P0().c2; x.lineWidth=3; x.strokeRect(cc*cs+1.5,r*cs+1.5,cs-3,cs-3); }
+  if(o.boxes){ const P=P0(); o.boxes.forEach((b,i)=>{ const col=[P.c1,P.c4,P.c3,P.c5,P.c2][i%5]; x.strokeStyle=col; x.lineWidth=2.5; x.strokeRect(b.box[0]*s,b.box[1]*s,b.box[2]*s,b.box[3]*s); x.font='600 12px Inter,system-ui'; const t=b.label, tw=x.measureText(t).width+8; const ty=Math.max(0,b.box[1]*s-16); x.fillStyle=col; x.fillRect(b.box[0]*s,ty,tw,16); x.fillStyle='#fff'; x.fillText(t,b.box[0]*s+4,ty+12); }); }
+  if(o.ids){ x.font='600 '+Math.max(7,Math.min(11,cs*.55))+'px "JetBrains Mono",monospace'; x.textAlign='center'; x.textBaseline='middle'; o.ids.forEach((id,i)=>{ const r=Math.floor(i/g), cc=i%g; x.fillStyle='rgba(0,0,0,.55)'; x.fillText(id,cc*cs+cs/2,r*cs+cs/2); }); }
+  return {s,g,cs}; }
+const pick=(host,g,cb)=>{ host=$(host); host.style.cursor='pointer'; host.addEventListener('click',e=>{ const r=host.getBoundingClientRect(), s=Math.min(r.width,r.height); const X=e.clientX-r.left, Y=e.clientY-r.top; if(X>s||Y>s) return; const cs=s/g(); cb(Math.floor(Y/cs)*g()+Math.floor(X/cs)); }); };
+/* ---------- 1. patches ---------- */
+function drawPatch(){ const g=N/st.P; if(st.sel==null||st.sel>=g*g) st.sel=Math.floor(g*g*.62)+Math.floor(g*.55);
+  drawImg('#pImg',st.scene,{sel:st.sel});
+  const {x,w,h}=cv('#pSeq'), P=P0(), n=g*g+1, cols=Math.min(n,Math.max(12,Math.ceil(Math.sqrt(n*w/h)))), rows=Math.ceil(n/cols), t=Math.min(w/cols,h/rows), img=VIS.canvas(st.scene,N); x.clearRect(0,0,w,h); x.imageSmoothingEnabled=false;
+  for(let i=0;i<n;i++){ const cx=(i%cols)*t, cy=Math.floor(i/cols)*t; if(i===0){ x.fillStyle=P.c3; x.fillRect(cx+1,cy+1,t-2,t-2); x.fillStyle='#fff'; x.font='700 '+Math.max(7,t*.3)+'px Inter'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('CLS',cx+t/2,cy+t/2); continue; }
+    const k=i-1, r=Math.floor(k/g), c=k%g; x.drawImage(img,c*st.P,r*st.P,st.P,st.P,cx+1,cy+1,t-2,t-2); if(k===st.sel){ x.strokeStyle=P.c2; x.lineWidth=3; x.strokeRect(cx+1.5,cy+1.5,t-3,t-3); } }
+  const Nn=g*g, f=v=>v.toLocaleString('en');
+  $('#pStats').innerHTML=[['c1',f(Nn),'patch tokens ('+g+' × '+g+')'],['c3',f(st.P*st.P*3),'numbers per patch (P × P × 3)'],['c4',f((Nn+1)**2),'attention scores per head per layer']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  const r=Math.floor(st.sel/g), c=st.sel%g; $('#pNote').innerHTML=`Selected patch: row ${r+1}, column ${c+1}, so it is token number <b>${st.sel+1}</b> after [CLS]. Position ${st.sel+1} is all the model is told about where it was, through its position embedding.`;
+  drawVit(); }
+ML.bindSeg('pScene',v=>{ st.scene=v; drawPatch(); });
+ML.bindRange('pP',v=>{ st.P=SIZES[v]; st.sel=null; drawPatch(); },v=>SIZES[v]+' px');
+pick('#pImg',()=>N/st.P,i=>{ st.sel=i; drawPatch(); });
+/* ---------- 2. vectors ---------- */
+function drawVit(){ const g=N/st.P, ps=VIS.patches(st.scene,N,st.P), E=ps.map(VIS.embed), p=ps[st.sel], e=E[st.sel], pos=VIS.pos2d(p.r,p.c,g), z=e.map((v,i)=>v+pos[i]);
+  const row=(lab,v,mx)=>`<div class="row" style="gap:4px 8px;align-items:center;margin:3px 0;flex-wrap:wrap"><span class="mono" style="width:150px;font-size:12px">${lab}</span>${NLP.vec(v,mx)}</div>`;
+  $('#vVec').innerHTML=row('pixels x_p ('+st.P*st.P*3+'), sampled',(()=>{ const px=VIS.pixels(st.scene,N), o=[]; const step=Math.max(1,Math.floor(st.P*st.P/16)); for(let k=0;k<st.P*st.P&&o.length<16;k+=step){ const y=Math.floor(k/st.P), xx=k%st.P, i=((p.r*st.P+y)*N+(p.c*st.P+xx))*3; o.push((px[i]+px[i+1]+px[i+2])/3-.5); } return o; })(),.5)
+    +row('E x_p (8)',e,.6)+row('+ position (8)',pos,.6)+row('= token (8)',z,.8)
+    +`<p class="hint" style="margin:6px 0 0">${VIS.FEAT.map((f,i)=>`${i+1} ${f}`).join(' · ')}</p>`;
+  let paint=null; if(st.view==='sim'){ const P=P0(); paint=E.map(v=>{ const s=NLP.cos(v,e); return NLP.div(s).replace('rgb','rgba').replace(')',',.85)'); }); }
+  drawImg('#vImg',st.scene,{sel:st.sel,paint}); }
+ML.bindSeg('vSeg',v=>{ st.view=v; drawVit(); });
+pick('#vImg',()=>N/st.P,i=>{ st.sel=i; drawPatch(); });
+/* ---------- 3. regions ---------- */
+function drawReg(){ const S=VIS.SCENES[st.rScene], P=P0(), cols=[P.c1,P.c4,P.c3,P.c5,P.c2];
+  if(st.rView==='reg') drawImg('#rImg',st.rScene,{grid:false,boxes:S.objects}); else drawImg('#rImg',st.rScene,{P:16});
+  $('#rList').innerHTML=S.objects.map((o,i)=>{ const R=VIS.region(st.rScene,N,o), L=(R.mean[0]+R.mean[1]+R.mean[2])/3, v=[R.mean[0]-L,R.mean[1]-L,R.mean[2]-L,L-.5,...R.geo];
+    return `<div class="row" style="gap:4px 8px;align-items:center;margin:4px 0;flex-wrap:wrap"><span class="mono" style="width:110px;font-size:12px;color:${cols[i%5]};font-weight:700">${NLP.esc(o.label)}</span>${NLP.vec(v,.6)}<span class="mono" style="font-size:11px;color:var(--muted)">box ${R.geo.slice(0,4).join(', ')}</span></div>`; }).join('');
+  $('#rStats').innerHTML=[['c1',S.objects.length,'region tokens'],['c3',144,'patch tokens at P = 16'],['c4',(144/S.objects.length).toFixed(0)+'×','fewer tokens with regions']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+ML.bindSeg('rSeg',v=>{ st.rView=v; drawReg(); }); ML.bindSeg('rScene',v=>{ st.rScene=v; drawReg(); });
+/* ---------- 4. codebook ---------- */
+function drawCodes(){ const ps=VIS.patches(st.cScene,N,12), X=ps.map(p=>p.mean), {C,A}=VIS.kmeans(X,st.K,5);
+  drawImg('#cOrig',st.cScene,{P:12,grid:false}); drawImg('#cQuant',st.cScene,{P:12,grid:false,paint:A.map(k=>VIS.hex(C[k]))});
+  $('#cBook').innerHTML='<div class="chips2">'+C.map((c,k)=>`<span class="tok" style="background:${VIS.hex(c)};color:${(c[0]+c[1]+c[2])/3>.55?'#111':'#fff'}">${k}</span>`).join('')+'</div>';
+  $('#cIds').innerHTML=Array.from({length:16},(_,r)=>A.slice(r*16,r*16+16).map(v=>String(v).padStart(2,' ')).join(' ')).join('<br>').replace(/ /g,'&nbsp;');
+  const err=Math.sqrt(X.reduce((s,x,i)=>s+VIS.d2(x,C[A[i]]),0)/X.length/3), bits=Math.ceil(Math.log2(st.K));
+  $('#cStats').innerHTML=[['c1','256','tokens (16 × 16 patches)'],['c3',bits+' bits','per token (log₂ K)'],['c4',(err*255).toFixed(1),'average colour error (0–255)']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+ML.bindRange('cK',v=>{ st.K=v; drawCodes(); }); ML.bindSeg('cScene',v=>{ st.cScene=v; drawCodes(); });
+function all(){ drawPatch(); drawReg(); drawCodes(); }
+all(); let rw=0; window.addEventListener('resize',()=>{ if(Math.abs(innerWidth-rw)>4){ rw=innerWidth; all(); } }); ML.onTheme(all);
+})();
+</script>
+<script>NLP.nav('nlp','visual-tokenisation'); ML.renderMath(document.body);</script>
+</body>
+</html>

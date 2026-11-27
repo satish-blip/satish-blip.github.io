@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Convolutional neural networks (CNNs)</title>
+<meta name="description" content="How a CNN sees: kernels sliding over an image, stride and padding, channels, pooling, receptive fields, a tiny CNN trained live in your browser, and the classic architectures from LeNet to ResNet and EfficientNet with their shapes and parameter counts.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Vision &middot; Foundations (part A of 2)</p>
+  <h1>Convolutional networks: <span class="grad">how a network learns to see</span></h1>
+  <p class="lede">A photo is a grid of numbers, and the same pattern (an edge, an eye, a wheel) can turn up anywhere in it. A convolutional network slides one small set of weights over the whole grid, so it learns each pattern once and finds it everywhere. This page builds the idea from a single multiply-and-add up to the networks that won ImageNet, with every step something you can change and watch.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#dense">1 · Why not a dense layer?</a><a href="#conv">2 · Convolution, step by step</a><a href="#size">3 · Stride, padding, output size</a><a href="#filters">4 · Filters on a picture</a><a href="#channels">5 · Channels and parameters</a><a href="#pool">6 · Pooling</a><a href="#rf">7 · Receptive field</a><a href="#train">8 · Train a tiny CNN</a><a href="#arch">9 · Classic architectures</a><a href="#py">10 · Python</a><a href="#credits">Sources</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a convolutional network, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A small 224 × 224 colour photo is 150,528 numbers. An ordinary dense layer with just 1,000 units would need 150 million weights for its first layer alone, and it would have to learn "cat ear in the top left" and "cat ear in the bottom right" as two unrelated things. Images have structure that a dense layer ignores: nearby pixels belong together, and a pattern means the same thing wherever it appears.</p>
+      <h3>The idea</h3><p>A <a class="term" data-t="cnn">convolutional neural network</a> replaces the giant weight matrix with a small <a class="term" data-t="conv-kernel">kernel</a> (say 3 × 3) that slides across the image. At every position it computes one weighted sum, giving a <a class="term" data-t="feature-map">feature map</a> that says "how much of my pattern is here". The same few weights are used at every position (<a class="term" data-t="weight-sharing">weight sharing</a>), so a pattern learned once is detected anywhere. Stacking such layers, with <a class="term" data-t="pooling">pooling</a> in between, lets later layers combine edges into textures, textures into parts and parts into objects.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Slide each kernel over the input and record the weighted sum at every position: one feature map per kernel.</li><li>Apply a non-linearity such as ReLU.</li><li>Shrink the maps with <a class="term" data-t="stride">stride</a> or pooling, so later layers see a wider area.</li><li>Repeat a few times, then flatten or average and finish with an ordinary classifier.</li><li>Train every kernel with backpropagation, exactly like a dense network.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Checking a long wall for cracks with a small cardboard window. You do not need a different window for every part of the wall: you slide the same one along and note where something crack-like shows through. A CNN does this with dozens of windows at once (one for cracks, one for corners, one for colour changes), then repeats the process on its own notes.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Few parameters: a 3 × 3 kernel has 9 weights whatever the image size</li><li>Finds a pattern wherever it appears (translation equivariance)</li><li>Builds a hierarchy: edges → textures → parts → objects</li><li>Strong on modest data; the workhorse of vision from 2012 to today</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Each unit sees only a local window; global context needs depth</li><li>Not invariant to rotation or scale unless trained with them</li><li>Can latch onto texture rather than shape</li><li>Very deep stacks need residual connections and normalisation to train</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="cnn">CNN</a><a class="term" data-t="convolution">Convolution</a><a class="term" data-t="conv-kernel">Kernel / filter</a><a class="term" data-t="feature-map">Feature map</a><a class="term" data-t="stride">Stride</a><a class="term" data-t="padding">Padding</a><a class="term" data-t="channel">Channel</a><a class="term" data-t="pooling">Pooling</a><a class="term" data-t="receptive-field">Receptive field</a><a class="term" data-t="weight-sharing">Weight sharing</a><a class="term" data-t="translation-equivariance">Translation equivariance</a><a class="term" data-t="resnet">ResNet</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. Want to experiment freely? The <a href="../../lab/#conv">DL lab's convolution sandbox</a> lets you design your own kernels on your own photos.</p>
+    </div>
+  </div>
+</section>
+
+<section id="dense" class="card">
+  <h2><span class="num">1</span>Why not just use a dense layer?</h2>
+  <p class="sub">Let us count. Take an image of \(H\times W\) pixels with \(C\) colour channels and compare two first layers: a dense layer with 1,000 hidden units, and a convolutional layer with 64 kernels of size \(3\times3\). Drag the image size.</p>
+  <div class="grid2">
+    <div>
+      <div class="ctl"><label for="dH"><span>Image side \(H=W\) (pixels)</span><output id="dHOut"></output></label><input type="range" id="dH" min="0" max="6" value="3"></div>
+      <div class="ctl"><label for="dC"><span>Channels \(C\)</span><output id="dCOut"></output></label><input type="range" id="dC" min="1" max="3" value="3" step="2"></div>
+      <div class="stats" id="dStats"></div>
+      <div class="plot short" id="dPlot"></div>
+      <p class="hint">Weights in the first layer, log scale. The dense layer grows with the number of pixels; the convolution does not grow at all, because the same \(3\times3\times C\) kernel is reused at every position.</p>
+    </div>
+    <div class="prose">
+      <h3>Counting weights</h3>
+      <p>A dense layer connects every input number to every unit, so it needs \(HWC\times1000\) weights. A convolutional layer with \(C_{\text{out}}\) kernels of size \(k\times k\) needs</p>
+      <div class="mathbox c1">$$\underbrace{k\cdot k\cdot C}_{\text{one kernel}}\times C_{\text{out}}\;+\;\underbrace{C_{\text{out}}}_{\text{biases}}$$</div>
+      <p>which does not mention \(H\) or \(W\). That is <a class="term" data-t="weight-sharing">weight sharing</a>: the kernel that finds a vertical edge in the top-left corner is the same one that finds it in the bottom-right.</p>
+      <h3>Two assumptions, built in</h3>
+      <p><b>Locality.</b> Each output looks only at a small neighbourhood. Pixels far apart are combined later, by deeper layers.</p>
+      <p><b>Translation equivariance.</b> Shift the input and the feature map shifts by the same amount. Written as an equation, with \(T\) a shift: \(\text{conv}(T x)=T\,\text{conv}(x)\). A dense layer has neither property and must learn them from data, which needs far more examples.</p>
+      <details class="deeper"><summary>Going deeper: a convolution is a dense layer with most weights forced to zero</summary><div>
+        <p>Write the image as one long vector \(x\). Any linear layer is \(y=Mx\). For a convolution, \(M\) is a huge, mostly-zero matrix in which each row holds the same \(k^2C\) kernel weights, shifted along by one position per row (a <i>doubly block-Toeplitz</i> matrix). So a convolution is a dense layer with two constraints: most weights are zero (locality) and the non-zero ones are tied together (sharing). Those constraints are a strong <i>inductive bias</i>: they shrink the set of functions the layer can represent to ones that are sensible for images, which is why CNNs learn from far fewer examples than a dense network, and why the vision transformer, which drops the bias, needs much more data (see <a href="../visual-tokenisation/#vit">visual tokenisation</a>).</p>
+        <p>Libraries exploit this directly: <i>im2col</i> copies every \(k\times k\) window into a column of a matrix, and the whole layer becomes one big matrix multiply, which GPUs are built for.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="conv" class="card hl">
+  <h2><span class="num">2</span>Convolution, one multiply-and-add at a time</h2>
+  <p class="sub">A 7 × 7 input (tap cells to switch them between 0 and 1), a 3 × 3 kernel (tap a weight to cycle it through −1, 0, 1, 2) and the 5 × 5 output. Press Play or drag the position: the window slides left to right, top to bottom, and each output is the sum of the nine products under the window.</p>
+  <div class="grid2">
+    <div>
+      <div class="cnn3">
+        <div><div class="plot sq" id="cIn"></div><p class="hint c">input \(x\) (7 × 7)</p></div>
+        <div><div class="plot sq" id="cK"></div><p class="hint c">kernel \(w\) (3 × 3)</p></div>
+        <div><div class="plot sq" id="cOut"></div><p class="hint c">output (5 × 5)</p></div>
+      </div>
+      <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px"><div class="seg" id="cPre"><button data-v="vert" class="on">Vertical edge</button><button data-v="horiz">Horizontal edge</button><button data-v="sum">Box sum</button><button data-v="sharp">Sharpen</button></div></div>
+      <div class="player" style="margin-top:8px"><button class="btn primary" id="cPlay">Play</button><button class="btn" id="cStep">Step</button><input type="range" id="cPos" min="0" max="24" value="0" style="flex:1"><span class="pos" id="cPosOut">1 / 25</span></div>
+    </div>
+    <div class="prose">
+      <h3 style="margin-top:0">This step</h3>
+      <div class="note mono" id="cSum" style="min-height:7.5em;font-size:12.5px;line-height:1.6"></div>
+      <p>For output row \(i\) and column \(j\), with a \(k\times k\) kernel \(w\) and bias \(b\):</p>
+      <div class="mathbox c1">$$y_{ij}=b+\sum_{u=0}^{k-1}\sum_{v=0}^{k-1}w_{uv}\,x_{i+u,\;j+v}$$</div>
+      <p>That is all a convolutional layer computes. With the <b>vertical edge</b> kernel (left column −1, right column +1) the output is large where the right side of the window is brighter than the left, so it marks the left edge of the shape with positive numbers and the right edge with negative ones. Flat regions, all 0s or all 1s, give 0.</p>
+      <p class="hint">Strictly, this is <i>cross-correlation</i>: the mathematical convolution flips the kernel first. Every deep-learning library computes the unflipped version and calls it convolution; since the kernel is learned, the flip makes no difference.</p>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo" data-anim="conv2d"><h5 class="algo-h">Algorithm: 2-D convolution (one kernel, stride 1, no padding)</h5><ol>
+        <li><span class="kw">input</span> image \(x\) (\(H\times W\)), kernel \(w\) (\(k\times k\)), bias \(b\)</li>
+        <li>\(H'\leftarrow H-k+1\), \(W'\leftarrow W-k+1\) <span class="cm">positions where the window fits</span></li>
+        <li><span class="kw">for</span> \(i=0..H'-1\) <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">for</span> \(j=0..W'-1\) <span class="kw">do</span></li>
+        <li class="i2">\(s\leftarrow b\)</li>
+        <li class="i2"><span class="kw">for</span> each \((u,v)\) in the window: \(s\leftarrow s+w_{uv}\,x_{i+u,j+v}\) <span class="cm">k² multiply-adds</span></li>
+        <li class="i2">\(y_{ij}\leftarrow s\) <span class="cm">one number of the feature map</span></li>
+        <li><span class="kw">return</span> feature map \(y\) (\(H'\times W'\))</li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: cost, and why 3 × 3 kernels won</summary><div>
+        <p>Each output costs \(k^2\) multiply-adds per input channel, so one layer costs \(k^2\,C_{\text{in}}\,C_{\text{out}}\,H'W'\). Two stacked \(3\times3\) layers see a \(5\times5\) area for \(2\cdot9=18\) weights per channel pair, against 25 for a single \(5\times5\); three \(3\times3\) layers see \(7\times7\) for 27 weights instead of 49, with two extra non-linearities in between. That argument, from the VGG paper (2014), is why almost every modern CNN uses small kernels stacked deep.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="size" class="card">
+  <h2><span class="num">3</span>Stride, padding and the output size</h2>
+  <p class="sub">Three settings decide where the window lands. <a class="term" data-t="stride">Stride</a> \(S\) is how far it jumps each step. <a class="term" data-t="padding">Padding</a> \(P\) adds a border of zeros so the window can sit over the edge pixels. <b>Dilation</b> \(D\) spreads the kernel's taps apart to see wider for the same weights. Change them and step through the positions.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot" id="sGrid" style="aspect-ratio:16/10"></div>
+      <div class="player" style="margin-top:8px"><button class="btn primary" id="sPlay">Play</button><input type="range" id="sPos" min="0" max="0" value="0" style="flex:1"><span class="pos" id="sPosOut"></span></div>
+      <p class="hint">Grey cells are padding (zeros). The coloured frame is the kernel's footprint for the highlighted output cell; with dilation only the dotted taps are read.</p>
+    </div>
+    <div>
+      <div class="ctl"><label for="sN"><span>Input size \(N\)</span><output id="sNOut"></output></label><input type="range" id="sN" min="4" max="12" value="7"></div>
+      <div class="ctl"><label for="sK"><span>Kernel size \(K\)</span><output id="sKOut"></output></label><input type="range" id="sK" min="1" max="5" value="3"></div>
+      <div class="ctl"><label for="sP"><span>Padding \(P\)</span><output id="sPOut"></output></label><input type="range" id="sP" min="0" max="3" value="1"></div>
+      <div class="ctl"><label for="sS"><span>Stride \(S\)</span><output id="sSOut"></output></label><input type="range" id="sS" min="1" max="3" value="1"></div>
+      <div class="ctl"><label for="sD"><span>Dilation \(D\)</span><output id="sDOut"></output></label><input type="range" id="sD" min="1" max="3" value="1"></div>
+      <div class="mathbox c3" id="sForm" style="min-height:4.2em"></div>
+      <div class="note" id="sNote" style="min-height:4.6em"></div>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:8px">
+    <div>
+      <p><b>The formula.</b> A dilated kernel covers \(D(K-1)+1\) cells. Along one side the window can start at \(0, S, 2S,\dots\) as long as it still fits inside the padded input of length \(N+2P\):</p>
+      <div class="mathbox c1">$$N_{\text{out}}=\left\lfloor\frac{N+2P-D(K-1)-1}{S}\right\rfloor+1$$</div>
+      <p>When \(S\) does not divide evenly, the floor drops the last few input rows and columns: they are never read. Frameworks will not warn you.</p>
+    </div>
+    <div>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Recipe</th><th>Setting</th><th>Effect</th></tr>
+        <tr><td>"Valid"</td><td>\(P=0\)</td><td>shrinks by \(K-1\) each layer</td></tr>
+        <tr><td>"Same"</td><td>\(P=\frac{K-1}{2}\), \(S=1\)</td><td>output size = input size</td></tr>
+        <tr><td>Downsample</td><td>\(K=3, P=1, S=2\)</td><td>halves the size (rounding up)</td></tr>
+        <tr><td>1 × 1 convolution</td><td>\(K=1\)</td><td>mixes channels at each pixel; changes depth only</td></tr>
+        <tr><td>Dilated</td><td>\(D=2\), \(P=2\) for \(K=3\)</td><td>sees 5 × 5 with 9 weights (segmentation, WaveNet)</td></tr>
+      </table></div>
+      <p class="src">Adapted from: <a href="https://arxiv.org/abs/1603.07285" target="_blank" rel="noopener">Dumoulin &amp; Visin, A guide to convolution arithmetic for deep learning (2016)</a> and <a href="https://cs231n.github.io/convolutional-networks/" target="_blank" rel="noopener">Stanford CS231n notes › Convolutional networks</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="filters" class="card">
+  <h2><span class="num">4</span>Filters on a real picture</h2>
+  <p class="sub">Before CNNs learned their own kernels, image processing used hand-designed ones. Try them: the first layer of a trained CNN ends up with kernels that look strikingly like these edge and blob detectors.</p>
+  <div class="grid2">
+    <div>
+      <div class="cvimgs c3"><div><div class="plot sq" id="fIn"></div><p class="hint c">input (grey)</p></div><div><div class="plot sq" id="fOut"></div><p class="hint c">feature map</p></div><div><div class="plot sq" id="fRelu"></div><p class="hint c">after ReLU</p></div></div>
+      <div class="row" style="margin-top:8px"><div class="seg" id="fPic"><button data-v="shapes" class="on">Shapes</button><button data-v="letters">Letters</button><button data-v="checker">Checkerboard</button><button data-v="rings">Rings</button><button data-v="park">Park</button><button data-v="street">Street</button></div></div>
+    </div>
+    <div>
+      <div class="ctl"><label for="fKer"><span>Kernel</span></label><select id="fKer"></select></div>
+      <div class="row" style="gap:14px;align-items:flex-start;margin-top:6px"><div class="plot sq" id="fKplot" style="width:150px;flex:0 0 150px"></div><div class="note" id="fNote" style="flex:1;min-height:6em"></div></div>
+      <div class="stats" id="fStats"></div>
+      <p class="hint">Feature maps use blue for positive and red for negative values, white for zero. ReLU keeps only the positive part: "how strongly is my pattern present here".</p>
+    </div>
+  </div>
+</section>
+
+<section id="channels" class="card">
+  <h2><span class="num">5</span>Channels: kernels are really boxes</h2>
+  <p class="sub">A colour image has 3 <a class="term" data-t="channel">channels</a> (red, green, blue) and a hidden layer may have 256. A kernel therefore spans <i>all</i> input channels: its shape is \(K\times K\times C_{\text{in}}\), and it still produces one number per position. A layer has \(C_{\text{out}}\) such kernels, and their maps stacked together are the next layer's channels.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot" id="chPlot" style="aspect-ratio:16/9"></div>
+      <div class="stats" id="chStats"></div>
+    </div>
+    <div>
+      <div class="ctl"><label for="chCin"><span>Input channels \(C_{\text{in}}\)</span><output id="chCinOut"></output></label><input type="range" id="chCin" min="0" max="7" value="1"></div>
+      <div class="ctl"><label for="chCout"><span>Output channels (kernels) \(C_{\text{out}}\)</span><output id="chCoutOut"></output></label><input type="range" id="chCout" min="0" max="7" value="3"></div>
+      <div class="ctl"><label for="chK"><span>Kernel size \(K\)</span><output id="chKOut"></output></label><input type="range" id="chK" min="0" max="3" value="1"></div>
+      <div class="ctl"><label for="chH"><span>Input height and width</span><output id="chHOut"></output></label><input type="range" id="chH" min="0" max="5" value="3"></div>
+      <div class="row" style="margin-top:4px"><div class="seg" id="chMode"><button data-v="std" class="on">Standard convolution</button><button data-v="dw">Depthwise separable</button></div></div>
+      <div class="mathbox c1" id="chForm" style="margin-top:10px;min-height:5.6em"></div>
+    </div>
+  </div>
+  <div class="prose" style="margin-top:6px">
+    <p><b>Depthwise separable convolution</b> (MobileNet, EfficientNet) splits the work in two: one \(K\times K\) kernel per input channel that never mixes channels (depthwise), then a \(1\times1\) convolution that mixes them (pointwise). It costs \(\frac{1}{C_{\text{out}}}+\frac{1}{K^2}\) of a standard convolution, about 8 to 9 times cheaper for \(3\times3\) kernels, with a small loss of accuracy. That trade is what makes phone-sized vision models possible.</p>
+  </div>
+</section>
+
+<section id="pool" class="card">
+  <h2><span class="num">6</span>Pooling: keep the strongest, shrink the map</h2>
+  <p class="sub"><a class="term" data-t="pooling">Max pooling</a> slides a 2 × 2 window with stride 2 and keeps the largest value; average pooling keeps the mean. The map halves in each direction, so the next layer covers twice the distance for the same kernel. Hover an output cell to see where it came from, then shift the input by one pixel.</p>
+  <div class="grid2">
+    <div>
+      <div class="cvimgs c21"><div><div class="plot sq" id="pIn"></div><p class="hint c">feature map (8 × 8)</p></div><div style="align-self:center"><div class="plot sq" id="pOut"></div><p class="hint c">pooled (4 × 4)</p></div></div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px"><div class="seg" id="pMode"><button data-v="max" class="on">Max</button><button data-v="avg">Average</button></div><button class="btn" id="pShift">Shift input right by 1</button><button class="btn" id="pNew">New numbers</button></div>
+    </div>
+    <div class="prose">
+      <div class="stats" id="pStats"></div>
+      <p><b>Why pool?</b> It throws away the exact position inside each window, which buys a little <i>invariance</i>: if a feature moves by one pixel, the maximum over its window often stays the same. It also cuts the computation of every later layer by four. Max pooling has no weights to learn; in backpropagation the gradient flows only to the cell that won the maximum.</p>
+      <p><b>Not exactly invariant.</b> Press Shift a few times: some pooled values stay, but many change, because a one-pixel shift can move the maximum across a window boundary. Pooling gives approximate, local invariance; that is one reason modern networks also train with shifted, cropped and flipped images (data augmentation).</p>
+      <p>Many recent networks replace pooling with stride-2 convolutions, and end with <b>global average pooling</b>: one average per channel over the whole map, which feeds the classifier and works at any input size.</p>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:12px">
+    <div>
+      <div class="algo" data-anim="maxpool"><h5 class="algo-h">Algorithm: 2 × 2 max pooling with stride 2</h5><ol>
+        <li><span class="kw">input</span> feature map \(a\) (\(H\times W\))</li>
+        <li><span class="kw">for</span> \(i=0..H/2-1\), \(j=0..W/2-1\) <span class="kw">do</span></li>
+        <li class="i1">look at the window \(a_{2i..2i+1,\;2j..2j+1}\) <span class="cm">4 numbers</span></li>
+        <li class="i1">\(p_{ij}\leftarrow\max\) of the window; remember which cell won</li>
+        <li><span class="kw">backward:</span> send \(\partial L/\partial p_{ij}\) to the winning cell, 0 to the other three</li>
+        <li><span class="kw">return</span> \(p\) (\(H/2\times W/2\))</li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper"><summary>Going deeper: equivariance, invariance and aliasing</summary><div>
+        <p>Convolution with stride 1 is translation <i>equivariant</i>: shift in, shift out. Classification wants <i>invariance</i>: shift in, same answer. Pooling and striding move a network from the first towards the second, but because they subsample, they break even equivariance for shifts that are not multiples of the stride. Zhang (2019) showed that standard CNNs can flip their prediction when the input moves by one pixel, and that blurring before subsampling ("anti-aliased" pooling, the same trick as in signal processing) makes them markedly more shift-stable.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="rf" class="card hl">
+  <h2><span class="num">7</span>Receptive field: how much of the image a unit sees</h2>
+  <p class="sub">A unit in the first layer sees only its \(3\times3\) window. A unit in the next layer sees 3 × 3 first-layer units, which together cover 5 × 5 pixels, and so on. Its <a class="term" data-t="receptive-field">receptive field</a> grows with every layer, and grows much faster after a stride or pooling. Pick a stack and tap a unit in the top layer.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot" id="rfPlot" style="aspect-ratio:16/10"></div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px"><div class="seg" id="rfSet"><button data-v="plain" class="on">Three 3×3 convs</button><button data-v="pool">Conv, pool, conv, pool, conv</button><button data-v="dil">Dilated 1, 2, 4</button><button data-v="stem">ResNet stem</button></div></div>
+    </div>
+    <div>
+      <div class="tblwrap" id="rfTbl"></div>
+      <p class="hint">A 1-D slice of the network: each row is a layer, each dot a unit. Lines show which units feed the selected one; shaded dots are its receptive field.</p>
+      <div class="mathbox c1">$$r_\ell=r_{\ell-1}+(k_\ell-1)\,d_\ell\,j_{\ell-1},\qquad j_\ell=j_{\ell-1}\,s_\ell,\qquad r_0=j_0=1$$</div>
+      <p class="hint">\(r\): receptive field in input pixels, \(j\): the jump, how many input pixels one step in this layer corresponds to, \(k,s,d\): kernel, stride, dilation. Adapted from <a href="https://distill.pub/2019/computing-receptive-fields/" target="_blank" rel="noopener">Araujo, Norris &amp; Sim, Computing receptive fields of CNNs (Distill, 2019)</a>.</p>
+    </div>
+  </div>
+  <div class="prose" style="margin-top:6px">
+    <p><b>Why it matters.</b> To recognise a dog, some unit must see the whole dog. ResNet-50 ends with a receptive field of several hundred pixels, larger than its 224-pixel input. In practice the <i>effective</i> receptive field is smaller than this theoretical one: pixels near the centre contribute far more to a unit's output than pixels at the edge, roughly like a Gaussian (Luo et al., 2016). Attention, which connects every position to every other in one step, is the other way to get global context (see <a href="../self-attention/">self-attention</a>).</p>
+  </div>
+</section>
+
+<section id="train" class="card">
+  <h2><span class="num">8</span>Train a tiny CNN, live</h2>
+  <p class="sub">Four classes of 12 × 12 pictures: horizontal, vertical and two diagonal strokes, placed anywhere, with noise. The network is one convolutional layer (a few 3 × 3 kernels), ReLU, 2 × 2 max pooling and a softmax classifier, about 500 weights, trained with backpropagation in your browser. Watch the kernels turn from noise into line detectors.</p>
+  <div class="grid2">
+    <div>
+      <div class="player"><button class="btn primary" id="tRun">Train</button><button class="btn" id="tReset">Reset</button><span class="pos" id="tIt">0 epochs</span></div>
+      <div class="ctl" style="margin-top:8px"><label for="tF"><span>Number of kernels</span><output id="tFOut"></output></label><input type="range" id="tF" min="1" max="8" value="4"></div>
+      <div class="ctl"><label for="tNoise"><span>Noise in the pictures</span><output id="tNoiseOut"></output></label><input type="range" id="tNoise" min="0" max="6" value="2"></div>
+      <div class="plot short" id="tLoss"></div>
+      <p class="hint">Training loss (purple) and test accuracy (green) on 200 new pictures, per epoch of 400 training pictures.</p>
+      <h3>Learned kernels</h3>
+      <div id="tKer" class="cnnker"></div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">One test picture, through the network</h3>
+      <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn" id="tPick">Another picture</button><span class="mono" id="tTrue" style="font-size:13px"></span></div>
+      <div id="tFlow" class="cnnflow"></div>
+      <div id="tProb"></div>
+      <p class="hint">Row by row: each kernel's feature map after ReLU, then after pooling. A horizontal stroke lights up the horizontal-line kernel all along the stroke, wherever it is. The classifier only has to read which pooled map is bright.</p>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:12px">
+    <div>
+      <div class="algo" data-anim="cnnbp"><h5 class="algo-h">Algorithm: one training step of a small CNN</h5><ol>
+        <li><span class="kw">input</span> picture \(x\), label \(y\), kernels \(w^{(f)}\), classifier \(V\)</li>
+        <li><span class="kw">forward:</span> \(z^{(f)}=w^{(f)}\star x+b_f\), \(a^{(f)}=\max(0,z^{(f)})\) <span class="cm">one map per kernel</span></li>
+        <li>\(p^{(f)}=\text{maxpool}(a^{(f)})\), \(h=\text{flatten}(p)\), \(\hat y=\text{softmax}(Vh+c)\)</li>
+        <li>loss \(L=-\log\hat y_y\)</li>
+        <li><span class="kw">backward:</span> \(\delta=\hat y-\text{onehot}(y)\), \(\nabla V=\delta h^\top\), \(\nabla h=V^\top\delta\)</li>
+        <li>route \(\nabla h\) to each pool winner; zero it where \(z\le0\) <span class="cm">pool and ReLU</span></li>
+        <li>\(\nabla w^{(f)}=\nabla z^{(f)}\star x\) <span class="cm">the gradient of a convolution is a convolution</span></li>
+        <li>update every weight: \(\theta\leftarrow\theta-\eta\nabla\theta\)</li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: backpropagation through a convolution</summary><div>
+        <p>Each weight \(w_{uv}\) is used at every output position, so its gradient adds up the contributions from all of them:</p>
+        <div class="mathbox c3">$$\frac{\partial L}{\partial w_{uv}}=\sum_{i,j}\frac{\partial L}{\partial z_{ij}}\,x_{i+u,\,j+v}$$</div>
+        <p>That is the input convolved with the output gradient. The gradient with respect to the input, which earlier layers need, is the output gradient convolved with the kernel rotated by 180° ("full" convolution, with padding). So the backward pass of a convolution is two more convolutions, and the same fast routines serve both directions.</p>
+        <p>Weight sharing shows up here: a kernel learns from every position at once, so a picture with a stroke in the corner trains the same weights as one with the stroke in the middle.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="arch" class="card">
+  <h2><span class="num">9</span>Classic architectures, from LeNet to EfficientNet</h2>
+  <p class="sub">Every famous CNN is the same few parts (convolution, non-linearity, pooling or stride, a classifier) arranged differently. Pick one to see its layers, the shape of the data after each one, and the parameter count, calculated live from the layer list.</p>
+  <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><select id="aSel" aria-label="Architecture" style="max-width:340px"></select><span class="hint" id="aMeta" style="margin:0"></span></div>
+  <div class="grid2" style="margin-top:10px">
+    <div>
+      <div class="plot" id="aPlot" style="aspect-ratio:16/9"></div>
+      <p class="hint">Each bar is a stage: height = spatial size (log scale), colour depth = number of channels. The data gets smaller and deeper as it goes right.</p>
+      <div class="note" id="aIdea" style="min-height:7em"></div>
+    </div>
+    <div>
+      <div class="tblwrap" id="aTbl" style="max-height:380px;overflow:auto"></div>
+    </div>
+  </div>
+  <div class="tblwrap" style="margin-top:14px"><table class="tbl txt">
+    <tr><th>Network</th><th>Year</th><th>Depth</th><th>Parameters</th><th>ImageNet top-1</th><th>What it introduced</th></tr>
+    <tr><td>LeNet-5</td><td>1998</td><td>5</td><td>≈ 60 k</td><td>(digits: ≈ 99% on MNIST)</td><td>conv → pool → conv → pool → dense, trained by backprop</td></tr>
+    <tr><td>AlexNet</td><td>2012</td><td>8</td><td>61.1 M</td><td>56.5%</td><td>ReLU, dropout, GPUs, data augmentation; won ImageNet by a wide margin</td></tr>
+    <tr><td>VGG-16</td><td>2014</td><td>16</td><td>138.4 M</td><td>71.6%</td><td>only 3 × 3 convolutions, stacked deep</td></tr>
+    <tr><td>GoogLeNet</td><td>2014</td><td>22</td><td>6.6 M</td><td>69.8%</td><td>Inception modules: parallel 1 × 1, 3 × 3, 5 × 5 branches</td></tr>
+    <tr><td>ResNet-50</td><td>2015</td><td>50</td><td>25.6 M</td><td>76.1%</td><td>residual connections; batch norm everywhere; 152 layers trainable</td></tr>
+    <tr><td>MobileNetV2</td><td>2018</td><td>53</td><td>3.5 M</td><td>71.9%</td><td>depthwise separable convs, inverted residuals, for phones</td></tr>
+    <tr><td>EfficientNet-B0</td><td>2019</td><td>82</td><td>5.3 M</td><td>77.7%</td><td>compound scaling of depth, width and resolution</td></tr>
+    <tr><td>ConvNeXt-T</td><td>2022</td><td>≈ 60</td><td>28.6 M</td><td>82.5%</td><td>a ResNet modernised with transformer-era choices (7 × 7 depthwise, LayerNorm, GELU)</td></tr>
+  </table></div>
+  <p class="src">ImageNet top-1 accuracies and parameter counts are the single-crop figures for the pre-trained weights in <a href="https://pytorch.org/vision/stable/models.html" target="_blank" rel="noopener">torchvision's model documentation</a>; papers report slightly different numbers with other training recipes.</p>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <h3>The residual block, the key to depth</h3>
+      <p>Stacking more plain layers eventually made networks <i>worse</i>, even on training data: the gradient signal faded on its way back through dozens of layers. A <a class="term" data-t="resnet">ResNet</a> block computes a correction \(F(x)\) and adds it to its input:</p>
+      <div class="mathbox c1">$$y=\text{ReLU}\big(x+F(x)\big),\qquad F(x)=\text{BN}(W_2\star\text{ReLU}(\text{BN}(W_1\star x)))$$</div>
+      <p>If the best thing a block can do is nothing, it only has to learn \(F=0\). And in the backward pass the \(+x\) gives the gradient a direct path to every earlier layer. The <a href="../../nn/residual/">residual connections page</a> trains plain and residual networks side by side.</p>
+    </div>
+    <div>
+      <h3>EfficientNet: scale all three together</h3>
+      <p>Given more compute, should a network be deeper, wider or fed larger images? EfficientNet scales all three with one knob \(\phi\): depth by \(\alpha^\phi\), width by \(\beta^\phi\), resolution by \(\gamma^\phi\), with \(\alpha=1.2,\beta=1.1,\gamma=1.15\) found by a small search so that \(\alpha\beta^2\gamma^2\approx2\): each step of \(\phi\) roughly doubles the compute.</p>
+      <div class="ctl"><label for="eP"><span>Compound coefficient \(\phi\)</span><output id="ePOut"></output></label><input type="range" id="eP" min="0" max="7" value="0"></div>
+      <div class="stats" id="eStats"></div>
+      <p class="hint">The released B1 to B7 round these numbers and use the resolutions 240, 260, 300, 380, 456, 528 and 600 pixels.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">10</span>The same thing in Python (PyTorch)</h2>
+<pre class="code"><span class="k">import</span> torch, torch.nn <span class="k">as</span> nn
+
+<span class="c"># a LeNet-style CNN for 28 x 28 grey digits</span>
+<span class="k">class</span> SmallCNN(nn.Module):
+    <span class="k">def</span> __init__(self, n_classes=<span class="s">10</span>):
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(<span class="s">1</span>, <span class="s">32</span>, kernel_size=<span class="s">3</span>, padding=<span class="s">1</span>), nn.ReLU(),   <span class="c"># (32, 28, 28): "same" padding</span>
+            nn.MaxPool2d(<span class="s">2</span>),                                       <span class="c"># (32, 14, 14)</span>
+            nn.Conv2d(<span class="s">32</span>, <span class="s">64</span>, kernel_size=<span class="s">3</span>, padding=<span class="s">1</span>), nn.ReLU(),  <span class="c"># (64, 14, 14)</span>
+            nn.MaxPool2d(<span class="s">2</span>))                                      <span class="c"># (64, 7, 7)</span>
+        self.head = nn.Sequential(nn.Flatten(), nn.Linear(<span class="s">64</span> * <span class="s">7</span> * <span class="s">7</span>, <span class="s">128</span>), nn.ReLU(),
+                                  nn.Dropout(<span class="s">0.3</span>), nn.Linear(<span class="s">128</span>, n_classes))
+    <span class="k">def</span> forward(self, x):
+        <span class="k">return</span> self.head(self.features(x))
+
+model = SmallCNN()
+x = torch.randn(<span class="s">8</span>, <span class="s">1</span>, <span class="s">28</span>, <span class="s">28</span>)                          <span class="c"># batch, channels, height, width</span>
+print(model(x).shape)                                    <span class="c"># torch.Size([8, 10])</span>
+print(sum(p.numel() <span class="k">for</span> p <span class="k">in</span> model.parameters()))        <span class="c"># 421,642 weights, 84% of them in the first Linear</span>
+
+<span class="c"># output size of one layer: floor((N + 2P - D(K-1) - 1) / S) + 1</span>
+conv = nn.Conv2d(<span class="s">3</span>, <span class="s">64</span>, kernel_size=<span class="s">7</span>, stride=<span class="s">2</span>, padding=<span class="s">3</span>)
+print(conv(torch.randn(<span class="s">1</span>, <span class="s">3</span>, <span class="s">224</span>, <span class="s">224</span>)).shape)            <span class="c"># (1, 64, 112, 112): the ResNet stem</span>
+
+<span class="c"># one training step</span>
+opt = torch.optim.AdamW(model.parameters(), lr=<span class="s">1e-3</span>)
+y = torch.randint(<span class="s">0</span>, <span class="s">10</span>, (<span class="s">8</span>,))
+loss = nn.functional.cross_entropy(model(x), y)
+opt.zero_grad(); loss.backward(); opt.step()
+
+<span class="c"># a pre-trained ResNet-18 from torchvision</span>
+<span class="k">from</span> torchvision.models <span class="k">import</span> resnet18, ResNet18_Weights
+w = ResNet18_Weights.IMAGENET1K_V1
+net = resnet18(weights=w).eval()
+<span class="c"># probs = net(w.transforms()(pil_image).unsqueeze(0)).softmax(-1)</span>
+print(sum(p.numel() <span class="k">for</span> p <span class="k">in</span> net.parameters()))           <span class="c"># 11,689,512</span></pre>
+  <p class="hint">Next: <a href="../vision-tasks/">part B, core vision tasks</a>, uses these networks as backbones for detection and segmentation, and shows how to reuse a pre-trained one on your own data.</p>
+</section>
+
+<section id="credits" class="card">
+  <h2>Sources and further reading</h2>
+  <div class="prose">
+    <ul>
+      <li>Y. LeCun, L. Bottou, Y. Bengio, P. Haffner, <a href="http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf" target="_blank" rel="noopener">Gradient-based learning applied to document recognition</a> (1998): LeNet-5.</li>
+      <li>A. Krizhevsky, I. Sutskever, G. Hinton, <a href="https://papers.nips.cc/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html" target="_blank" rel="noopener">ImageNet classification with deep convolutional neural networks</a> (2012): AlexNet.</li>
+      <li>K. Simonyan, A. Zisserman, <a href="https://arxiv.org/abs/1409.1556" target="_blank" rel="noopener">Very deep convolutional networks for large-scale image recognition</a> (2014): VGG and the case for 3 × 3 kernels.</li>
+      <li>K. He, X. Zhang, S. Ren, J. Sun, <a href="https://arxiv.org/abs/1512.03385" target="_blank" rel="noopener">Deep residual learning for image recognition</a> (2015): ResNet.</li>
+      <li>M. Tan, Q. Le, <a href="https://arxiv.org/abs/1905.11946" target="_blank" rel="noopener">EfficientNet: rethinking model scaling for convolutional neural networks</a> (2019): compound scaling and the B0 stage table.</li>
+      <li>V. Dumoulin, F. Visin, <a href="https://arxiv.org/abs/1603.07285" target="_blank" rel="noopener">A guide to convolution arithmetic for deep learning</a> (2016), and <a href="https://cs231n.github.io/convolutional-networks/" target="_blank" rel="noopener">Stanford CS231n notes</a>: output-size formula, padding and stride (section 3).</li>
+      <li>A. Araujo, W. Norris, J. Sim, <a href="https://distill.pub/2019/computing-receptive-fields/" target="_blank" rel="noopener">Computing receptive fields of convolutional neural networks</a> (Distill, 2019): the recursion in section 7. W. Luo et al., <a href="https://arxiv.org/abs/1701.04128" target="_blank" rel="noopener">Understanding the effective receptive field</a> (2016). R. Zhang, <a href="https://arxiv.org/abs/1904.11486" target="_blank" rel="noopener">Making convolutional networks shift-invariant again</a> (2019).</li>
+      <li><a href="https://pytorch.org/vision/stable/models.html" target="_blank" rel="noopener">torchvision model documentation</a>: parameter counts and accuracies in the table of section 9.</li>
+    </ul>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+ {"q":"A convolutional layer has 64 kernels of size 3 × 3 and its input has 32 channels. How many weights does it have, including one bias per kernel?","o":["3 × 3 × 64 + 64 = 640","3 × 3 × 32 × 64 + 64 = 18,496","3 × 3 × 32 + 32 = 320","It depends on the image size"],"a":1,"e":"Each kernel spans all 32 input channels (3 × 3 × 32 = 288 weights), there are 64 kernels, plus 64 biases. The image size does not enter: that is weight sharing."},
+ {"q":"An input of 32 × 32 goes through a 5 × 5 convolution with padding 0 and stride 1. What is the output size?","o":["32 × 32","30 × 30","28 × 28","27 × 27"],"a":2,"e":"\\(\\lfloor(32+0-5)/1\\rfloor+1=28\\). With padding 2 (\"same\") it would stay 32."},
+ {"q":"Why does a 2 × 2 max-pooling layer have no parameters to learn?","o":["Its weights are frozen after pre-training","It only takes the maximum of each window, a fixed rule","It shares weights with the previous convolution","It learns a single shared weight"],"a":1,"e":"Max pooling is a fixed operation. In backpropagation it simply routes the gradient to the cell that held the maximum."},
+ {"q":"Three stacked 3 × 3 convolutions (stride 1) give each output unit a receptive field of:","o":["3 × 3","5 × 5","7 × 7","9 × 9"],"a":2,"e":"Each layer adds k − 1 = 2: 3, then 5, then 7. VGG used this to replace a 7 × 7 kernel (49 weights per channel pair) with three 3 × 3 layers (27 weights and two more ReLUs)."},
+ {"q":"What problem did residual connections (ResNet) solve?","o":["Images being too large for GPU memory","Very deep plain networks training worse than shallower ones","Overfitting on small datasets","The need for labelled data"],"a":1,"e":"Adding the input back, y = x + F(x), gives the gradient a direct path backwards and makes 'do nothing' easy to learn, so networks with 50 to 150 layers became trainable."}
+]</script>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/vis.js"></script>
+<script src="../../assets/cv.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>Object.assign(ML.palette(),{soft:ML.css('--soft')||'#eee'});
+/* "kernel" means a convolution kernel on this page, not an SVM kernel */
+if(window.GLOSS&&GLOSS._alias) GLOSS._alias.forEach(a=>{ const l=a[0].toLowerCase(); if(a[1]==='kernel') a[1]='conv-kernel'; if(l==='feature map'||l==='feature maps') a[1]='feature-map'; if(/^resnets?$/.test(l)) a[1]='resnet'; });
+const fmtN=v=>v>=1e9?(v/1e9).toFixed(2)+' B':v>=1e6?(v/1e6).toFixed(2)+' M':v>=1e4?(v/1e3).toFixed(1)+' k':Math.round(v).toLocaleString('en');
+const stats=(id,rows)=>{ $(id).innerHTML=rows.map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); };
+
+/* ---------- 1. dense vs conv ---------- */
+const SIDES=[28,32,64,128,224,512,1024]; const dense={H:128,C:3};
+const dPlot=new ML.Plot('#dPlot',{equal:false});
+function drawDense(){ const d=dense.H*dense.H*dense.C*1000, c=9*dense.C*64+64;
+  stats('#dStats',[['c4',fmtN(d),'dense layer, 1,000 units'],['c1',fmtN(c),'convolution, 64 kernels 3 × 3'],['c3',Math.round(d/c).toLocaleString('en')+'×','fewer weights with convolution']]);
+  const P=P0(); ML.chart(dPlot,[{pts:SIDES.map(s=>[s,Math.log10(s*s*dense.C*1000)]),color:P.c4,dots:true},{pts:SIDES.map(s=>[s,Math.log10(9*dense.C*64+64)]),color:P.c1,dots:true}],{y0:2,y1:10,xl:'image side (pixels)',yfmt:v=>'10^'+v,vline:dense.H}); }
+ML.bindRange('dH',v=>{ dense.H=SIDES[v]; drawDense(); },v=>SIDES[v]+' px'); ML.bindRange('dC',v=>{ dense.C=v; drawDense(); },v=>v===1?'1 (grey)':'3 (colour)');
+dPlot.onResize=drawDense;
+
+/* ---------- 2. convolution step by step ---------- */
+const KPRE={vert:[-1,0,1,-1,0,1,-1,0,1],horiz:[-1,-1,-1,0,0,0,1,1,1],sum:[1,1,1,1,1,1,1,1,1],sharp:[0,-1,0,-1,5,-1,0,-1,0]};
+const cx={x:CV.img(7,7),K:KPRE.vert.slice(),pos:0,timer:null};
+[[1,1],[1,2],[1,3],[1,4],[1,5],[2,4],[3,3],[4,3],[5,2],[5,3]].forEach(([r,c])=>cx.x.d[r*7+c]=1); /* a "7" */
+const kImg=()=>{ const k=CV.img(3,3); k.d.set(cx.K); return k; };
+function drawConv(){ const out=CV.conv(cx.x,cx.K,3), i=Math.floor(cx.pos/5), j=cx.pos%5, part=CV.img(5,5);
+  for(let q=0;q<25;q++) part.d[q]=q<=cx.pos?out.d[q]:0;
+  const lim=Math.max(1,...Array.from(out.d).map(Math.abs));
+  CV.draw('#cIn',cx.x,{mode:'grey',lo:-0.25,hi:1.25,grid:true,nums:true,hl:[j,i,3,3],fmt:v=>v});
+  CV.draw('#cK',kImg(),{mode:'signed',grid:true,nums:true,fmt:v=>v});
+  CV.draw('#cOut',part,{mode:'signed',lo:-lim,hi:lim,grid:true,nums:true,hl:[j,i,1,1],fmt:v=>v});
+  const win=CV.window(cx.x,3,j,i), terms=win.map((v,q)=>`${cx.K[q]<0?'('+cx.K[q]+')':cx.K[q]}×${v}`);
+  $('#cSum').innerHTML=`output row ${i+1}, column ${j+1}:<br>`+[0,1,2].map(r=>terms.slice(r*3,r*3+3).join(' + ')).join('<br>+ ')+`<br>= <b>${out.d[cx.pos]}</b>`;
+  $('#cPos').value=cx.pos; $('#cPosOut').textContent=(cx.pos+1)+' / 25'; }
+$('#cPos').addEventListener('input',e=>{ cx.pos=+e.target.value; drawConv(); });
+const stopConv=()=>{ clearInterval(cx.timer); cx.timer=null; $('#cPlay').textContent='Play'; };
+$('#cPlay').onclick=()=>{ if(cx.timer){ stopConv(); return; } $('#cPlay').textContent='Pause'; cx.timer=setInterval(()=>{ cx.pos=(cx.pos+1)%25; drawConv(); },650); };
+$('#cStep').onclick=()=>{ stopConv(); cx.pos=(cx.pos+1)%25; drawConv(); };
+ML.bindSeg('cPre',v=>{ cx.K=KPRE[v].slice(); drawConv(); });
+$('#cIn').addEventListener('click',e=>{ const h=CV.hit('#cIn',cx.x,e); if(!h) return; const q=h[1]*7+h[0]; cx.x.d[q]=cx.x.d[q]?0:1; drawConv(); }); $('#cIn').style.cursor='pointer';
+$('#cK').addEventListener('click',e=>{ const h=CV.hit('#cK',kImg(),e); if(!h) return; const q=h[1]*3+h[0], cyc=[-1,0,1,2]; cx.K[q]=cyc[(cyc.indexOf(cx.K[q])+1)%4]; if(cx.K[q]===undefined) cx.K[q]=0; drawConv(); }); $('#cK').style.cursor='pointer';
+
+/* ---------- 3. stride, padding, output size ---------- */
+const sz={N:7,K:3,P:1,S:1,D:1,pos:0,timer:null};
+function drawSize(){ const {N,K,P,S,D}=sz, M=N+2*P, span=D*(K-1)+1, O=CV.outSize(N,K,S,P,D), ok=O>0;
+  $('#sPos').max=Math.max(0,O*O-1); if(sz.pos>O*O-1) sz.pos=0; $('#sPos').value=sz.pos; $('#sPosOut').textContent=ok?(sz.pos+1)+' / '+O*O:'–';
+  const {x,w,h}=CV.host('#sGrid'), Pl=P0(); x.clearRect(0,0,w,h);
+  const cs=Math.min((w*.62)/M,(h-24)/M), ox=8, oy=(h-M*cs)/2+8; const oi=Math.floor(sz.pos/Math.max(O,1)), oj=sz.pos%Math.max(O,1);
+  for(let r=0;r<M;r++) for(let c=0;c<M;c++){ const pad=r<P||c<P||r>=P+N||c>=P+N; x.fillStyle=pad?Pl.soft:Pl.card; x.fillRect(ox+c*cs+1,oy+r*cs+1,cs-2,cs-2); x.strokeStyle=Pl.line; x.strokeRect(ox+c*cs+.5,oy+r*cs+.5,cs-1,cs-1);
+    if(pad&&cs>14){ x.fillStyle=Pl.muted; x.font='10px "JetBrains Mono"'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('0',ox+c*cs+cs/2,oy+r*cs+cs/2); } }
+  if(ok){ const r0=oi*S, c0=oj*S; x.fillStyle=Pl.c1+'33'; x.fillRect(ox+c0*cs,oy+r0*cs,span*cs,span*cs); x.strokeStyle=Pl.c1; x.lineWidth=2.5; x.strokeRect(ox+c0*cs+1,oy+r0*cs+1,span*cs-2,span*cs-2); x.lineWidth=1;
+    for(let u=0;u<K;u++) for(let v=0;v<K;v++){ x.fillStyle=Pl.c1; x.beginPath(); x.arc(ox+(c0+v*D)*cs+cs/2,oy+(r0+u*D)*cs+cs/2,Math.max(2.5,cs*.17),0,7); x.fill(); } }
+  x.fillStyle=Pl.muted; x.font='600 12px Inter'; x.textAlign='left'; x.fillText(`padded input ${M} × ${M}`,ox,oy-8);
+  if(ok){ const cs2=Math.min((w*.3)/O,(h-24)/O,cs*1.1), ox2=w-O*cs2-8, oy2=(h-O*cs2)/2+8;
+    for(let r=0;r<O;r++) for(let c=0;c<O;c++){ const on=r===oi&&c===oj, done=r*O+c<=sz.pos; x.fillStyle=on?Pl.c1:done?Pl.c1+'55':Pl.card; x.fillRect(ox2+c*cs2+1,oy2+r*cs2+1,cs2-2,cs2-2); x.strokeStyle=Pl.line; x.strokeRect(ox2+c*cs2+.5,oy2+r*cs2+.5,cs2-1,cs2-1); }
+    x.fillStyle=Pl.muted; x.fillText(`output ${O} × ${O}`,ox2,oy2-8); }
+  $('#sForm').innerHTML=ML.tex(`N_{\\text{out}}=\\left\\lfloor\\frac{${N}+2\\cdot${P}-${D}\\cdot(${K}-1)-1}{${S}}\\right\\rfloor+1=${ok?O:'\\text{none}'}`,true);
+  const rem=(N+2*P-span)%S; $('#sNote').innerHTML=!ok?'The kernel is larger than the padded input: no position fits. Add padding or use a smaller kernel.':
+    (rem?`<b>Watch out:</b> with stride ${S} the windows do not fit evenly; the last ${rem} padded row(s) and column(s) are never read.`:P===(K-1)*D/2&&S===1?'"Same" padding: the output is exactly as large as the input.':S>1?`Stride ${S} shrinks the map about ${S}×: each step skips ${S-1} position(s).`:P===0?`"Valid": no padding, the map shrinks by ${span-1}.`:'The border of zeros lets the kernel centre sit on edge pixels.'); }
+['sN','sK','sP','sS','sD'].forEach(id=>ML.bindRange(id,v=>{ sz[id[1]]=v; drawSize(); }));
+$('#sPos').addEventListener('input',e=>{ sz.pos=+e.target.value; drawSize(); });
+$('#sPlay').onclick=()=>{ if(sz.timer){ clearInterval(sz.timer); sz.timer=null; $('#sPlay').textContent='Play'; return; } $('#sPlay').textContent='Pause'; sz.timer=setInterval(()=>{ const O=CV.outSize(sz.N,sz.K,sz.S,sz.P,sz.D); if(O<1) return; sz.pos=(sz.pos+1)%(O*O); drawSize(); },550); };
+
+/* ---------- 4. filters on a picture ---------- */
+const fl={pic:'shapes',ker:'sobelx'};
+$('#fKer').innerHTML=Object.entries(CV.KERNELS).map(([k,v])=>`<option value="${k}"${k===fl.ker?' selected':''}>${v.name}</option>`).join('');
+function drawFilt(){ const im=CV.pic(fl.pic,96), K=CV.KERNELS[fl.ker], out=CV.conv(im,K.w,K.k,{pad:(K.k-1)/2,padMode:'edge'}), rel=CV.map(out,v=>v>0?v:0), [lo,hi]=CV.range(out);
+  CV.draw('#fIn',im,{mode:'grey'}); CV.draw('#fOut',out,{mode:fl.ker==='identity'||fl.ker==='box'||fl.ker==='gauss'?'grey':'signed'}); CV.draw('#fRelu',rel,{mode:'auto',lo:0,hi:Math.max(hi,1e-6)});
+  const kim=CV.img(K.k,K.k); kim.d.set(K.w); CV.draw('#fKplot',kim,{mode:'signed',grid:true,nums:true,fmt:v=>Math.abs(v)<1&&v!==0?v.toFixed(2).replace('0.','.'):v});
+  $('#fNote').textContent=K.note; let pos=0; for(const v of out.d) if(v>1e-6) pos++;
+  stats('#fStats',[['c1',K.k+' × '+K.k,'kernel, '+K.k*K.k+' weights'],['c3',lo.toFixed(2)+' … '+hi.toFixed(2),'range of the feature map'],['c4',Math.round(100*pos/out.d.length)+'%','of positions positive']]); }
+ML.bindSeg('fPic',v=>{ fl.pic=v; drawFilt(); }); $('#fKer').onchange=e=>{ fl.ker=e.target.value; drawFilt(); }; ML.tileRow('fPic');
+
+/* ---------- 5. channels and parameters ---------- */
+const CH=[1,3,8,16,32,64,128,256,512].slice(0,8), CHO=[8,16,32,64,128,256,512,1024], KS=[1,3,5,7], HS=[7,14,28,56,112,224];
+const ch={cin:1,cout:64,k:3,h:56,mode:'std'};
+function drawCh(){ const {cin,cout,k,h,mode}=ch, pad=(k-1)/2, std=(k*k*cin+1)*cout, dw=(k*k*cin+cin)+(cin+1)*cout, prm=mode==='std'?std:dw, macs=mode==='std'?k*k*cin*cout*h*h:(k*k*cin+cin*cout)*h*h;
+  stats('#chStats',[['c1',fmtN(prm),'parameters'],['c3',fmtN(macs),'multiply-adds per image'],['c4',`${h}×${h}×${cout}`,'output shape (same padding)']].concat(mode==='dw'?[['c2',(std/dw).toFixed(1)+'×','fewer weights than standard']]:[]));
+  $('#chForm').innerHTML=mode==='std'?ML.tex(`\\underbrace{(${k}\\cdot${k}\\cdot${cin}+1)}_{\\text{one kernel + bias}}\\times${cout}=${std.toLocaleString('en')}`,true):ML.tex(`\\underbrace{${k}^2\\cdot${cin}+${cin}}_{\\text{depthwise}}+\\underbrace{(${cin}+1)\\cdot${cout}}_{1\\times1\\ \\text{pointwise}}=${dw.toLocaleString('en')}`,true);
+  const {x,w,h:H}=CV.host('#chPlot'), P=P0(); x.clearRect(0,0,w,H);
+  const box=(cx0,cy0,sw,sd,col,lab,sub)=>{ const dx=sd*.55, dy=-sd*.4; x.fillStyle=col+'44'; x.strokeStyle=col; x.lineWidth=1.5;
+    x.beginPath(); x.rect(cx0,cy0,sw,sw); x.fill(); x.stroke(); x.beginPath(); x.moveTo(cx0,cy0); x.lineTo(cx0+dx,cy0+dy); x.lineTo(cx0+sw+dx,cy0+dy); x.lineTo(cx0+sw,cy0); x.closePath(); x.fill(); x.stroke();
+    x.beginPath(); x.moveTo(cx0+sw,cy0); x.lineTo(cx0+sw+dx,cy0+dy); x.lineTo(cx0+sw+dx,cy0+sw+dy); x.lineTo(cx0+sw,cy0+sw); x.closePath(); x.fill(); x.stroke();
+    x.fillStyle=P.ink; x.font='600 12px Inter'; x.textAlign='center'; x.fillText(lab,cx0+sw/2+dx/2,cy0+sw+18); x.fillStyle=P.muted; x.font='11px "JetBrains Mono"'; x.fillText(sub,cx0+sw/2+dx/2,cy0+sw+33); };
+  const depth=c=>Math.min(w*.16,10+Math.log2(c+1)*9), S=Math.min(H*.5,w*.2);
+  box(w*.05,H*.3,S,depth(cin),P.c3,'input',`${h}×${h}×${cin}`);
+  const ks=Math.max(10,S*k/h*2.2); box(w*.42,H*.3+S/2-ks/2,ks,depth(cin),P.c2,mode==='std'?`${cout} kernels`:`${cin} depthwise + ${cout} 1×1`,`${k}×${k}×${mode==='std'?cin:1}`);
+  box(w*.66,H*.3,S,depth(cout),P.c1,'output',`${h}×${h}×${cout}`);
+  x.strokeStyle=P.muted; x.setLineDash([4,4]); x.beginPath(); x.moveTo(w*.05+S+depth(cin)*.55+6,H*.3+S/2); x.lineTo(w*.42-6,H*.3+S/2); x.moveTo(w*.42+ks+depth(cin)*.55+6,H*.3+S/2); x.lineTo(w*.66-6,H*.3+S/2); x.stroke(); x.setLineDash([]); }
+ML.bindRange('chCin',v=>{ ch.cin=CH[v]; drawCh(); },v=>CH[v]); ML.bindRange('chCout',v=>{ ch.cout=CHO[v]; drawCh(); },v=>CHO[v]);
+ML.bindRange('chK',v=>{ ch.k=KS[v]; drawCh(); },v=>KS[v]+' × '+KS[v]); ML.bindRange('chH',v=>{ ch.h=HS[v]; drawCh(); },v=>HS[v]+' × '+HS[v]);
+ML.bindSeg('chMode',v=>{ ch.mode=v; drawCh(); });
+ch.cin=CH[+$('#chCin').value]; ch.cout=CHO[+$('#chCout').value]; ch.k=KS[+$('#chK').value]; ch.h=HS[+$('#chH').value];
+
+/* ---------- 6. pooling ---------- */
+const pl={mode:'max',seed:4,shift:0,hov:null};
+const base=()=>{ const R=ML.rng(pl.seed), a=CV.img(12,12); for(let i=0;i<144;i++) a.d[i]=Math.floor(R()*10); return a; };
+function pin(){ const b=base(), im=CV.img(8,8); for(let r=0;r<8;r++) for(let c=0;c<8;c++) im.d[r*8+c]=b.d[r*12+c+2-pl.shift]; return im; }
+function drawPool(){ const im=pin(), out=CV.pool(im,2,2,pl.mode), b0=(()=>{ const s=pl.shift; pl.shift=0; const o=CV.pool(pin(),2,2,pl.mode); pl.shift=s; return o; })();
+  const h=pl.hov; let hl=null, hl2=null; if(h){ hl=[h[0]*2,h[1]*2,2,2]; if(pl.mode==='max'){ const a=out.arg[h[1]*4+h[0]]; hl2=[a%8,Math.floor(a/8),1,1]; } }
+  CV.draw('#pIn',im,{mode:'auto',lo:-3,hi:12,grid:true,nums:true,hl,hl2,fmt:v=>v});
+  CV.draw('#pOut',out,{mode:'auto',lo:-3,hi:12,grid:true,nums:true,hl:h?[h[0],h[1],1,1]:null,fmt:v=>pl.mode==='max'?v:v.toFixed(1)});
+  let same=0; for(let i=0;i<16;i++) if(Math.abs(out.d[i]-b0.d[i])<1e-9) same++;
+  stats('#pStats',[['c1','64 → 16','numbers (4× fewer)'],['c3','0','weights to learn'],['c4',pl.shift?same+' / 16':'–',pl.shift?`pooled values unchanged after shifting ${pl.shift} px`:'shift the input to test']]); }
+ML.bindSeg('pMode',v=>{ pl.mode=v; drawPool(); });
+$('#pShift').onclick=()=>{ pl.shift=(pl.shift+1)%3; $('#pShift').textContent=pl.shift===2?'Shift back to the start':'Shift input right by 1'; drawPool(); };
+$('#pNew').onclick=()=>{ pl.seed++; drawPool(); };
+['#pOut','#pIn'].forEach((sel,k)=>{ $(sel).addEventListener('pointermove',e=>{ const im=k?CV.img(8,8):CV.img(4,4), hit=CV.hit(sel,im,e); const nh=hit?(k?[hit[0]>>1,hit[1]>>1]:hit):null; if(String(nh)!==String(pl.hov)){ pl.hov=nh; drawPool(); } }); });
+
+/* ---------- 7. receptive field ---------- */
+const RFS={plain:[['conv 3×3',3,1,1],['conv 3×3',3,1,1],['conv 3×3',3,1,1]], pool:[['conv 3×3',3,1,1],['pool 2×2',2,2,1],['conv 3×3',3,1,1],['pool 2×2',2,2,1],['conv 3×3',3,1,1]],
+  dil:[['conv 3×3, d=1',3,1,1],['conv 3×3, d=2',3,1,2],['conv 3×3, d=4',3,1,4]], stem:[['conv 7×7, s=2',7,2,1],['maxpool 3×3, s=2',3,2,1],['conv 3×3',3,1,1],['conv 3×3',3,1,1]]};
+const rf={set:'plain',sel:null};
+function rfLayers(){ const L=RFS[rf.set], N0=31, sizes=[N0], pads=[]; L.forEach(([n,k,s,d])=>{ const p=Math.floor(d*(k-1)/2), prev=sizes[sizes.length-1]; pads.push(p); sizes.push(CV.outSize(prev,k,s,p,d)); }); return {L,sizes,pads}; }
+function drawRF(){ const {L,sizes,pads}=rfLayers(), P=P0(), {x,w,h}=CV.host('#rfPlot'); x.clearRect(0,0,w,h);
+  const top=L.length; if(rf.sel==null||rf.sel>=sizes[top]) rf.sel=Math.floor(sizes[top]/2);
+  const sets=[]; sets[top]=new Set([rf.sel]); for(let l=top;l>0;l--){ const [n,k,s,d]=L[l-1], p=pads[l-1], S=new Set(); sets[l].forEach(i=>{ for(let t=0;t<k;t++){ const q=i*s-p+t*d; if(q>=0&&q<sizes[l-1]) S.add(q); } }); sets[l-1]=S; }
+  const rows=top+1, gy=(h-30)/(rows), posX=(l,i)=>{ const n=sizes[l], j=Math.pow(1,0); let jump=1; for(let q=0;q<l;q++) jump*=L[q][2]; let start=0; /* centre of unit i in input coordinates */
+      let c=i, off=0; for(let q=l;q>0;q--){ const [nn,k,s,d]=L[q-1], p=pads[q-1]; c=c*s-p+d*(k-1)/2; } return 14+(c+.5)/sizes[0]*(w-28); };
+  const Y=l=>h-18-l*gy;
+  for(let l=top;l>0;l--){ const [n,k,s,d]=L[l-1], p=pads[l-1]; sets[l].forEach(i=>{ for(let t=0;t<k;t++){ const q=i*s-p+t*d; if(q<0||q>=sizes[l-1]) continue; x.strokeStyle=P.c1; x.globalAlpha=.55; x.lineWidth=1.3; x.beginPath(); x.moveTo(posX(l,i),Y(l)); x.lineTo(posX(l-1,q),Y(l-1)); x.stroke(); x.globalAlpha=1; } }); }
+  for(let l=0;l<=top;l++){ const r=Math.min(5,Math.max(2,(w-28)/sizes[l]*.32)); for(let i=0;i<sizes[l];i++){ const on=sets[l].has(i); x.beginPath(); x.arc(posX(l,i),Y(l),on?r+1:r,0,7); x.fillStyle=on?(l===top?P.c2:P.c1):P.line; x.fill(); }
+    x.fillStyle=P.muted; x.font='11px Inter'; x.textAlign='left'; x.fillText(l?L[l-1][0]+` (${sizes[l]})`:`input (${sizes[0]})`,4,Y(l)-8); }
+  let r=1,j=1; const tr=[['input','–','–','–',1,1]]; L.forEach(([n,k,s,d])=>{ r=r+(k-1)*d*j; j=j*s; tr.push([n,k,s,d,r,j]); });
+  $('#rfTbl').innerHTML='<table class="tbl"><tr><th>layer</th><th>k</th><th>s</th><th>d</th><th>receptive field r</th><th>jump j</th></tr>'+tr.map(t=>`<tr><td>${t[0]}</td><td>${t[1]}</td><td>${t[2]}</td><td>${t[3]}</td><td><b>${t[4]}</b></td><td>${t[5]}</td></tr>`).join('')+'</table>'; }
+ML.bindSeg('rfSet',v=>{ rf.set=v; rf.sel=null; drawRF(); }); ML.tileRow('rfSet');
+$('#rfPlot').addEventListener('click',e=>{ const {sizes}=rfLayers(), r=$('#rfPlot').getBoundingClientRect(), n=sizes[sizes.length-1]; let best=0,bd=1e9; for(let i=0;i<n;i++){ /* nearest top unit by x */ }
+  const X=e.clientX-r.left; const top=RFS[rf.set].length; const {L,pads}=rfLayers(); for(let i=0;i<n;i++){ let c=i; for(let q=top;q>0;q--){ const [nn,k,s,d]=L[q-1]; c=c*s-pads[q-1]+d*(k-1)/2; } const px=14+(c+.5)/sizes[0]*(r.width-28); if(Math.abs(px-X)<bd){ bd=Math.abs(px-X); best=i; } } rf.sel=best; drawRF(); });
+$('#rfPlot').style.cursor='pointer';
+
+/* ---------- 8. train a tiny CNN ---------- */
+const NOISE=[0,.1,.2,.3,.4,.5,.6];
+const tr={F:4,noise:.2,net:null,ep:0,hist:[],timer:null,data:null,test:null,pick:0};
+function tInit(){ tr.data=CV.strokeSet('bars',400,12,11,tr.noise); tr.test=CV.strokeSet('bars',200,12,12,tr.noise); tr.net=CV.TinyCNN({seed:3,F:tr.F}); tr.ep=0; tr.hist=[{ep:0,loss:Math.log(4),acc:tr.net.acc(tr.test.X,tr.test.Y)}]; tDraw(); }
+const tLoss=new ML.Plot('#tLoss',{equal:false}); tLoss.onResize=()=>tChart();
+function tEpoch(){ const {X,Y}=tr.data, idx=ML.rng(tr.ep+1).shuffle([...Array(X.length).keys()]); let L=0,nb=0; for(let b=0;b<idx.length;b+=20){ const I=idx.slice(b,b+20); L+=tr.net.step(I.map(i=>X[i]),I.map(i=>Y[i]),0.05); nb++; }
+  tr.ep++; tr.hist.push({ep:tr.ep,loss:L/nb,acc:tr.net.acc(tr.test.X,tr.test.Y)}); }
+function tChart(){ const P=P0(); if(!tr.hist.length) return; ML.chart(tLoss,[{pts:tr.hist.map(h=>[h.ep,h.loss/Math.log(4)]),color:P.c3},{pts:tr.hist.map(h=>[h.ep,h.acc]),color:P.c5,dots:true}],{y0:0,y1:1.05,x0:0,x1:Math.max(10,tr.ep),xl:'epoch',yfmt:v=>v.toFixed(1)}); }
+function tDraw(){ const P=P0(), net=tr.net; $('#tIt').textContent=tr.ep+' epoch'+(tr.ep===1?'':'s')+' · test accuracy '+Math.round(100*tr.hist[tr.hist.length-1].acc)+'%'; tChart();
+  $('#tKer').innerHTML=net.W.map((w,f)=>`<div><div class="plot sq" id="tk${f}"></div><span>kernel ${f+1}</span></div>`).join('');
+  net.W.forEach((w,f)=>{ const k=CV.img(3,3); k.d.set(Array.from(w)); CV.draw('#tk'+f,k,{mode:'signed',grid:true}); });
+  const im=tr.test.X[tr.pick], y=tr.test.Y[tr.pick], fw=net.forward(im), cls=CV.TASKS.bars;
+  $('#tTrue').textContent='true class: '+cls[y];
+  $('#tFlow').innerHTML=`<div class="cf-in"><div class="plot sq" id="tfIn"></div><span>input</span></div><div class="cf-maps">`+fw.acts.map((a,f)=>`<div class="cf-row"><span class="mono">k${f+1}</span><div class="plot sq" id="tfA${f}"></div><div class="plot sq" id="tfP${f}"></div></div>`).join('')+'</div>';
+  CV.draw('#tfIn',im,{mode:'grey'}); const mx=Math.max(1e-6,...fw.acts.map(a=>CV.range(a)[1]));
+  fw.acts.forEach((a,f)=>{ CV.draw('#tfA'+f,a,{mode:'auto',lo:0,hi:mx}); CV.draw('#tfP'+f,fw.pools[f],{mode:'auto',lo:0,hi:mx}); });
+  $('#tProb').innerHTML=NLP.bars(cls.map((c,i)=>({label:c,value:fw.p[i]})),{max:1,lw:'92px'}); }
+$('#tRun').onclick=()=>{ if(tr.timer){ clearInterval(tr.timer); tr.timer=null; $('#tRun').textContent='Train'; return; } $('#tRun').textContent='Pause'; tr.timer=setInterval(()=>{ tEpoch(); tDraw(); if(tr.ep>=40){ clearInterval(tr.timer); tr.timer=null; $('#tRun').textContent='Train'; } },120); };
+$('#tReset').onclick=()=>{ if(tr.timer){ clearInterval(tr.timer); tr.timer=null; $('#tRun').textContent='Train'; } tInit(); };
+$('#tPick').onclick=()=>{ tr.pick=(tr.pick+37)%200; tDraw(); };
+ML.bindRange('tF',v=>{ tr.F=v; $('#tReset').onclick(); }); ML.bindRange('tNoise',v=>{ tr.noise=NOISE[v]; $('#tReset').onclick(); },v=>NOISE[v].toFixed(1));
+
+/* ---------- 9. architectures: shapes and parameters from a layer list ---------- */
+/* ops: ['conv',k,s,p,c,bias,bn] ['pool',k,s,p] ['aap',o] ['gap'] ['fc',c] ['basic',c,s] ['bottle',c,s] ['note',label,shape,params] */
+const rep=(n,f)=>Array.from({length:n},(_,i)=>f(i));
+const ARCH={
+  lenet:{name:'LeNet-5 (1998)', inp:[32,32,1], meta:'≈ 61.7 k parameters (modern version: every C3 map sees all 6 S2 maps)', idea:'Handwritten digits on cheques. Two rounds of convolution and subsampling, then three dense layers. Small enough to run in 1998, and the template every CNN since has followed.',
+    ops:[['conv',5,1,0,6,1,0,'C1 conv 5×5'],['pool',2,2,0,'S2 avg pool 2×2'],['conv',5,1,0,16,1,0,'C3 conv 5×5'],['pool',2,2,0,'S4 avg pool 2×2'],['conv',5,1,0,120,1,0,'C5 conv 5×5'],['fc',84,'F6 dense'],['fc',10,'output']]},
+  alexnet:{name:'AlexNet (2012)', inp:[224,224,3], meta:'torchvision version', idea:'Five convolutions and three huge dense layers, trained on two GPUs with ReLU, dropout and heavy augmentation. Cut the ImageNet error from 26% to 15% and started the deep-learning era in vision. Note where the parameters are: about 96% sit in the dense layers.',
+    ops:[['conv',11,4,2,64,1,0,'conv 11×11, s4'],['pool',3,2,0,'max pool 3×3, s2'],['conv',5,1,2,192,1,0,'conv 5×5'],['pool',3,2,0,'max pool'],['conv',3,1,1,384,1,0,'conv 3×3'],['conv',3,1,1,256,1,0,'conv 3×3'],['conv',3,1,1,256,1,0,'conv 3×3'],['pool',3,2,0,'max pool'],['aap',6,'adaptive avg pool 6×6'],['fc',4096,'dense'],['fc',4096,'dense'],['fc',1000,'output']]},
+  vgg16:{name:'VGG-16 (2014)', inp:[224,224,3], meta:'13 conv + 3 dense layers', idea:'Nothing but 3 × 3 convolutions with "same" padding, doubling the channels after each 2 × 2 pool. Simple, deep and very heavy: 138 million weights, 15.5 billion multiply-adds per image.',
+    ops:[].concat(...[[64,2],[128,2],[256,3],[512,3],[512,3]].map(([c,n],b)=>rep(n,i=>['conv',3,1,1,c,1,0,`conv 3×3, ${c}`]).concat([['pool',2,2,0,'max pool 2×2']]))).concat([['fc',4096,'dense'],['fc',4096,'dense'],['fc',1000,'output']])},
+  resnet18:{name:'ResNet-18 (2015)', inp:[224,224,3], meta:'basic blocks [2, 2, 2, 2]', idea:'A stem (7 × 7 conv, stride 2, max pool) then four stages of residual blocks, each block two 3 × 3 convolutions with batch norm and a skip connection. Stages 2 to 4 halve the size and double the channels; a 1 × 1 convolution reshapes the skip when they do. Global average pooling replaces the giant dense layers.',
+    ops:[['conv',7,2,3,64,0,1,'stem conv 7×7, s2'],['pool',3,2,1,'max pool 3×3, s2']].concat(...[[64,1],[128,2],[256,2],[512,2]].map(([c,s])=>[['basic',c,s],['basic',c,1]])).concat([['gap','global avg pool'],['fc',1000,'output']])},
+  resnet50:{name:'ResNet-50 (2015)', inp:[224,224,3], meta:'bottleneck blocks [3, 4, 6, 3]', idea:'Deeper ResNets use a bottleneck block: a 1 × 1 convolution shrinks the channels by 4, a 3 × 3 works in the thin space, and a 1 × 1 expands again. Fifty layers for less compute than VGG-16.',
+    ops:[['conv',7,2,3,64,0,1,'stem conv 7×7, s2'],['pool',3,2,1,'max pool 3×3, s2']].concat(...[[64,1,3],[128,2,4],[256,2,6],[512,2,3]].map(([c,s,n])=>rep(n,i=>['bottle',c,i?1:s]))).concat([['gap','global avg pool'],['fc',1000,'output']])},
+  effb0:{name:'EfficientNet-B0 (2019)', inp:[224,224,3], meta:'stage table from the paper; 5.3 M parameters', idea:'Built from MBConv blocks (inverted residuals with depthwise convolutions and squeeze-and-excitation), with the layout found by neural architecture search. The stage table below is Table 1 of the paper; parameters are torchvision\'s count, not computed here (the blocks have too many parts to list).',
+    table:[['Stem conv 3×3, s2','112×112×32','1'],['MBConv1, k3×3','112×112×16','1'],['MBConv6, k3×3','56×56×24','2'],['MBConv6, k5×5','28×28×40','2'],['MBConv6, k3×3','14×14×80','3'],['MBConv6, k5×5','14×14×112','3'],['MBConv6, k5×5','7×7×192','4'],['MBConv6, k3×3','7×7×320','1'],['Conv 1×1, pool, FC','1×1×1280 → 1000','1']]},
+};
+function archRun(a){ let [H,W,C]=a.inp, total=0; const rows=[['input',`${H}×${W}×${C}`,0]], stages=[[H,C,'in']];
+  const conv=(k,s,p,c,bias,bn)=>{ const n=k*k*C*c+(bias?c:0)+(bn?2*c:0); H=CV.outSize(H,k,s,p); W=CV.outSize(W,k,s,p); C=c; return n; };
+  a.ops.forEach(o=>{ let n=0, lab=o[o.length-1];
+    if(o[0]==='conv'){ n=conv(o[1],o[2],o[3],o[4],o[5],o[6]); }
+    else if(o[0]==='pool'){ H=CV.outSize(H,o[1],o[2],o[3]); W=CV.outSize(W,o[1],o[2],o[3]); lab=o[4]; }
+    else if(o[0]==='aap'){ H=W=o[1]; lab=o[2]; } else if(o[0]==='gap'){ H=W=1; lab=o[1]; }
+    else if(o[0]==='fc'){ const inp=H*W*C; n=inp*o[1]+o[1]; H=W=1; C=o[1]; lab=o[2]; }
+    else if(o[0]==='basic'){ const [_,c,s]=o, cin=C; n=conv(3,s,1,c,0,1)+conv(3,1,1,c,0,1); if(s!==1||cin!==c) n+=cin*c+2*c; lab=`basic block ${c}`+(s>1?', s2':''); }
+    else if(o[0]==='bottle'){ const [_,c,s]=o, cin=C; n=conv(1,1,0,c,0,1)+conv(3,s,1,c,0,1)+conv(1,1,0,4*c,0,1); if(s!==1||cin!==4*c) n+=cin*4*c+8*c; lab=`bottleneck ${c}→${4*c}`+(s>1?', s2':''); }
+    total+=n; rows.push([lab,`${H}×${W}×${C}`,n]); stages.push([H,C,lab]); });
+  return {rows,total,stages}; }
+const aKeys=Object.keys(ARCH); $('#aSel').innerHTML=aKeys.map(k=>`<option value="${k}">${ARCH[k].name}</option>`).join(''); $('#aSel').value='resnet18';
+function drawArch(){ const a=ARCH[$('#aSel').value], P=P0(); $('#aIdea').textContent=a.idea;
+  let stages, rowsH;
+  if(a.table){ stages=[[224,3,'in']].concat(a.table.map(t=>{ const m=t[1].match(/(\d+)×\d+×(\d+)/); return [+m[1],+m[2],t[0]]; }));
+    rowsH='<table class="tbl"><tr><th>stage</th><th>output</th><th>layers</th></tr>'+a.table.map(t=>`<tr><td>${t[0]}</td><td class="mono">${t[1]}</td><td>${t[2]}</td></tr>`).join('')+'</table>'; $('#aMeta').textContent=a.meta; }
+  else { const r=archRun(a); stages=r.stages; rowsH='<table class="tbl"><tr><th>layer</th><th>output shape</th><th>parameters</th></tr>'+r.rows.map(t=>`<tr><td>${t[0]}</td><td class="mono">${t[1]}</td><td class="mono">${t[2]?t[2].toLocaleString('en'):''}</td></tr>`).join('')+`<tr><td><b>total</b></td><td></td><td class="mono"><b>${r.total.toLocaleString('en')}</b></td></tr></table>`;
+    $('#aMeta').textContent=r.total.toLocaleString('en')+' parameters · '+a.meta; }
+  $('#aTbl').innerHTML=rowsH;
+  const {x,w,h}=CV.host('#aPlot'); x.clearRect(0,0,w,h); const n=stages.length, bw=(w-20)/n, maxH=Math.log2(Math.max(...stages.map(s=>s[0]))+1), maxC=Math.log2(Math.max(...stages.map(s=>s[1]))+1);
+  stages.forEach(([H,C],i)=>{ const hh=(h-40)*(Math.log2(H+1)/maxH)*.92+6, a2=.2+.8*Math.log2(C+1)/maxC; x.fillStyle=P.c1; x.globalAlpha=a2; x.fillRect(10+i*bw+1,(h-24)/2-hh/2+4,Math.max(2,bw-2),hh); x.globalAlpha=1; });
+  x.fillStyle=P.muted; x.font='11px Inter'; x.textAlign='left'; x.fillText('input',10,h-6); x.textAlign='right'; x.fillText('output',w-10,h-6); }
+$('#aSel').onchange=drawArch;
+const EF={a:1.2,b:1.1,g:1.15};
+ML.bindRange('eP',v=>{ const d=Math.pow(EF.a,v), wd=Math.pow(EF.b,v), r=Math.pow(EF.g,v);
+  stats('#eStats',[['c1',d.toFixed(2)+'×','depth (layers)'],['c3',wd.toFixed(2)+'×','width (channels)'],['c4',Math.round(224*r)+' px','resolution'],['c2',Math.pow(EF.a*EF.b*EF.b*EF.g*EF.g,v).toFixed(1)+'×','compute (FLOPs)']]); },v=>'B'+v);
+
+/* ---------- draw everything ---------- */
+function all(){ drawDense(); drawConv(); drawSize(); drawFilt(); drawCh(); drawPool(); drawRF(); tDraw(); drawArch(); }
+tInit(); $('#eP').dispatchEvent(new Event('input')); all();
+let rw=innerWidth; window.addEventListener('resize',()=>{ if(Math.abs(innerWidth-rw)>4){ rw=innerWidth; all(); } }); ML.onTheme(all);
+})();
+</script>
+<script>NLP.nav('nlp','cnn'); ML.renderMath(document.body);</script>
+</body>
+</html>

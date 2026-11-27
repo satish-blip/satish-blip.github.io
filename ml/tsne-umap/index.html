@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>t-SNE and UMAP explained interactively: maps of high-dimensional data</title>
+<meta name="description" content="Non-linear dimensionality reduction you can run in the browser: why PCA flattens curved data, how t-SNE turns distances into neighbour probabilities with perplexity, the crowding problem and the Student-t trick, how UMAP builds a fuzzy neighbour graph, and how to read these maps without being fooled.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Unsupervised learning</p>
+  <h1>t-SNE and UMAP: <span class="grad">maps of data with too many dimensions</span></h1>
+  <p class="lede">A dataset of handwritten digits has 64 numbers per image; a word embedding has 300; a single cell, 20,000 genes. We cannot look at those spaces, but we can draw a 2-D map that keeps each point next to its true neighbours. This page builds the two standard map-makers, t-SNE and UMAP, runs them live, and shows what their pictures do and do not tell you.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#why">1 · Why not PCA?</a><a href="#tsne">2 · t-SNE live</a><a href="#perp">3 · Perplexity</a><a href="#crowd">4 · The crowding problem</a><a href="#umap">5 · UMAP</a><a href="#read">6 · Reading the map</a><a href="#elsewhere">7 · Try it elsewhere</a><a href="#py">8 · Python</a><a href="#credits">9 · Credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What are t-SNE and UMAP, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3>
+      <p>Plots have two axes. Data often have hundreds. <a href="../pca/">PCA</a> squashes many dimensions into two by keeping the directions of largest spread, but it can only rotate and drop axes. If the data lie on a curved surface, or in many separate groups, a flat projection piles different things on top of each other.</p>
+      <h3>The idea</h3>
+      <p>Forget global geometry and keep only <i>who is next to whom</i>. For each point, list its near neighbours in the original space. Then place the points on a page and move them until each point’s neighbours on the page match its neighbours in the data. This is <a class="term" data-t="manifold">manifold</a> learning, or <a class="term" data-t="dimensionality-reduction">non-linear dimensionality reduction</a>.</p>
+      <ol class="steps2"><li>Measure similarities between points in the original space.</li><li>Start with points scattered on a 2-D page.</li><li>Pull together points that are similar in the data; push apart the rest.</li><li>Repeat until the layout settles.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Seating a wedding from a list of who knows whom. You cannot keep everyone’s exact “social distance”, but you can make sure friends share tables and strangers do not. The room plan shows the friendship groups clearly, yet the distance between two tables, or the size of a table, means very little.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Seeing clusters in embeddings, images, cells or documents</li><li>Spotting mislabelled or odd points</li><li>Checking what a neural network has learned</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Cluster sizes and gaps between clusters are not meaningful</li><li>Settings (perplexity, neighbours) change the picture</li><li>Random noise can look like clusters</li><li>Not a feature extractor for new data (t-SNE)</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="tsne">t-SNE</a><a class="term" data-t="umap">UMAP</a><a class="term" data-t="tsne-perplexity">Perplexity</a><a class="term" data-t="kl-divergence">KL divergence</a><a class="term" data-t="crowding-problem">Crowding problem</a><a class="term" data-t="knn-graph">k-NN graph</a><a class="term" data-t="manifold">Manifold</a></div>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="why" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Why not just PCA?</h2>
+    <p class="sub">The same high-dimensional data drawn three ways. Colours are the true groups (or the position along the roll); none of the methods sees them. The number under each map is the share of each point’s 10 nearest neighbours in the original space that are still among its 10 nearest on the map.</p>
+    <div class="seg" id="wData"></div>
+    <div class="cl-gal" id="wGal"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Take the <b>Swiss roll</b>: a sheet of paper rolled up in 3-D. Two points on neighbouring layers of the roll are close in straight-line distance but far apart along the sheet. PCA looks for the flattest view of the whole roll and lays the layers on top of each other, so neighbours on the map are often not neighbours on the sheet. A neighbour-based method unrolls it.</p>
+      <p>With the <b>Digits</b> data (8×8 pixel images of the digits 0 to 9, so 64 numbers each, generated on this page with random shifts, thickness and noise), PCA separates a few digits but stacks the others. t-SNE and UMAP pull the ten digits apart, because each image’s nearest images really are the same digit.</p>
+      <p>PCA is still the right first step: it is linear, exact, fast, keeps global distances and can project new points. Practitioners often run PCA to 50 dimensions first and give that to t-SNE or UMAP, which removes noise and speeds them up.</p>
+      <div class="mathbox c3">$$\text{neighbours kept}=\frac{1}{nk}\sum_{i=1}^{n}\big|\,\text{kNN}_{\text{data}}(i)\cap\text{kNN}_{\text{map}}(i)\,\big|$$</div>
+      <p class="hint">This score is a simple cousin of the “trustworthiness” measure (Venna and Kaski, 2001). 1 means every neighbourhood survived.</p>
+    </div>
+  </div>
+</section>
+
+<section id="tsne" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>t-SNE, iteration by iteration</h2>
+    <p class="sub">Press <b>Run</b> and watch the map form. During the first 100 iterations (“early exaggeration”) the attractions are multiplied by 12, which pulls clusters into tight clumps that can then move past each other.</p>
+    <div class="plot sq" id="pT"></div>
+    <div class="seg" id="tData"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="tRun">Run</button><button class="btn" id="tNew">Restart</button><span class="pos" id="tPos"></span></div>
+    <div class="plot short" id="pTl"></div>
+    <div class="stats" id="tStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p><a class="term" data-t="tsne">t-SNE</a> (van der Maaten and Hinton, 2008) turns distances into probabilities twice, once in the data and once on the map, and makes the two sets of probabilities match.</p>
+      <p><b>In the data.</b> Put a Gaussian of width \(\sigma_i\) on point \(x_i\). The chance that \(x_i\) would “pick” \(x_j\) as its neighbour is</p>
+      <div class="mathbox c1">$$p_{j\mid i}=\frac{\exp(-\lVert x_i-x_j\rVert^2/2\sigma_i^2)}{\sum_{k\ne i}\exp(-\lVert x_i-x_k\rVert^2/2\sigma_i^2)},\qquad p_{ij}=\frac{p_{j\mid i}+p_{i\mid j}}{2n}.$$</div>
+      <p>Each \(\sigma_i\) is chosen so the point has a fixed effective number of neighbours, the perplexity (next section). Symmetrising gives one probability \(p_{ij}\) per pair, summing to 1 over all pairs.</p>
+      <p><b>On the map.</b> With map positions \(y_i\in\mathbb R^2\), use a Student-t curve with one degree of freedom instead of a Gaussian:</p>
+      <div class="mathbox c4">$$q_{ij}=\frac{(1+\lVert y_i-y_j\rVert^2)^{-1}}{\sum_{k\ne l}(1+\lVert y_k-y_l\rVert^2)^{-1}}.$$</div>
+      <p><b>Match them.</b> Minimise the <a class="term" data-t="kl-divergence">Kullback–Leibler divergence</a> \(C=\mathrm{KL}(P\,\|\,Q)=\sum_{i\ne j}p_{ij}\log\frac{p_{ij}}{q_{ij}}\) by gradient descent. The gradient has a neat physical reading, a spring between every pair:</p>
+      <div class="mathbox c2">$$\frac{\partial C}{\partial y_i}=4\sum_{j}(p_{ij}-q_{ij})\,\frac{y_i-y_j}{1+\lVert y_i-y_j\rVert^2}.$$</div>
+      <p>If the pair is more similar in the data than on the map (\(p_{ij}>q_{ij}\)) the spring pulls them together; otherwise it pushes them apart. KL is asymmetric: putting true neighbours far apart (large \(p\), small \(q\)) costs a lot, putting non-neighbours close costs little. So t-SNE protects local structure and is careless about global layout.</p>
+      <div class="ctl"><label for="tP"><span>Perplexity</span><output id="tPOut"></output></label><input type="range" id="tP" min="2" max="80" step="1" value="30"></div>
+      <div class="ctl"><label for="tLr"><span>Learning rate</span><output id="tLrOut"></output></label><input type="range" id="tLr" min="10" max="400" step="10" value="100"></div>
+      <div class="algo" data-anim="tsne"><h5 class="algo-h">Algorithm: t-SNE</h5><ol>
+        <li><span class="kw">input</span> points \(x_1,\dots,x_n\), perplexity, iterations \(T\)</li>
+        <li><span class="kw">for</span> each point: binary-search \(\sigma_i\) so that \(\text{Perp}(P_i)\) = perplexity</li>
+        <li>\(p_{ij}\leftarrow(p_{j\mid i}+p_{i\mid j})/2n\)</li>
+        <li>place \(y_i\) at small random positions</li>
+        <li><span class="kw">for</span> \(t=1,\dots,T\) <span class="kw">do</span></li>
+        <li class="i1">compute all \(q_{ij}\) from the Student-t kernel</li>
+        <li class="i1">gradient \(g_i=4\sum_j(\alpha p_{ij}-q_{ij})(y_i-y_j)/(1+\lVert y_i-y_j\rVert^2)\) <span class="cm">\(\alpha=12\) early, then 1</span></li>
+        <li class="i1">\(y_i\leftarrow y_i+\) momentum update with step \(-\eta g_i\)</li>
+        <li><span class="kw">return</span> the map \(y_1,\dots,y_n\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: making it fast</summary><div>
+        <p>The exact version above costs \(O(n^2)\) per iteration, fine for a few thousand points. Barnes–Hut t-SNE (van der Maaten, 2014) groups far-away points into the centre of mass of a quadtree cell, giving \(O(n\log n)\); FIt-SNE (Linderman et al., 2019) interpolates on a grid with FFTs and handles millions of points. Modern defaults (openTSNE, scikit-learn) also start from a PCA layout rather than random positions, which keeps more global structure and makes runs repeatable (Kobak and Berens, 2019).</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="perp" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Perplexity: how many neighbours each point listens to</h2>
+    <p class="sub">The point ringed on the t-SNE map above (tap the map to choose another). Bars: its neighbour probabilities \(p_{j\mid i}\) against distance in the original space, for the current perplexity. Purple bars are points of the same true group.</p>
+    <div class="plot wide" id="pPp"></div>
+    <div class="stats" id="pStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A single global width would not work: in a dense region a small \(\sigma\) already finds many neighbours, while in a sparse region the same \(\sigma\) finds none. t-SNE therefore gives each point its own \(\sigma_i\), chosen so that its neighbour distribution has the same <a class="term" data-t="tsne-perplexity">perplexity</a>:</p>
+      <div class="mathbox c1">$$\text{Perp}(P_i)=2^{H(P_i)},\qquad H(P_i)=-\sum_j p_{j\mid i}\log_2 p_{j\mid i}.$$</div>
+      <p>Perplexity is “the effective number of neighbours”: a distribution spread evenly over 30 points has perplexity exactly 30. Because \(H\) rises steadily with \(\sigma_i\), a binary search finds the right \(\sigma_i\) in a few dozen steps.</p>
+      <p>Low perplexity (2 to 5) makes each point listen only to its closest few, giving many small, fragmented clumps; high perplexity (50 and above) averages over wider areas and shows bigger structure but can merge small groups. The usual range is 5 to 50, and it must stay well below \(n\). Try it on the <b>Pure noise</b> data with perplexity 3 and you will see “clusters” that do not exist.</p>
+      <div class="algo" data-anim="perpsearch"><h5 class="algo-h">Algorithm: finding σᵢ for a target perplexity</h5><ol>
+        <li><span class="kw">input</span> squared distances from \(x_i\), target perplexity \(u\)</li>
+        <li>\(\beta\leftarrow1\) <span class="cm">\(\beta=1/2\sigma_i^2\)</span>; lo \(\leftarrow0\), hi \(\leftarrow\infty\)</li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1">\(p_{j\mid i}\propto e^{-\beta d_{ij}^2}\); \(H\leftarrow\) entropy</li>
+        <li class="i1"><span class="kw">if</span> \(H>\log u\): lo \(\leftarrow\beta\), raise \(\beta\) <span class="cm">too many neighbours: narrow</span></li>
+        <li class="i1"><span class="kw">else</span>: hi \(\leftarrow\beta\), lower \(\beta\) <span class="cm">too few: widen</span></li>
+        <li><span class="kw">until</span> \(|H-\log u|\) is tiny</li>
+        <li><span class="kw">return</span> \(\sigma_i=1/\sqrt{2\beta}\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="crowd" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>The crowding problem, and why the map uses a heavy tail</h2>
+    <p class="sub">Top: distances from a point to 2,000 random neighbours spread evenly in a ball of dimension \(d\) (scaled so the farthest is 1). Bottom: the Gaussian kernel used in the data and the Student-t kernel used on the map, at equal height at distance 0.</p>
+    <div class="plot short" id="pCr"></div>
+    <div class="plot short" id="pKer" style="margin-top:10px"></div>
+    <div class="stats" id="crStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>In high dimensions there is far more room at medium distance than near the centre. In a \(d\)-dimensional ball the share of volume within radius \(r\) is \(r^d\), so in 50 dimensions half of the volume lies beyond radius \(0.5^{1/50}\approx0.986\): almost every neighbour sits at nearly the same distance. Slide \(d\) up and watch the distances pile up near 1.</p>
+      <p>A 2-D page has no such room. If the map tried to keep those many moderately-distant neighbours at moderate distance, they would crowd into the middle and squash the clusters together. This is the <a class="term" data-t="crowding-problem">crowding problem</a>, and it ruined the earlier method SNE, which used Gaussians on both sides.</p>
+      <p>t-SNE’s fix is the Student-t on the map. Its tail falls like \(1/r^2\) instead of \(e^{-r^2}\), so a moderate similarity in the data is matched by a much larger distance on the map. Clusters get room to separate, which is exactly the clean gaps you see in t-SNE plots, and also why gap sizes are exaggerated.</p>
+      <div class="ctl"><label for="crD"><span>Dimension \(d\)</span><output id="crDOut"></output></label><input type="range" id="crD" min="1" max="100" step="1" value="2"></div>
+    </div>
+  </div>
+</section>
+
+<section id="umap" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>UMAP: a fuzzy neighbour graph, laid out</h2>
+    <p class="sub">UMAP on the data chosen in section 2, starting from the PCA layout. Turn on the graph to see the weighted neighbour links it is trying to keep (darker = stronger).</p>
+    <div class="plot sq" id="pU"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="uRun">Run</button><button class="btn" id="uNew">Restart</button><label class="toggle"><input type="checkbox" id="uG"> show neighbour graph</label><span class="pos" id="uPos"></span></div>
+    <div class="plot short" id="pUc"></div>
+    <div class="stats" id="uStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p><a class="term" data-t="umap">UMAP</a> (McInnes, Healy and Melville, 2018) has the same shape of idea, with three changes that make it faster and a little more faithful to global structure.</p>
+      <p><b>1. A <a class="term" data-t="knn-graph">k-nearest-neighbour graph</a> with local scaling.</b> For each point take its \(k\) nearest neighbours. Let \(\rho_i\) be the distance to the closest one and choose \(\sigma_i\) so that \(\sum_{j}\exp\!\big(-(d_{ij}-\rho_i)/\sigma_i\big)=\log_2 k\). The weight of edge \(i\to j\) is</p>
+      <div class="mathbox c1">$$w_{j\mid i}=\exp\!\Big(-\frac{\max(0,\,d_{ij}-\rho_i)}{\sigma_i}\Big),\qquad w_{ij}=w_{j\mid i}+w_{i\mid j}-w_{j\mid i}\,w_{i\mid j}.$$</div>
+      <p>Subtracting \(\rho_i\) guarantees every point is fully connected to at least one neighbour, so no point is left isolated; the last formula is a fuzzy “or” of the two directions.</p>
+      <p><b>2. A curve on the map with a chosen minimum gap.</b> On the page, the similarity of two points at distance \(d\) is \(v(d)=(1+a\,d^{2b})^{-1}\), where \(a,b\) are fitted so the curve is about 1 out to <i>min_dist</i> and then decays (bottom chart). With \(a=b=1\) it is exactly t-SNE’s Student-t.</p>
+      <p><b>3. Cross-entropy, optimised by sampling.</b> UMAP minimises \(\sum_{ij}\big[w_{ij}\log\frac{w_{ij}}{v_{ij}}+(1-w_{ij})\log\frac{1-w_{ij}}{1-v_{ij}}\big]\). The first term attracts linked points, the second repels unlinked ones. Instead of summing over all \(n^2\) pairs it samples edges in proportion to their weight and a few random “negative” points per edge, which makes each epoch cost \(O(nk)\).</p>
+      <div class="ctl"><label for="uK"><span>n_neighbors \(k\)</span><output id="uKOut"></output></label><input type="range" id="uK" min="3" max="60" step="1" value="15"></div>
+      <div class="ctl"><label for="uM"><span>min_dist</span><output id="uMOut"></output></label><input type="range" id="uM" min="0" max="0.99" step="0.01" value="0.1"></div>
+      <div class="algo" data-anim="umap"><h5 class="algo-h">Algorithm: UMAP</h5><ol>
+        <li><span class="kw">input</span> points, n_neighbors \(k\), min_dist, epochs \(E\)</li>
+        <li>find each point’s \(k\) nearest neighbours <span class="cm">approximate search for big data</span></li>
+        <li>\(\rho_i\leftarrow\) nearest distance; binary-search \(\sigma_i\); edge weights \(w_{j\mid i}\)</li>
+        <li>symmetrise: \(w_{ij}=w_{j\mid i}+w_{i\mid j}-w_{j\mid i}w_{i\mid j}\)</li>
+        <li>fit \(a,b\) to min_dist; initialise \(y\) (spectral or PCA layout)</li>
+        <li><span class="kw">for</span> epoch \(=1,\dots,E\) <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">for</span> each edge \((i,j)\), with probability \(\propto w_{ij}\): pull \(y_i,y_j\) together</li>
+        <li class="i1">pick a few random points \(m\): push \(y_i\) away from \(y_m\) <span class="cm">negative sampling</span></li>
+        <li class="i1">shrink the step size linearly</li>
+        <li><span class="kw">return</span> \(y\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: t-SNE versus UMAP, honestly</summary><div>
+        <p>UMAP is much faster on large data, can embed new points with <code>transform</code>, and can embed into more than two dimensions as a pre-processing step (for example before HDBSCAN). The claim that UMAP preserves global structure better turned out to come mostly from its initialisation: with the same spectral or PCA start, t-SNE keeps global layout about as well (Kobak and Linderman, 2021). Both methods are tools for looking, and both can mislead in the ways shown in the next section.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="read" class="lab">
+  <div class="card hl">
+    <h2><span class="num">6</span>Reading the map without being fooled</h2>
+    <p class="sub">Three tight clusters in 20-D with very different spreads (one 6× wider than another) and different gaps between them. t-SNE at four perplexities, computed one after another.</p>
+    <div class="cl-gal" id="rGal"></div>
+    <div class="player" style="margin-top:10px"><button class="btn" id="rRun">Recompute</button><span class="pos" id="rPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The lessons from Wattenberg, Viégas and Johnson’s well-known article <i>How to Use t-SNE Effectively</i> (Distill, 2016), reproduced here on our own data:</p>
+      <ol><li><b>Cluster sizes mean nothing.</b> Each point gets the same effective number of neighbours, so a wide cluster and a tight one come out about the same size. Here the true spreads differ six-fold; on the maps they barely differ.</li><li><b>Distances between clusters may mean nothing.</b> The gaps depend on perplexity and on the heavy tail, not on the true separation.</li><li><b>Random noise can look like clusters</b> at low perplexity. Try <b>Pure noise</b> in section 2.</li><li><b>Shapes can be invented.</b> Elongated or curved clusters at low perplexity are often artefacts.</li><li><b>Look at more than one setting</b> (and several random seeds) before believing a structure.</li></ol>
+      <p>A practical habit: colour the map by a variable you trust (a label, a measurement), check that patterns survive changes of perplexity or n_neighbors, and confirm any “cluster” with an analysis in the original space, such as the <a href="../clustering/">clustering methods</a> on the previous page.</p>
+    </div>
+  </div>
+</section>
+
+<section id="elsewhere" class="card">
+  <h2><span class="num">7</span>Try it on other data on this site</h2>
+  <div class="grid2 prose">
+    <div><h3>Your own table: the ML Playground</h3><p>The <a href="../playground/#/eda">ML Playground</a> has a t-SNE view under <b>EDA</b> (open the charts and choose the <b>t-SNE</b> tab). Load one of the sample datasets or your own CSV, colour the map by the target, and see whether the classes the models must separate already sit apart. It also has PCA, so you can compare the two on the same rows.</p></div>
+    <div><h3>Word meanings: the Word Galaxy</h3><p>The <a href="../../word2vec/#galaxy">Word2vec explorer’s Word Galaxy</a> draws thousands of 300-dimensional word vectors with t-SNE and PCA. Countries, numbers, verbs and names form their own islands, a real example of neighbourhoods surviving the trip from 300 dimensions to two. The same caveats apply: the distance between the “countries” island and the “sports” island means little.</p></div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">8</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.datasets <span class="k">import</span> load_digits
+<span class="k">from</span> sklearn.decomposition <span class="k">import</span> PCA
+<span class="k">from</span> sklearn.manifold <span class="k">import</span> TSNE, trustworthiness
+X, y = load_digits(return_X_y=<span class="k">True</span>)                          <span class="c"># 1,797 images, 64 pixels each</span>
+
+X50 = PCA(n_components=<span class="s">50</span>).fit_transform(X)                  <span class="c"># common first step</span>
+Y = TSNE(n_components=<span class="s">2</span>, perplexity=<span class="s">30</span>, init=<span class="s">"pca"</span>, learning_rate=<span class="s">"auto"</span>,
+         random_state=<span class="s">0</span>).fit_transform(X50)
+print(trustworthiness(X, Y, n_neighbors=<span class="s">10</span>))                 <span class="c"># 1.0 = neighbourhoods kept</span>
+
+<span class="k">import</span> umap                                                   <span class="c"># pip install umap-learn</span>
+reducer = umap.UMAP(n_neighbors=<span class="s">15</span>, min_dist=<span class="s">0.1</span>, metric=<span class="s">"euclidean"</span>, random_state=<span class="s">0</span>)
+U = reducer.fit_transform(X)
+U_new = reducer.transform(X_new)                               <span class="c"># UMAP can place new points</span>
+
+<span class="k">import</span> matplotlib.pyplot <span class="k">as</span> plt
+plt.scatter(*Y.T, c=y, s=<span class="s">4</span>, cmap=<span class="s">"tab10"</span>); plt.title(<span class="s">"t-SNE of digits"</span>); plt.show()</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">9</span>Sources and credits</h2>
+  <div class="prose">
+    <p>The demos and code on this page were written for this site, with their own synthetic data. Section 6 reproduces, on that data, the lessons of Martin Wattenberg, Fernanda Viégas and Ian Johnson’s interactive article <a href="https://distill.pub/2016/misread-tsne/" target="_blank" rel="noopener"><i>How to Use t-SNE Effectively</i></a> (Distill, 2016), which is well worth exploring in full. The UMAP description follows the <a href="https://umap-learn.readthedocs.io/en/latest/how_umap_works.html" target="_blank" rel="noopener">umap-learn documentation, “How UMAP works”</a>.</p>
+    <p>Original papers: Hinton and Roweis 2002 (SNE); van der Maaten and Hinton 2008 (t-SNE); van der Maaten 2014 (Barnes–Hut t-SNE); McInnes, Healy and Melville 2018 (UMAP); Kobak and Berens 2019 (the art of using t-SNE for single-cell transcriptomics); Kobak and Linderman 2021 (initialisation is critical for preserving global data structure); Linderman et al. 2019 (FIt-SNE); Tenenbaum, de Silva and Langford 2000 (Isomap); Roweis and Saul 2000 (locally linear embedding); Venna and Kaski 2001 (trustworthiness).</p>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+ {"q":"What does t-SNE try to preserve?","o":["All pairwise distances","Each point’s neighbours: points close in the data should be close on the map","The directions of largest variance","The cluster sizes"],"a":1,"e":"It matches neighbour probabilities, and the KL loss punishes separating true neighbours far more than anything else, so local structure wins over global geometry."},
+ {"q":"Perplexity in t-SNE is best read as…","o":["The number of iterations","The effective number of neighbours each point pays attention to","The learning rate","The number of output dimensions"],"a":1,"e":"\\(\\text{Perp}=2^{H}\\); each point’s Gaussian width \\(\\sigma_i\\) is tuned by binary search to hit it. Typical values are 5 to 50."},
+ {"q":"Why does t-SNE use a Student-t distribution on the map instead of a Gaussian?","o":["It is faster to compute","Its heavy tail gives moderately distant points room on a 2-D page, fixing the crowding problem","It makes the loss convex","It removes the need for perplexity"],"a":1,"e":"High-dimensional spaces have much more room at medium distance than 2-D does; the \\(1/r^2\\) tail lets the map place those points farther away, so clusters separate."},
+ {"q":"Two clusters on a t-SNE plot: one looks twice as big as the other. You can conclude…","o":["The first has twice the variance","Very little: t-SNE equalises densities, so cluster sizes on the map are not meaningful","The first has twice as many points","The second is noise"],"a":1,"e":"Each point gets the same effective number of neighbours regardless of local density, so a wide cluster and a tight cluster come out similar in size."},
+ {"q":"In UMAP, what does min_dist control?","o":["How many neighbours each point has","How tightly points may be packed together on the map","The number of epochs","The distance metric in the data"],"a":1,"e":"It shapes the map-side curve \\((1+ad^{2b})^{-1}\\): small values give tight clumps, large values spread points evenly. n_neighbors sets the local versus global balance."}
+]</script>
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything runs in your browser. Previous: <a href="../clustering/">&larr; Clustering</a> · Next: <a href="../anomaly-detection/">Anomaly detection &rarr;</a></p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../dl/assets/evo.js"></script>
+<script src="../assets/unsup.js"></script>
+<script>
+(function(){
+const {$} = ML;
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+if(window.EVO) EVO.render('#evoSlot','unsup');
+const P=()=>ML.palette();
+/* ---------- high-dimensional datasets ---------- */
+const SEG7=[[1,1,1,0,1,1,1],[0,0,1,0,0,1,0],[1,0,1,1,1,0,1],[1,0,1,1,0,1,1],[0,1,1,1,0,1,0],[1,1,0,1,0,1,1],[1,1,0,1,1,1,1],[1,0,1,0,0,1,0],[1,1,1,1,1,1,1],[1,1,1,1,0,1,1]];
+function digit(d, r){ const im=new Array(64).fill(0), dx=r()<.2? r.int(3)-1 : 0, dy=0, th=1, set=(x,y,v=1)=>{ x+=dx; y+=dy; if(x>=0&&x<8&&y>=0&&y<8) im[y*8+x]=Math.max(im[y*8+x],v); };
+  const s=SEG7[d], L=2, R=5, T=1, M=3.5|0, B=6, hz=(y)=>{ for(let x=L;x<=R;x++) for(let t=0;t<th;t++) set(x,y+t); }, vt=(x,y0,y1)=>{ for(let y=y0;y<=y1;y++) for(let t=0;t<th;t++) set(x+t*(x===L?1:-1),y); };
+  if(s[0]) hz(T); if(s[1]) vt(L,T,M); if(s[2]) vt(R,T,M); if(s[3]) hz(M); if(s[4]) vt(L,M,B); if(s[5]) vt(R,M,B); if(s[6]) hz(B);
+  return im.map(v=>Math.max(0,Math.min(1,v*(0.75+0.25*r())+0.12*r.gauss()))*16); }
+const HD = {
+  digits:{name:'Digits (64-D)', make(seed){ const r=US.rng(seed), X=[], y=[]; for(let i=0;i<250;i++){ const d=i%10; X.push(digit(d,r)); y.push(d); } return {X,y,k:10}; }},
+  roll:{name:'Swiss roll (3-D)', make(seed){ const r=US.rng(seed), X=[], y=[]; for(let i=0;i<300;i++){ const t=1.5*Math.PI*(1+2*r()), h=10*r(); X.push([t*Math.cos(t), h, t*Math.sin(t)]); y.push((t-1.5*Math.PI)/(3*Math.PI)); } return {X,y,cont:true}; }},
+  blobs:{name:'5 clusters (20-D)', make(seed){ const r=US.rng(seed), X=[], y=[], M=[...Array(5)].map(()=>[...Array(20)].map(()=>4*r.gauss())); for(let i=0;i<250;i++){ const k=i%5; X.push(M[k].map(m=>m+r.gauss()*(0.6+0.35*k))); y.push(k); } return {X,y,k:5}; }},
+  noise:{name:'Pure noise (10-D)', make(seed){ const r=US.rng(seed), X=[], y=[]; for(let i=0;i<220;i++){ X.push([...Array(10)].map(()=>r.gauss())); y.push(0); } return {X,y,k:1}; }}
+};
+const segOf=(id,cur,cb)=>{ const el=$('#'+id); el.innerHTML=Object.entries(HD).map(([k,v])=>`<button data-v="${k}"${k===cur?' class="on"':''}>${v.name}</button>`).join(''); ML.bindSeg(el,cb); if(ML.tileRow) ML.tileRow(el); };
+function colorOf(D, i){ const pal=P(); if(D.cont){ const t=D.y[i]; const a=ML.rgb(pal.c3), b=ML.rgb(pal.c4), c=ML.rgb(pal.c1); const m=t<.5? [a,c,t*2] : [c,b,(t-.5)*2]; return `rgb(${m[0].map((v,j)=>Math.round(v+(m[1][j]-v)*m[2])).join(',')})`; } return D.k===1? pal.c1 : US.col(D.y[i]); }
+/* draw a 2-D layout, scaled to fit the plot */
+function drawMap(plot, Y, D, o={}){ const pal=P(); plot.clear(); const xs=Y.map(p=>p[0]), ys=Y.map(p=>p[1]); let x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys); const pad=.08*Math.max(x1-x0,y1-y0,1e-9);
+  plot.setBounds({x0:x0-pad,x1:x1+pad,y0:y0-pad,y1:y1+pad}); const c=plot.ctx;
+  if(o.edges){ c.save(); o.edges.forEach(([i,j,w])=>{ c.globalAlpha=.08+.35*w; c.strokeStyle=pal.ink; c.lineWidth=.7; c.beginPath(); c.moveTo(plot.X(Y[i][0]),plot.Y(Y[i][1])); c.lineTo(plot.X(Y[j][0]),plot.Y(Y[j][1])); c.stroke(); }); c.restore(); }
+  c.save(); Y.forEach((p,i)=>{ c.beginPath(); c.arc(plot.X(p[0]),plot.Y(p[1]),o.r||3.4,0,7); c.fillStyle=colorOf(D,i); c.fill(); c.lineWidth=.8; c.strokeStyle=pal.dark?'#0b0d19':'#fff'; c.stroke(); });
+  if(o.ring!=null && Y[o.ring]){ c.lineWidth=2.5; c.strokeStyle=pal.ink; c.beginPath(); c.arc(plot.X(Y[o.ring][0]),plot.Y(Y[o.ring][1]),9,0,7); c.stroke(); }
+  if(D.k>1 && !D.cont && o.labels){ const cen={}; Y.forEach((p,i)=>{ const k=D.y[i]; (cen[k]=cen[k]||[0,0,0]); cen[k][0]+=p[0]; cen[k][1]+=p[1]; cen[k][2]++; }); c.font='700 13px Inter,system-ui'; c.textAlign='center'; for(const k in cen){ const X=plot.X(cen[k][0]/cen[k][2]), Yp=plot.Y(cen[k][1]/cen[k][2]); c.lineWidth=4; c.strokeStyle=pal.bg; c.strokeText(k,X,Yp+4); c.fillStyle=pal.ink; c.fillText(k,X,Yp+4); } }
+  c.restore(); if(o.title){ c.save(); c.font='600 12.5px Inter,system-ui'; c.lineWidth=4; c.strokeStyle=pal.bg; c.strokeText(o.title,8,18); c.fillStyle=pal.ink; c.fillText(o.title,8,18); c.restore(); } }
+
+/* ---------- 1 · PCA vs t-SNE vs UMAP ---------- */
+let wId='roll'; const wGal=$('#wGal'); wGal.innerHTML=['PCA','t-SNE','UMAP'].map((t,i)=>`<figure><div class="plot sq" id="w${i}"></div><figcaption><b>${t}</b><span id="w${i}s"></span></figcaption></figure>`).join('');
+const WP=[0,1,2].map(i=>new ML.Plot('#w'+i)); let wJob=0;
+function runW(){ const job=++wJob, D=HD[wId].make(1), Y0=US.pca2(D.X); const sc=Math.max(...Y0.map(p=>Math.hypot(p[0],p[1])))||1;
+  drawMap(WP[0],Y0,D,{r:2.6}); $('#w0s').textContent='kept '+(100*US.knnKeep(D.X,Y0,10)).toFixed(0)+'%';
+  const T=US.Tsne(D.X,{perplexity:30, init:Y0.map(p=>[p[0]/sc*1e-2,p[1]/sc*1e-2])}), U=US.Umap(D.X,{nNeighbors:15,minDist:.1,init:Y0.map(p=>[10*p[0]/sc,10*p[1]/sc])});
+  $('#w1s').textContent='…'; $('#w2s').textContent='…'; let it=0;
+  const tick=()=>{ if(job!==wJob) return; for(let s=0;s<12;s++){ if(T.it<500) T.step(); if(U.epoch<U.total) U.step(); } it++; drawMap(WP[1],T.Y,D,{r:2.6}); drawMap(WP[2],U.Y,D,{r:2.6});
+    if(T.it<500 || U.epoch<U.total) requestAnimationFrame(tick); else { $('#w1s').textContent='kept '+(100*US.knnKeep(D.X,T.Y,10)).toFixed(0)+'%'; $('#w2s').textContent='kept '+(100*US.knnKeep(D.X,U.Y,10)).toFixed(0)+'%'; } };
+  requestAnimationFrame(tick); }
+segOf('wData', wId, v=>{ wId=v; runW(); });
+
+/* ---------- 2 · t-SNE live ---------- */
+const pT=new ML.Plot('#pT'), pTl=new ML.Plot('#pTl',{equal:false}); let tId='digits', tPer=30, tLr=100, TD=null, TS=null, tOn=false, tKL=[], tSel=0, tSeed=3;
+function tStart(){ TD=HD[tId].make(1); TS=US.Tsne(TD.X,{perplexity:Math.min(tPer,TD.X.length/3-1), lr:tLr, seed:tSeed}); tKL=[]; tSel=Math.min(tSel,TD.X.length-1); drawT(); drawPerp(); }
+function drawT(){ const pal=P(); drawMap(pT,TS.Y,TD,{ring:tSel, labels:TS.it>150, title: TS.it? 'iteration '+TS.it+(TS.it<100?' · early exaggeration':'') : 'press Run'});
+  if(tKL.length>1) ML.chart(pTl,[{pts:tKL.map((v,i)=>[i+1,v]),color:pal.c1,width:2.2}],{x0:1,x1:Math.max(100,tKL.length),xl:'iteration',vline:100,yfmt:v=>v.toFixed(1)}); else pTl.clear();
+  $('#tPos').textContent = tOn? 'running…' : TS.it>=1000? 'done' : '';
+  $('#tStats').innerHTML=stat('c1',tKL.length? tKL[tKL.length-1].toFixed(3):'–','KL(P‖Q) (with exaggeration early on)')+stat('c3',TS.it,'iterations')+stat('c5',TS.it>=300? (100*US.knnKeep(TD.X,TS.Y,10)).toFixed(0)+'%':'–','neighbours kept (after 300)'); }
+function tLoop(){ if(!tOn) return; for(let s=0;s<6;s++){ tKL.push(TS.step()); } drawT(); if(TS.it>=1000){ tOn=false; $('#tRun').textContent='Run'; drawT(); return; } requestAnimationFrame(tLoop); }
+$('#tRun').addEventListener('click',()=>{ tOn=!tOn; $('#tRun').textContent=tOn?'Pause':'Run'; if(tOn) requestAnimationFrame(tLoop); else drawT(); });
+$('#tNew').addEventListener('click',()=>{ tSeed++; tStart(); });
+segOf('tData', tId, v=>{ tId=v; tStart(); uStart(); });
+ML.bindRange('tP', v=>{ tPer=v; tStart(); }); ML.bindRange('tLr', v=>{ tLr=v; tStart(); });
+pT.pointer({down:(x,y)=>{ const i=pT.nearest(TS.Y,pT.X(x),pT.Y(y),18); if(i>=0){ tSel=i; drawT(); drawPerp(); } }});
+
+/* ---------- 3 · perplexity ---------- */
+const pPp=new ML.Plot('#pPp',{equal:false});
+function drawPerp(){ const pal=P(), i=tSel, X=TD.X, n=X.length, {cond,sigma}=US.tsneP(X,Math.min(tPer,n/3-1)), row=cond[i];
+  const ds=X.map(x=>Math.sqrt(US.d2(x,X[i]))), ord=[...Array(n).keys()].filter(j=>j!==i).sort((a,b)=>ds[a]-ds[b]), dmax=ds[ord[Math.min(n-2,Math.round(n*.6))]], pm=Math.max(...row)*1.08;
+  const fr=ML.chart(pPp,[{pts:[[0,0],[dmax,pm]],color:'transparent',noline:true}],{x0:0,x1:dmax,y0:0,y1:pm,xl:'distance from the chosen point in the original space',yfmt:v=>v.toFixed(3)});
+  const c=pPp.ctx; c.save(); ord.forEach(j=>{ if(ds[j]>dmax) return; c.fillStyle=(!TD.cont && TD.k>1 && TD.y[j]===TD.y[i])? pal.c1 : pal.muted; c.globalAlpha=.85; c.fillRect(fr.fx(ds[j])-1.2,fr.fy(row[j]),2.4,fr.fy(0)-fr.fy(row[j])); }); c.restore();
+  const H=-row.reduce((s,p)=>s+(p>1e-300?p*Math.log2(p):0),0), same=(!TD.cont&&TD.k>1)? ord.slice(0,Math.round(Math.pow(2,H))).filter(j=>TD.y[j]===TD.y[i]).length/Math.round(Math.pow(2,H)) : NaN;
+  $('#pStats').innerHTML=stat('c1',sigma[i].toFixed(2),'σᵢ for this point')+stat('c3',Math.pow(2,H).toFixed(1),'effective neighbours 2^H')+stat('c4',sigma.reduce((a,b)=>a+b,0)/n>0? (Math.min(...sigma).toFixed(2)+'–'+Math.max(...sigma).toFixed(2)):'','σ range over all points')+stat('c5',isNaN(same)?'–':(100*same).toFixed(0)+'%','of its top neighbours in the same group'); }
+
+/* ---------- 4 · crowding ---------- */
+const pCr=new ML.Plot('#pCr',{equal:false}), pKer=new ML.Plot('#pKer',{equal:false}); let crD=2;
+function drawCr(){ const pal=P(), r=US.rng(7), N=2000, B=40, h=new Array(B).fill(0); for(let i=0;i<N;i++){ const u=Math.pow(r(),1/crD); h[Math.min(B-1,Math.floor(u*B))]++; }
+  const fr=ML.chart(pCr,[{pts:[[0,0],[1,Math.max(...h)*1.1]],color:'transparent',noline:true}],{x0:0,x1:1,y0:0,y1:Math.max(...h)*1.1,xl:'distance (1 = farthest)',yfmt:v=>v.toFixed(0)}); const c=pCr.ctx; c.save(); c.fillStyle=pal.c1; c.globalAlpha=.7; h.forEach((v,b)=>c.fillRect(fr.fx(b/B)+1,fr.fy(v),fr.fx(1/B)-fr.fx(0)-2,fr.fy(0)-fr.fy(v))); c.restore();
+  ML.chart(pKer,[{pts:[...Array(121).keys()].map(i=>[i/20,Math.exp(-((i/20)**2))]),color:pal.c3,width:2.6},{pts:[...Array(121).keys()].map(i=>[i/20,1/(1+(i/20)**2)]),color:pal.c4,width:2.6}],{x0:0,x1:6,y0:0,y1:1.05,xl:'distance  ·  blue: Gaussian e^(−r²)   orange: Student-t 1/(1+r²)'});
+  const med=Math.pow(.5,1/crD); $('#crStats').innerHTML=stat('c1',med.toFixed(3),'median distance')+stat('c3',(100*(1-Math.pow(.9,crD))).toFixed(1)+'%','points beyond 0.9')+stat('c4',(1/(1+9)/Math.exp(-9)).toFixed(0)+'×','t-kernel vs Gaussian at r = 3'); }
+ML.bindRange('crD', v=>{ crD=v; drawCr(); }); pCr.onResize=pKer.onResize=()=>drawCr();
+
+/* ---------- 5 · UMAP ---------- */
+const pU=new ML.Plot('#pU'), pUc=new ML.Plot('#pUc',{equal:false}); let uK=15, uM=.1, UD=null, UM=null, uOn=false;
+function uStart(){ UD=HD[tId].make(1); const Y0=US.pca2(UD.X), sc=Math.max(...Y0.map(p=>Math.hypot(p[0],p[1])))||1; UM=US.Umap(UD.X,{nNeighbors:Math.min(uK,UD.X.length-1), minDist:uM, init:Y0.map(p=>[10*p[0]/sc,10*p[1]/sc])}); drawU(); }
+function drawU(){ const pal=P(); drawMap(pU,UM.Y,UD,{edges:$('#uG').checked? UM.E : null, labels:UM.epoch>80, title: UM.epoch? 'epoch '+UM.epoch+' / '+UM.total : 'PCA start · press Run'});
+  ML.chart(pUc,[{pts:[...Array(121).keys()].map(i=>[i/40,1/(1+UM.a*Math.pow(i/40,2*UM.b))]),color:pal.c1,width:2.6},{pts:[...Array(121).keys()].map(i=>[i/40,1/(1+(i/40)**2)]),color:pal.c4,width:1.8,dash:[5,4]}],{x0:0,x1:3,y0:0,y1:1.05,xl:'distance on the map  ·  purple: UMAP curve   dashed: t-SNE',vline:uM});
+  $('#uPos').textContent = uOn? 'running…' : '';
+  $('#uStats').innerHTML=stat('c1',UM.a.toFixed(2)+', '+UM.b.toFixed(2),'fitted a, b')+stat('c3',UM.E.length,'graph edges')+stat('c5',UM.epoch>=UM.total? (100*US.knnKeep(UD.X,UM.Y,10)).toFixed(0)+'%':'–','neighbours kept (when done)'); }
+function uLoop(){ if(!uOn) return; for(let s=0;s<3;s++) if(UM.epoch<UM.total) UM.step(); drawU(); if(UM.epoch>=UM.total){ uOn=false; $('#uRun').textContent='Run'; drawU(); return; } requestAnimationFrame(uLoop); }
+$('#uRun').addEventListener('click',()=>{ uOn=!uOn; $('#uRun').textContent=uOn?'Pause':'Run'; if(uOn) requestAnimationFrame(uLoop); else drawU(); });
+$('#uNew').addEventListener('click',()=>{ uOn=false; $('#uRun').textContent='Run'; uStart(); }); $('#uG').addEventListener('change',drawU);
+ML.bindRange('uK', v=>{ uK=v; uOn=false; $('#uRun').textContent='Run'; uStart(); }); ML.bindRange('uM', v=>{ uM=v; uOn=false; $('#uRun').textContent='Run'; uStart(); }, v=>v.toFixed(2));
+
+/* ---------- 6 · reading the map ---------- */
+const PERPS=[2,5,30,80]; $('#rGal').innerHTML=PERPS.map((p,i)=>`<figure><div class="plot sq" id="r${i}"></div><figcaption><b>perplexity ${p}</b><span id="r${i}s"></span></figcaption></figure>`).join(''); const RP=PERPS.map((_,i)=>new ML.Plot('#r'+i)); let rJob=0;
+function rData(){ const r=US.rng(21), X=[], y=[], M=[[0],[10],[40]].map(([o])=>[...Array(20)].map((_,j)=>j===0? o : 0)), S=[.5,1.2,3]; for(let i=0;i<180;i++){ const k=i%3; X.push(M[k].map(m=>m+S[k]*r.gauss())); y.push(k); } return {X,y,k:3}; }
+function runR(){ const job=++rJob, D=rData(); let q=0; $('#rPos').textContent='true spreads 0.5 : 1.2 : 3 · true gaps 10 and 30';
+  const next=()=>{ if(job!==rJob || q>=PERPS.length) return; const T=US.Tsne(D.X,{perplexity:PERPS[q],seed:5}), i=q; const tick=()=>{ if(job!==rJob) return; for(let s=0;s<25;s++) T.step(); drawMap(RP[i],T.Y,D,{r:2.6}); if(T.it<600) requestAnimationFrame(tick); else { $('#r'+i+'s').textContent=''; q++; next(); } }; requestAnimationFrame(tick); };
+  RP.forEach(p=>p.clear()); next(); }
+$('#rRun').addEventListener('click',runR);
+
+/* first draw: after layout settles */
+tStart(); uStart(); drawCr();
+/* the two heavier galleries start when they scroll into view */
+const lazy=(sel,fn)=>{ const el=$(sel); if(!('IntersectionObserver' in window)){ fn(); return; } const io=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)){ io.disconnect(); fn(); } },{rootMargin:'200px'}); io.observe(el); };
+lazy('#wGal',runW); lazy('#rGal',runR);
+pT.onResize=()=>drawT(); pTl.onResize=()=>drawT(); pPp.onResize=()=>drawPerp(); pU.onResize=pUc.onResize=()=>drawU();
+ML.onTheme && ML.onTheme(()=>{ drawT(); drawPerp(); drawCr(); drawU(); });
+})();
+</script>
+<script>ML.nav('tsne-umap'); ML.renderMath(document.body);</script>
+</body>
+</html>

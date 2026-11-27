@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LayoutLMv2</title>
+<meta name="description" content="LayoutLMv2 reads scanned documents such as receipts, invoices and forms using three things at once: the words, where each word sits on the page, and the page image. Interactive 0–1000 layout grid, spatial-aware attention you can probe, the three pre-training jobs, and key-field extraction with BIO tags.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP &middot; Multimodal (part 5 of 5)</p>
+  <h1>LayoutLMv2: <span class="grad">reading documents with text, layout and image</span></h1>
+  <p class="lede">A receipt is not a sentence. "13.55" means nothing until you notice that it sits on the same line as "TOTAL", in bold, at the bottom of the page. The models in parts 1 to 4 paired photos with captions. LayoutLMv2 (Xu et al., 2021) pairs the <i>text</i> of a scanned page with <i>where</i> each word is and <i>what the page looks like</i>, and it became a standard model for document understanding. This page builds its input, probes its attention, walks through how it is pre-trained, and uses it to pull fields out of documents.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#page">1 · From a page to tokens</a><a href="#spatial">2 · Spatial-aware attention</a><a href="#pre">3 · Pre-training</a><a href="#extract">4 · Pulling out fields</a><a href="#family">5 · The family</a><a href="#py">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is LayoutLMv2, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>Businesses process millions of receipts, invoices, forms and contracts. The task is called <a class="term" data-t="document-ai">document AI</a>: given a scanned page, find the total, the date, the customer's name, the line items. An <a class="term" data-t="ocr">OCR</a> engine can already turn the scan into words, each with a <a class="term" data-t="bounding-box">bounding box</a>. But if we feed those words to BERT as one long sentence, we throw away the layout, and the layout carries most of the meaning: a value is usually to the right of, or just below, its label.</p>
+      <h3>The idea</h3><p><a class="term" data-t="layoutlm">LayoutLM</a> (2020) added a <a class="term" data-t="layout-embedding">2-D position embedding</a> to every word, built from its box. <a class="term" data-t="layoutlmv2">LayoutLMv2</a> (2021) goes further in three ways. It puts the <b>page image</b> into the same transformer as <b>visual tokens</b>; it adds <a class="term" data-t="spatial-attention">spatial-aware self-attention</a>, so attention scores depend on the relative position of two words on the page; and it is pre-trained with jobs that tie text and image together: <a class="term" data-t="mvlm">masked visual-language modelling</a>, <a class="term" data-t="tia">text–image alignment</a> and <a class="term" data-t="tim">text–image matching</a>.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Run OCR: words plus their boxes, scaled to a 0–1000 grid.</li><li>Turn the page image into 49 visual tokens with a CNN.</li><li>Give every token a 1-D position, a 2-D layout embedding and a segment.</li><li>Run a transformer whose attention knows distances on the page.</li><li>Fine-tune: for example, tag each word as part of a field with <a class="term" data-t="bio-tagging">BIO tags</a>.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Hand someone a restaurant bill in a language they cannot read, and ask for the total. They still find it at once: bottom of the page, the biggest number, in bold, at the end of the line that starts with a short word. They used layout and appearance, not meaning. LayoutLMv2 is built to use all three: meaning, layout and appearance.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Forms, receipts, invoices, tables</li><li>Robust to odd OCR reading order</li><li>One model for extraction, classification and document question answering</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Needs an OCR engine first, and inherits its mistakes</li><li>At most 512 text tokens per page</li><li>The CNN backbone (detectron2) is heavy to install</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="document-ai">Document AI</a><a class="term" data-t="ocr">OCR</a><a class="term" data-t="bounding-box">Bounding box</a><a class="term" data-t="layout-embedding">2-D position embedding</a><a class="term" data-t="spatial-attention">Spatial-aware attention</a><a class="term" data-t="mvlm">MVLM</a><a class="term" data-t="tia">Text–image alignment</a><a class="term" data-t="tim">Text–image matching</a><a class="term" data-t="bio-tagging">BIO tagging</a><a class="term" data-t="segment-embedding">Segment embedding</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="page" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>From a page to tokens</h2>
+    <p class="sub">Each word the OCR found has a box. Tap a word to see the numbers LayoutLMv2 actually receives for it. Switch on the 7×7 grid to see the visual tokens, and tap a cell.</p>
+    <div class="plot docv" id="pgDoc"></div>
+    <div class="ctl"><div class="seg" id="pgKey"><button data-v="receipt" class="on">Receipt</button><button data-v="invoice">Invoice</button><button data-v="form">Form</button></div></div>
+    <div class="ctl"><div class="seg" id="pgView"><button data-v="words" class="on">Text tokens</button><button data-v="grid">Visual tokens</button></div></div>
+    <div class="stats" id="pgStats"></div>
+    <div class="note" id="pgNote"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Start with what the OCR engine gives us: words \(w_1,\dots,w_n\), and for each one a box with corners \((x_0,y_0)\) (top left) and \((x_1,y_1)\) (bottom right), measured in pixels. Pages come in every size, so the first step is to make the numbers comparable. Each coordinate is divided by the page width or height and multiplied by 1000:</p>
+      <div class="mathbox c1">$$\tilde x=\Big\lfloor 1000\,\frac{x}{W_{\text{page}}}\Big\rfloor,\qquad \tilde y=\Big\lfloor 1000\,\frac{y}{H_{\text{page}}}\Big\rfloor .$$</div>
+      <p>Now every page lives on the same 0–1000 grid, whatever its resolution. From the box we also take the width \(w=\tilde x_1-\tilde x_0\) and height \(h=\tilde y_1-\tilde y_0\).</p>
+      <p><b>Text tokens.</b> As in BERT, each word piece gets a token embedding, a 1-D position (its place in the OCR reading order) and a <a class="term" data-t="segment-embedding">segment embedding</a>, all vectors of the model's width \(d\):</p>
+      <div class="mathbox c3">$$t_i=\operatorname{TokEmb}(w_i)+\operatorname{PosEmb1D}(i)+\operatorname{SegEmb}([A]).$$</div>
+      <p><b>Visual tokens.</b> The page image is resized to \(224\times224\) and passed through a CNN (a ResNeXt with a feature pyramid). Its output feature map is average-pooled to a \(7\times7\) grid, giving 49 vectors \(f_1,\dots,f_{49}\), one per cell. A linear layer maps each to width \(d\):</p>
+      <div class="mathbox c4">$$v_j=\operatorname{Proj}(f_j)+\operatorname{PosEmb1D}(j)+\operatorname{SegEmb}([C]).$$</div>
+      <p>The segment \([C]\) tells the model "this is a picture token". Unlike the frozen detector in VisualBERT, this CNN is trained together with the rest of the model.</p>
+      <p><b>Layout.</b> Every token, text or visual, also gets a <a class="term" data-t="layout-embedding">2-D layout embedding</a> from its box (a visual token uses the box of its grid cell). Two lookup tables turn coordinates into vectors, one for the horizontal numbers and one for the vertical ones, and the results are concatenated:</p>
+      <div class="mathbox c2">$$\ell_i=\operatorname{Concat}\big(\operatorname{PosEmb2D}_x(x_0,x_1,w),\ \operatorname{PosEmb2D}_y(y_0,y_1,h)\big).$$</div>
+      <p>The layout embedding is added to both kinds of token, and the sequence is the 49 visual tokens followed by the text: \([v_1,\dots,v_{49},t_{\text{[CLS]}},t_1,\dots,t_n,t_{\text{[SEP]}}]+\ell\). Special tokens such as [CLS] get the empty box \((0,0,0,0)\).</p>
+      <div class="algo" data-anim="lmv2in"><h5 class="algo-h">Algorithm: building LayoutLMv2's input from a page</h5><ol>
+        <li><span class="kw">input</span> page image \(I\) of size \(W\times H\); OCR words \(w_1..w_n\) with pixel boxes</li>
+        <li><span class="kw">for</span> each box: \((x_0,y_0,x_1,y_1)\leftarrow\lfloor 1000\cdot(x_0/W,\,y_0/H,\,x_1/W,\,y_1/H)\rfloor\); \(w\leftarrow x_1-x_0\), \(h\leftarrow y_1-y_0\)</li>
+        <li>text tokens: \(t_i\leftarrow\operatorname{TokEmb}(w_i)+\operatorname{PosEmb1D}(i)+\operatorname{SegEmb}([A])\)</li>
+        <li>\(F\leftarrow\operatorname{CNN}(\operatorname{resize}(I,224))\); average-pool to \(7\times7\) <span class="cm">49 cells</span></li>
+        <li>visual tokens: \(v_j\leftarrow\operatorname{Proj}(F_j)+\operatorname{PosEmb1D}(j)+\operatorname{SegEmb}([C])\)</li>
+        <li><span class="kw">for</span> every token: \(\ell\leftarrow\operatorname{Concat}(\operatorname{PosEmb2D}_x(x_0,x_1,w),\operatorname{PosEmb2D}_y(y_0,y_1,h))\) <span class="cm">a visual token uses its cell's box</span></li>
+        <li>\(X\leftarrow[v_1..v_{49},t_{\text{[CLS]}},t_1..t_n,t_{\text{[SEP]}}]+\ell\)</li>
+        <li><span class="kw">return</span> \(X\) <span class="cm">the transformer's input</span></li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: why a lookup table for coordinates, and why 1000</summary><div>
+        <p>A coordinate is an integer from 0 to 1000, so it can index a learned table of 1001 vectors, exactly as a word id indexes the word-embedding table. The model then learns what "near the top" or "right edge" means instead of being told. Using a 0–1000 grid keeps the table small while still resolving positions to a tenth of a percent of the page, which is finer than a line of text.</p>
+        <p>In the original LayoutLM the four corner coordinates each had their own table and the four vectors were summed. LayoutLMv2 splits the width \(d\) into an \(x\) part and a \(y\) part, looks up \(x_0,x_1,w\) in the \(x\) tables and \(y_0,y_1,h\) in the \(y\) tables, and concatenates. Either way, two words on the same line share their \(y\) vectors, and two numbers in the same right-aligned column share their \(x_1\) vector: precisely the regularities that make a table readable.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="spatial" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Spatial-aware self-attention</h2>
+    <p class="sub">Tap a word to make it the query. Each box is shaded by how much attention the query gives it. Compare plain 1-D attention, LayoutLM's absolute 2-D positions, and LayoutLMv2's relative spatial bias.</p>
+    <div class="plot docv" id="atDoc"></div>
+    <div class="ctl"><div class="seg" id="atKey"><button data-v="receipt" class="on">Receipt</button><button data-v="invoice">Invoice</button><button data-v="form">Form</button></div></div>
+    <div class="ctl"><div class="seg" id="atMode"><button data-v="1d">1-D only (BERT)</button><button data-v="abs">+ 2-D positions (v1)</button><button data-v="rel" class="on">+ spatial bias (v2)</button></div></div>
+    <div id="atBars"></div>
+    <div class="note" id="atNote"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Ordinary self-attention scores a pair of tokens by their content only. For a query token \(i\) and a key token \(j\), with vectors \(x_i,x_j\):</p>
+      <div class="mathbox c1">$$\alpha_{ij}=\frac{(x_iW^Q)(x_jW^K)^{\top}}{\sqrt{d_{\text{head}}}}.$$</div>
+      <p>Position enters only through the embeddings that were added at the input. On a document that is a weak signal: whether "13.55" belongs to "TOTAL" depends on their <i>relative</i> position (same line, to the right), not on where each one is in absolute terms.</p>
+      <p>LayoutLMv2 therefore adds three learned <b>bias terms</b> to every score, one for the distance in reading order and one for each axis on the page:</p>
+      <div class="mathbox c2">$$\alpha'_{ij}=\alpha_{ij}+b^{(1D)}_{\,j-i}+b^{(2D_x)}_{\,x_j-x_i}+b^{(2D_y)}_{\,y_j-y_i}.$$</div>
+      <p>Each \(b\) is a small table indexed by a (bucketed) distance, with separate values per attention head, shared across layers. Then attention proceeds as usual:</p>
+      <ol class="steps2">
+        <li>\(a_{ij}=\dfrac{e^{\alpha'_{ij}}}{\sum_k e^{\alpha'_{ik}}}\): softmax over all tokens \(j\), so each row sums to 1.</li>
+        <li>\(h_i=\sum_j a_{ij}\,(x_jW^V)\): the output is a weighted average of the value vectors.</li>
+      </ol>
+      <p>Look at what the bias does in the demo. With 1-D only, "TOTAL" spreads its attention along the reading order. With the spatial bias, it concentrates on the words on its own line, and in particular on the amount to its right. A head can learn "look along my row" (large \(b^{(2D_y)}\) near 0), "look down my column" (large \(b^{(2D_x)}\) near 0), or both.</p>
+      <div class="algo" data-anim="lmv2attn"><h5 class="algo-h">Algorithm: spatial-aware self-attention (one head)</h5><ol>
+        <li><span class="kw">input</span> token vectors \(x_1..x_N\) with reading positions and box corners; weights \(W^Q,W^K,W^V\); bias tables \(b^{(1D)},b^{(2D_x)},b^{(2D_y)}\)</li>
+        <li>\(q_i\leftarrow x_iW^Q,\ k_j\leftarrow x_jW^K,\ v_j\leftarrow x_jW^V\)</li>
+        <li>\(\alpha_{ij}\leftarrow q_i\cdot k_j/\sqrt{d_{\text{head}}}\) <span class="cm">what the words say</span></li>
+        <li>\(\alpha'_{ij}\leftarrow\alpha_{ij}+b^{(1D)}_{j-i}+b^{(2D_x)}_{x_j-x_i}+b^{(2D_y)}_{y_j-y_i}\) <span class="cm">where they are</span></li>
+        <li>\(a_{i\cdot}\leftarrow\operatorname{softmax}_j(\alpha'_{ij})\)</li>
+        <li>\(h_i\leftarrow\sum_j a_{ij}v_j\)</li>
+        <li><span class="kw">return</span> \(h_1..h_N\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: why relative biases beat absolute positions</summary><div>
+        <p>With absolute 2-D embeddings (LayoutLM v1) the score \((x_i+\ell_i)W^Q\big((x_j+\ell_j)W^K\big)^\top\) contains a cross term \(\ell_iW^QW^{K\top}\ell_j^\top\). It can, in principle, learn "same row", but it must learn it separately for every pair of absolute rows. A relative bias \(b_{y_j-y_i}\) states the rule once for all rows: same-row pairs get the same boost wherever they are on the page. That is translation invariance, the same reason convolutions share weights across positions.</p>
+        <p>Distances are bucketed (fine buckets near zero, coarse ones far away), as in T5's relative position bias, so the table stays small. The biases are computed once per forward pass and added to every layer's scores.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="pre" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Pre-training: three jobs</h2>
+    <p class="sub">Pick a job and press <b>New sample</b>. The page image is what the CNN sees; the chips below are the text tokens in reading order, with each token's training target underneath.</p>
+    <div class="plot docv" id="ptDoc"></div>
+    <div class="ctl"><div class="seg" id="ptJob"><button data-v="mvlm" class="on">Masked words</button><button data-v="tia">Text–image alignment</button><button data-v="tim">Text–image matching</button></div></div>
+    <div class="btnrow"><button class="btn primary" id="ptNew">New sample</button><div class="seg" id="ptKey"><button data-v="receipt" class="on">Receipt</button><button data-v="invoice">Invoice</button><button data-v="form">Form</button></div></div>
+    <div id="ptToks"></div>
+    <div class="note" id="ptNote"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>LayoutLMv2 was pre-trained on about 11 million scanned pages (the IIT-CDIP collection) with no labels at all: just the images and their OCR output. Three jobs turn that raw material into a learning signal.</p>
+      <p><b>1. Masked visual-language modelling (<a class="term" data-t="mvlm">MVLM</a>).</b> Hide about 15% of the words and predict them, as in BERT's masked language modelling, but the model keeps each hidden word's <i>box</i>. To guess "13.55" it may use "TOTAL" to the left and the column of prices above. One catch: the word is still visible in the page image, so its pixels are blacked out too, otherwise the CNN would simply read the answer.</p>
+      <div class="mathbox c1">$$\mathcal L_{\text{MVLM}}=-\sum_{i\in\text{masked}}\log p\big(w_i\mid h_i\big).$$</div>
+      <p><b>2. Text–image alignment (<a class="term" data-t="tia">TIA</a>).</b> Pick some text lines at random and cover them in the image (the text tokens stay). For every token that is not masked, predict whether its line is covered. To answer, the model has to find the token's region in the picture, which teaches it which pixels belong to which word.</p>
+      <div class="mathbox c3">$$\mathcal L_{\text{TIA}}=-\sum_{i\notin\text{masked}}\log p\big(c_i\mid h_i\big),\qquad c_i\in\{\text{Covered},\text{Not covered}\}.$$</div>
+      <p><b>3. Text–image matching (<a class="term" data-t="tim">TIM</a>).</b> For some samples the image is swapped for another page's, or left out; the output above [CLS] predicts whether text and image belong together. This is the page-level version of VisualBERT's caption matching.</p>
+      <div class="mathbox c2">$$\mathcal L=\mathcal L_{\text{MVLM}}+\mathcal L_{\text{TIA}}+\mathcal L_{\text{TIM}}.$$</div>
+      <div class="algo" data-anim="lmv2pt"><h5 class="algo-h">Algorithm: LayoutLMv2 pre-training step</h5><ol>
+        <li><span class="kw">input</span> a page: image \(I\), OCR words \(w_1..w_n\) with boxes</li>
+        <li>with small probability replace \(I\) by another page's image, or drop it <span class="cm">TIM target: not matched</span></li>
+        <li>mask 15% of the words; black out their boxes in \(I\) <span class="cm">so the pixels cannot leak the answer</span></li>
+        <li>cover a few random text lines in \(I\) <span class="cm">TIA targets</span></li>
+        <li>\(H\leftarrow\operatorname{LayoutLMv2}(\text{text},\text{layout},I)\)</li>
+        <li>\(\mathcal L_{\text{MVLM}}\leftarrow\) cross-entropy of each masked word from \(h_i\)</li>
+        <li>\(\mathcal L_{\text{TIA}}\leftarrow\) covered or not, for each unmasked word, from \(h_i\)</li>
+        <li>\(\mathcal L_{\text{TIM}}\leftarrow\) matched or not, from \(h_{\text{[CLS]}}\)</li>
+        <li>update all weights, the CNN included, to reduce \(\mathcal L_{\text{MVLM}}+\mathcal L_{\text{TIA}}+\mathcal L_{\text{TIM}}\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: what each job forces the model to learn</summary><div>
+        <p>MVLM alone could be solved from the text and layout and would leave the image unused. TIA is the job that makes the image necessary: no amount of text tells you which lines were covered in the picture. It aligns each word with its pixels at a fine grain. TIM works at the coarse grain: does this text belong to this page at all? When the image is swapped or dropped, every TIA target is set to Covered, so the two jobs stay consistent.</p>
+        <p>The paper's ablations found each job helps on the downstream tasks, and that the spatial-aware attention adds a further gain on top. Pre-training the CNN jointly, rather than freezing an ImageNet model, also mattered: document images look nothing like natural photos.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="extract" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Fine-tuning: pulling fields out of a document</h2>
+    <p class="sub">Coloured boxes are the predicted fields; a red outline marks a mistake. The chips show the tokens in the order the OCR returned them. Switch the OCR order to "column by column" and watch which model breaks.</p>
+    <div class="plot docv" id="exDoc"></div>
+    <div class="ctl"><div class="seg" id="exKey"><button data-v="receipt" class="on">Receipt</button><button data-v="invoice">Invoice</button><button data-v="form">Form</button></div></div>
+    <div class="ctl"><div class="seg" id="exModel"><button data-v="text">Text only</button><button data-v="layout" class="on">Text + layout</button></div></div>
+    <div class="ctl"><div class="seg" id="exOrder"><button data-v="row" class="on">OCR order: line by line</button><button data-v="col">Column by column</button></div></div>
+    <div class="stats" id="exStats"></div>
+    <div id="exToks"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The most common use is <b>key information extraction</b>: find the fields a business needs, such as company, date, items, prices and total. It is framed as <a class="term" data-t="bio-tagging">BIO tagging</a>, one label per token. B-TOTAL means "the first word of a total", I-TOTAL "a later word of the same total", and O "not part of any field". With \(K\) field types there are \(2K+1\) labels.</p>
+      <p>A single linear layer on top of the pre-trained model does the tagging:</p>
+      <div class="mathbox c1">$$p(y_i=c\mid\text{page})=\operatorname{softmax}\big(W h_i+b\big)_c,\qquad \mathcal L=-\sum_i\log p(y_i\mid\text{page}).$$</div>
+      <p>Fine-tuning trains \(W,b\) and adjusts all the pre-trained weights, using a few hundred labelled pages (FUNSD has 199 forms; CORD has 1,000 receipts).</p>
+      <p>Why does layout matter so much? Try the demo. The "text only" model here reads tokens in OCR order and decides from the neighbouring words, as a sequence model does. When the OCR returns the page line by line, the price follows its item and the total follows "TOTAL", and it does well. Real OCR engines often read a receipt or a form <b>column by column</b>, and then every price lands far from its item. The "text + layout" model decides from geometry, "what is on my row, to my left?", so the reading order no longer matters. These two models are hand-written rules standing in for what the trained networks learn, so you can see why each one succeeds or fails.</p>
+      <div class="algo" data-anim="lmv2bio"><h5 class="algo-h">Algorithm: key information extraction with BIO tags</h5><ol>
+        <li><span class="kw">input</span> a page; a LayoutLMv2 fine-tuned with a token classifier \(W,b\)</li>
+        <li>\(H\leftarrow\operatorname{LayoutLMv2}(\text{page})\)</li>
+        <li><span class="kw">for</span> each text token \(i\): \(y_i\leftarrow\arg\max_c\operatorname{softmax}(Wh_i+b)_c\)</li>
+        <li><span class="kw">for</span> \(i=1..n\) <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">if</span> \(y_i=\)B-\(T\): close any open field; open a new field of type \(T\) with \(w_i\)</li>
+        <li class="i1"><span class="kw">else if</span> \(y_i=\)I-\(T\) and the open field has type \(T\): append \(w_i\)</li>
+        <li class="i1"><span class="kw">else</span>: close any open field</li>
+        <li><span class="kw">return</span> the list of (type, text) fields</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: other tasks, and how results are measured</summary><div>
+        <p><b>Entity-level F1.</b> A predicted field counts as correct only if its type and every one of its words match the truth exactly. Precision is the share of predicted fields that are correct, recall the share of true fields found, and F1 their harmonic mean (see <a href="../../../ml/metrics/">evaluation metrics</a>).</p>
+        <p><b>Other heads on the same model.</b> Document classification (is this a letter, an invoice, a résumé?) puts a classifier on \(h_{\text{[CLS]}}\), as on RVL-CDIP's 16 classes. Document visual question answering (DocVQA) puts the question in the text segment and predicts the start and end token of the answer span, like extractive QA in BERT. Relation extraction links a key token to its value token with a small pairwise classifier.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="family" class="card">
+  <h2><span class="num">5</span>The family: from LayoutLM to OCR-free models</h2>
+  <p class="sub">Each generation answered a weakness of the one before. The scores are from the papers (base-size models where both are given) and show the trend; they are not a leaderboard.</p>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Model (year)</th><th>Text</th><th>Layout</th><th>Image</th><th>Pre-training</th><th>FUNSD F1</th></tr>
+    <tr><td>BERT on OCR text</td><td>✓</td><td>–</td><td>–</td><td>masked words</td><td>about 60</td></tr>
+    <tr><td><a class="term" data-t="layoutlm">LayoutLM</a> (2020)</td><td>✓</td><td>absolute 2-D embeddings</td><td>only at fine-tuning</td><td>MVLM</td><td>79</td></tr>
+    <tr><td><b>LayoutLMv2</b> (2021)</td><td>✓</td><td>2-D embeddings + spatial attention bias</td><td>CNN visual tokens, trained jointly</td><td>MVLM, TIA, TIM</td><td>83</td></tr>
+    <tr><td>LayoutXLM (2021)</td><td>✓, 53 languages</td><td>as v2</td><td>as v2</td><td>as v2, multilingual</td><td>–</td></tr>
+    <tr><td>LayoutLMv3 (2022)</td><td>✓</td><td>2-D embeddings, segment-level boxes</td><td>ViT-style image patches, no CNN</td><td>masked words + masked image patches + word–patch alignment</td><td>90</td></tr>
+    <tr><td>Donut, Pix2Struct (2022)</td><td>read from pixels</td><td>implicit</td><td>the only input</td><td>generate the text of the page</td><td>–</td></tr>
+  </table></div>
+  <div class="grid2 prose" style="margin-top:12px">
+    <div>
+      <p><b>Two directions after v2.</b> LayoutLMv3 kept the OCR words but replaced the CNN with image patches, as in the <a href="../visual-tokenisation/">Vision Transformer</a>, and added a masked-image job so text and image are learned symmetrically. Donut and Pix2Struct dropped OCR altogether: an image encoder reads the pixels and a decoder writes out the answer as text, which avoids OCR errors at the cost of more training.</p>
+      <p>Today's multimodal LLMs read documents the same way they read photos, with visual tokens fed to a language model. LayoutLMv2's ideas still carry over: give the model where things are, not just what they say, and train it on jobs that force text and pixels to agree.</p>
+    </div>
+    <div>
+      <details class="deeper"><summary>Going deeper: model sizes and training data</summary><div>
+        <p>LayoutLMv2-base has 12 transformer layers of width 768 (about 200 million parameters including the visual backbone); the large model has 24 layers of width 1024 (about 426 million). Both were initialised from UniLMv2 text weights and pre-trained on IIT-CDIP. The paper reports state-of-the-art results at the time on FUNSD (forms), CORD and SROIE (receipts), Kleister-NDA (long contracts), RVL-CDIP (document classification) and DocVQA (question answering).</p>
+        <p>The input is capped at 512 text tokens plus 49 visual tokens. Longer documents are split into windows, and very dense pages lose detail in the coarse 7×7 visual grid, one of the reasons LayoutLMv3 moved to finer image patches.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="c"># pip install transformers pytesseract  (+ detectron2 for the LayoutLMv2 visual backbone)</span>
+<span class="k">from</span> PIL <span class="k">import</span> Image
+<span class="k">from</span> transformers <span class="k">import</span> LayoutLMv2Processor, LayoutLMv2ForTokenClassification
+
+processor = LayoutLMv2Processor.from_pretrained(<span class="s">"microsoft/layoutlmv2-base-uncased"</span>)   <span class="c"># runs Tesseract OCR for you</span>
+labels = [<span class="s">"O"</span>, <span class="s">"B-COMPANY"</span>, <span class="s">"I-COMPANY"</span>, <span class="s">"B-DATE"</span>, <span class="s">"B-TOTAL"</span>, <span class="s">"I-TOTAL"</span>]
+model = LayoutLMv2ForTokenClassification.from_pretrained(
+    <span class="s">"microsoft/layoutlmv2-base-uncased"</span>, num_labels=len(labels))     <span class="c"># fine-tune before use</span>
+
+page = Image.open(<span class="s">"receipt.png"</span>).convert(<span class="s">"RGB"</span>)
+enc = processor(page, return_tensors=<span class="s">"pt"</span>, truncation=<span class="k">True</span>)
+<span class="c"># enc["input_ids"]: word pieces;  enc["bbox"]: one 0-1000 box per piece;  enc["image"]: 224x224 page</span>
+logits = model(**enc).logits                    <span class="c"># (1, tokens, num_labels)</span>
+pred = [labels[i] <span class="k">for</span> i <span class="k">in</span> logits.argmax(-<span class="s">1</span>)[<span class="s">0</span>].tolist()]
+
+<span class="c"># bring your own OCR: pass words and boxes (already scaled to 0-1000)</span>
+proc2 = LayoutLMv2Processor.from_pretrained(<span class="s">"microsoft/layoutlmv2-base-uncased"</span>, apply_ocr=<span class="k">False</span>)
+enc2 = proc2(page, [<span class="s">"TOTAL"</span>, <span class="s">"13.55"</span>], boxes=[[<span class="s">67</span>, <span class="s">710</span>, <span class="s">205</span>, <span class="s">743</span>], [<span class="s">790</span>, <span class="s">710</span>, <span class="s">933</span>, <span class="s">743</span>]], return_tensors=<span class="s">"pt"</span>)
+
+<span class="c"># LayoutLMv3 needs no detectron2: AutoProcessor / LayoutLMv3ForTokenClassification, "microsoft/layoutlmv3-base"</span></pre>
+</section>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/doc.js"></script>
+<script>
+(function(){
+const {$} = ML; const esc=s=>NLP.esc(s);
+const TCOL=t=>t?'var(--'+DOCS.TYPE_COL[t]+')':'transparent';
+const mount=(sel,d,o)=>{ const h=$(sel); return DOCS.mount(h,d,o,Math.min(560,innerHeight*.62)); };
+const segOn=(id,v)=>{ $('#'+id).querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===v)); };
+/* ---------- 1. page to tokens ---------- */
+let pgK='receipt', pgV='words', pgSel=null, pgCell=[5,1]; let pgM;
+function drawPage(){ const d=DOCS.get(pgK); if(pgSel==null||pgSel>=d.words.length) pgSel=d.words.findIndex(w=>w.type==='TOTAL');
+  pgM=mount('#pgDoc',d,{ outline:i=>pgV==='words'?(i===pgSel?'c2':'c1'):null, fill:i=>pgV==='words'&&i===pgSel?['c2',.18]:null, grid:pgV==='grid'?7:0, gridHi:pgCell });
+  const st=$('#pgStats'), nt=$('#pgNote');
+  if(pgV==='words'){ const w=d.words[pgSel], b=w.box;
+    st.innerHTML=[['token',esc(w.text)],['1-D position',(pgSel+1)],['segment','[A] text'],['x₀, x₁, w',b[0]+', '+b[2]+', '+b[4]],['y₀, y₁, h',b[1]+', '+b[3]+', '+b[5]]].map(([l,v],k)=>`<div class="stat c${k%5+1}"><b style="font-size:16px">${v}</b><span>${l}</span></div>`).join('');
+    nt.innerHTML=`<b>${esc(w.text)}</b> is token ${pgSel+1} of ${d.words.length} in reading order. Its box spans ${(b[4]/10).toFixed(1)}% of the page width and sits ${(b[1]/10).toFixed(1)}% of the way down. Same-line words share almost the same \\(y_0,y_1\\); right-aligned prices share \\(x_1\\).`; }
+  else { const [r,c]=pgCell, s=1000/7, b=[c*s,r*s,(c+1)*s,(r+1)*s].map(Math.round), inside=d.words.filter(w=>{ const cx=(w.box[0]+w.box[2])/2, cy=(w.box[1]+w.box[3])/2; return cx>=b[0]&&cx<b[2]&&cy>=b[1]&&cy<b[3]; });
+    st.innerHTML=[['visual token',(r*7+c+1)+' of 49'],['segment','[C] image'],['x₀, x₁, w',b[0]+', '+b[2]+', '+(b[2]-b[0])],['y₀, y₁, h',b[1]+', '+b[3]+', '+(b[3]-b[1])]].map(([l,v],k)=>`<div class="stat c${(k+1)%5+1}"><b style="font-size:16px">${v}</b><span>${l}</span></div>`).join('');
+    nt.innerHTML=`Cell (row ${r+1}, column ${c+1}) is one visual token: the CNN's features averaged over this patch of the page. `+(inside.length?`It covers ${inside.map(w=>'<b>'+esc(w.text)+'</b>').join(', ')}, so its vector carries how those words <i>look</i> (bold, handwritten, ruled lines).`:'It holds mostly blank paper, which is still useful: it tells the model where the gaps are.'); }
+  ML.renderMath(nt); }
+$('#pgDoc').addEventListener('click',e=>{ if(!pgM) return; if(pgV==='words'){ const i=pgM.hit(e); if(i>=0){ pgSel=i; drawPage(); } } else { pgCell=pgM.cell(e,7); drawPage(); } });
+ML.bindSeg('pgKey',v=>{ pgK=v; pgSel=null; drawPage(); }); ML.bindSeg('pgView',v=>{ pgV=v; drawPage(); });
+/* ---------- 2. spatial-aware attention (toy scores) ---------- */
+const KEYW=new Set(['total','due','subtotal','tax','date:','name:','phone:','birth:','plan:','paid:','amount','qty']);
+const kind=w=>{ const t=w.text.toLowerCase(); if(DOCS.isDate(w.text)) return 'date'; if(DOCS.isNum(w.text)||/^\d[\d:%]*$/.test(w.text)) return 'num'; if(KEYW.has(t)) return 'key'; return 'word'; };
+function attention(d,q,mode){ const Q=d.words[q], qk=kind(Q), lam=mode==='rel'?1:mode==='abs'?.4:0, cy=w=>(w.px[1]+w.px[3])/2, hgt=(Q.px[3]-Q.px[1]);
+  const sc=d.words.map((W,j)=>{ const k=kind(W); let s=j===q?.8:0;
+    if((qk==='key'&&(k==='num'||k==='date'||W.st==='h'))||((qk==='num'||qk==='date'||Q.st==='h')&&k==='key')) s+=1.0;
+    if(qk==='num'&&k==='num') s+=.4; if(qk==='word'&&k==='word'&&W.type&&Q.type) s+=.3;
+    s+=1.3*Math.exp(-Math.abs(j-q)/1.4);
+    const dy=Math.abs(cy(W)-cy(Q))/Math.max(8,hgt), dx=(W.px[0]+W.px[2])/2-(Q.px[0]+Q.px[2])/2, row=Math.exp(-dy*dy/.5);
+    if(j!==q) s+=lam*(2.8*row + (qk==='key'&&dx>0?1.2*row:0) + ((qk==='num'||Q.st==='h')&&dx<0?1.0*row:0) + .9*Math.exp(-Math.pow((W.px[2]-Q.px[2])/10,2))*(k===qk?1:.3) - 1.2*Math.min(1,Math.hypot(dx/d.W,(cy(W)-cy(Q))/d.H)/.5));
+    return 1.4*s; });
+  return NLP.softmax(sc); }
+let atK='receipt', atMode='rel', atQ=null, atM;
+function drawAtt(){ const d=DOCS.get(atK); if(atQ==null||atQ>=d.words.length) atQ=d.words.findIndex(w=>/^(total|name:)$/i.test(w.text));
+  const A=attention(d,atQ,atMode), mx=Math.max(...A.filter((_,j)=>j!==atQ));
+  atM=mount('#atDoc',d,{ fill:i=>i===atQ?['c1',.22]:['c2',Math.min(.85,A[i]/mx*.8)], outline:i=>i===atQ?'c1':null });
+  const top=A.map((a,j)=>({j,a})).filter(o=>o.j!==atQ).sort((x,y)=>y.a-x.a).slice(0,4), P=ML.palette();
+  $('#atBars').innerHTML=NLP.bars(top.map(o=>({label:d.words[o.j].text,value:o.a,color:P.c2})),{lw:'96px',max:Math.max(.2,top[0].a),fmt:v=>Math.round(v*100)+'%'});
+  const Q=d.words[atQ], cy=w=>(w.px[1]+w.px[3])/2, row=A.reduce((s,a,j)=>s+(j!==atQ&&Math.abs(cy(d.words[j])-cy(Q))<Q.size*.6?a:0),0);
+  $('#atNote').innerHTML=`Query <b>${esc(Q.text)}</b> gives <b>${Math.round(row*100)}%</b> of its attention to words on its own line. `+({'1d':'With 1-D positions only, it mostly looks at its neighbours in the OCR reading order, wherever they are on the page.','abs':'Absolute 2-D positions help a little: the model has to learn "same row" separately for every row.','rel':'The relative bias boosts same-row and same-column words everywhere on the page, so the key finds its value.'})[atMode]; }
+$('#atDoc').addEventListener('click',e=>{ if(!atM) return; const i=atM.hit(e); if(i>=0){ atQ=i; drawAtt(); } });
+ML.bindSeg('atKey',v=>{ atK=v; atQ=null; drawAtt(); }); ML.bindSeg('atMode',v=>{ atMode=v; drawAtt(); });
+/* ---------- 3. pre-training jobs ---------- */
+let ptK='receipt', ptJob='mvlm', ptS=null;
+function sample(){ const d=DOCS.get(ptK), r=ML.rng(Math.floor(Math.random()*1e6)), n=d.words.length;
+  const mask=new Set(); const want=Math.max(1,Math.round(n*.15)); while(mask.size<want) mask.add(Math.floor(r()*n));
+  const lines=[...new Set(d.words.map(w=>w.line))], cover=new Set(); const nc=Math.max(1,Math.round(lines.length*.2)); while(cover.size<nc) cover.add(lines[Math.floor(r()*lines.length)]);
+  const others=DOCS.keys.filter(k=>k!==ptK), matched=r()<.5, other=others[Math.floor(r()*others.length)];
+  const tia=d.words.map(w=>cover.has(w.line)), pT=d.words.map((w,i)=>Math.min(.98,Math.max(.02,(tia[i]?.86:.1)+(r()-.5)*.16)));
+  ptS={mask,cover,matched,other,tia,pT,pM:matched?.9+r()*.08:.06+r()*.1}; }
+function drawPt(){ if(!ptS) sample(); const d=DOCS.get(ptK), S=ptS;
+  if(ptJob==='tim'&&!S.matched) mount('#ptDoc',DOCS.get(S.other),{});
+  else mount('#ptDoc',d,{ mask:ptJob==='mvlm'?S.mask:null, cover:ptJob==='tia'?S.cover:null });
+  const chip=(t,sub,bg,fg)=>`<span class="tok" style="background:${bg};color:${fg||'var(--ink)'}">${esc(t)}<small>${sub}</small></span>`;
+  let h='<div class="chips2" style="margin-top:4px">';
+  if(ptJob==='tim') h+=chip('[CLS]',S.matched?'same page':'other page','color-mix(in srgb,var(--c3) 22%,transparent)');
+  d.words.forEach((w,i)=>{ if(ptJob==='mvlm') h+=S.mask.has(i)?chip('[MASK]','→ '+w.text,'var(--c2)','#fff'):chip(w.text,'·',NLP.tokColor(i));
+    else if(ptJob==='tia') h+=chip(w.text,(S.tia[i]?'covered':'not')+' '+Math.round(S.pT[i]*100)+'%',S.tia[i]?'color-mix(in srgb,var(--c4) 26%,transparent)':'color-mix(in srgb,var(--c5) 18%,transparent)');
+    else h+=chip(w.text,'',NLP.tokColor(i)); });
+  $('#ptToks').innerHTML=h+'</div>';
+  const nm=[...S.mask].map(i=>'<b>'+esc(d.words[i].text)+'</b>');
+  $('#ptNote').innerHTML=ptJob==='mvlm'?`${nm.length} of ${d.words.length} words are masked: ${nm.join(', ')}. Their boxes stay in the input, and their pixels are blacked out in the image so the CNN cannot read the answer. The model predicts each one from its neighbours on the page.`
+    : ptJob==='tia'?`${S.cover.size} line${S.cover.size>1?'s are':' is'} covered in the image, but every word is still in the text. Each token must say whether its own line is covered, so it has to find itself in the picture. Percentages: a model's predicted probability of "covered".`
+    : `${S.matched?'The image is this page\'s own scan':'The image was swapped for the '+DOCS.get(S.other).name.toLowerCase()+' while the text is still the '+d.name.toLowerCase()+'\'s'}. The [CLS] output says "same page" with probability <b>${Math.round(S.pM*100)}%</b>; the target is ${S.matched?'yes':'no'}.`; }
+$('#ptNew').onclick=()=>{ sample(); drawPt(); };
+ML.bindSeg('ptJob',v=>{ ptJob=v; drawPt(); }); ML.bindSeg('ptKey',v=>{ ptK=v; ptS=null; drawPt(); });
+/* ---------- 4. extraction: text-only vs text+layout toy taggers ---------- */
+const ITEMW=new Set(['latte','butter','croissant','orange','juice','muffin','website','design','hosting','(1','year)','annual']);
+const GENERIC=new Set(['INVOICE','MEMBERSHIP','FORM','Bill','Paid','Thank','Date','Name','Phone','Plan','Fee','Signature','Office','Description','Phone:','Name:','Plan:','Qty','Amount','Subtotal','Tax','TOTAL','Total']);
+const TOT=new Set(['total','due','paid:']);
+function tagText(seq){ const y=[]; seq.forEach((w,t)=>{ const lw=w.text.toLowerCase(), p=seq[t-1], p2=seq[t-2], yp=y[t-1]||'O'; let lab='O';
+    if(DOCS.isDate(w.text)) lab='B-DATE';
+    else if(ITEMW.has(lw)) lab=(yp.endsWith('ITEM')?'I':'B')+'-ITEM';
+    else if(DOCS.isNum(w.text)){ const back=[p,p2].filter(Boolean).map(x=>x.text.toLowerCase()); if(back.some(b=>TOT.has(b))) lab='B-TOTAL'; else if(back.some(b=>ITEMW.has(b))) lab='B-PRICE'; }
+    else if(p&&/^(name:|to:)$/i.test(p.text)&&/^[A-Z]/.test(w.text)) lab='B-NAME';
+    else if(yp.endsWith('NAME')&&/^[A-Z][a-z]+$/.test(w.text)&&!GENERIC.has(w.text)) lab='I-NAME';
+    else if(p&&/^phone:$/i.test(p.text)&&/^\d+$/.test(w.text)) lab='B-PHONE';
+    else if(yp.endsWith('PHONE')&&/^\d+$/.test(w.text)) lab='I-PHONE';
+    else if(/^[A-Z][A-Za-z]+$/.test(w.text)&&!GENERIC.has(w.text)&&!ITEMW.has(lw)&&(yp.endsWith('COMPANY')||(t<8&&!y.some(l=>l.endsWith('COMPANY'))))) lab=(yp.endsWith('COMPANY')?'I':'B')+'-COMPANY';
+    y.push(lab); }); return y; }
+function tagLayout(d){ const W=d.words, cy=w=>(w.px[1]+w.px[3])/2, same=(a,b)=>Math.abs(cy(a)-cy(b))<Math.max(a.size,b.size)*.6;
+  const lab=W.map(()=>'O');
+  const tops=[...new Set(W.filter(w=>cy(w)<d.H*.25).map(w=>w.line))].sort((a,b)=>cy(W.find(w=>w.line===a))-cy(W.find(w=>w.line===b)));
+  const coLine=tops.find(l=>W.filter(w=>w.line===l).every(w=>/^[A-Z][A-Za-z]+$/.test(w.text)&&!GENERIC.has(w.text)));
+  W.forEach((w,i)=>{ const lw=w.text.toLowerCase(), row=W.filter(o=>o!==w&&same(o,w)), left=row.filter(o=>o.px[2]<=w.px[0]).sort((a,b)=>b.px[2]-a.px[2]);
+    if(DOCS.isDate(w.text)) lab[i]='B-DATE';
+    else if(ITEMW.has(lw)){ const prev=left[0]; lab[i]=(prev&&ITEMW.has(prev.text.toLowerCase())&&w.px[0]-prev.px[2]<14?'I':'B')+'-ITEM'; }
+    else if(DOCS.isNum(w.text)){ if(row.some(o=>TOT.has(o.text.toLowerCase()))) lab[i]='B-TOTAL'; else if(row.some(o=>ITEMW.has(o.text.toLowerCase()))) lab[i]='B-PRICE'; }
+    else { const key=left.find(o=>/:$/.test(o.text)), lead=W.filter(o=>o.line===w.line)[0], above=W.filter(o=>/^to:$/i.test(o.text)&&lead.px[1]>o.px[3]&&lead.px[1]-o.px[3]<30&&Math.abs(lead.px[0]-W[W.indexOf(o)-1].px[0])<6);
+      const firstOnRow=!left.some(o=>!/:$/.test(o.text));
+      if((key&&/^name:$/i.test(key.text))||above.length) lab[i]=(firstOnRow?'B':'I')+'-NAME';
+      else if(key&&/^phone:$/i.test(key.text)&&/^\d+$/.test(w.text)) lab[i]=(firstOnRow?'B':'I')+'-PHONE';
+      else if(key&&/^plan:$/i.test(key.text)) lab[i]='B-ITEM';
+      else if(w.line===coLine) lab[i]=(W.filter(o=>o.line===coLine)[0]===w?'B':'I')+'-COMPANY'; } });
+  return lab; }
+let exK='receipt', exModel='layout', exOrder='row';
+function drawEx(){ const d=DOCS.get(exK), seq=exOrder==='row'?d.words:DOCS.columnOrder(d);
+  const pred=new Array(d.words.length).fill('O'); if(exModel==='text'){ const y=tagText(seq); seq.forEach((w,t)=>pred[w.i]=y[t]); } else tagLayout(d).forEach((l,i)=>pred[i]=l);
+  const typ=l=>l==='O'?null:l.slice(2), wrong=i=>typ(pred[i])!==d.words[i].type;
+  mount('#exDoc',d,{ fill:i=>typ(pred[i])?[DOCS.TYPE_COL[typ(pred[i])],.35]:null, outline:i=>wrong(i)?'c4':null });
+  const ent=d.words.filter(w=>w.type).length, ok=d.words.filter((w,i)=>w.type&&!wrong(i)).length, fp=d.words.filter((w,i)=>!w.type&&typ(pred[i])).length;
+  $('#exStats').innerHTML=`<div class="stat c5"><b>${ok} / ${ent}</b><span>field words tagged right</span></div><div class="stat c4"><b>${fp}</b><span>false alarms</span></div><div class="stat c1"><b>${Math.round(100*ok/ent)}%</b><span>recall</span></div>`;
+  $('#exToks').innerHTML='<p class="hint" style="margin:6px 0 4px">Tokens in OCR order, with the predicted tag:</p><div class="chips2">'+seq.map(w=>{ const l=pred[w.i], t=typ(l); return `<span class="tok" style="background:${t?'color-mix(in srgb,'+TCOL(t)+' 28%,transparent)':'var(--soft)'};${wrong(w.i)?'border-color:var(--c4)':''}">${esc(w.text)}<small>${l}</small></span>`; }).join('')+'</div>'; }
+ML.bindSeg('exKey',v=>{ exK=v; drawEx(); }); ML.bindSeg('exModel',v=>{ exModel=v; drawEx(); }); ML.bindSeg('exOrder',v=>{ exOrder=v; drawEx(); });
+function all(){ drawPage(); drawAtt(); drawPt(); drawEx(); }
+all(); let rw=innerWidth; window.addEventListener('resize',()=>{ if(Math.abs(innerWidth-rw)>4){ rw=innerWidth; all(); } }); ML.onTheme(all);
+window.addEventListener('load',()=>setTimeout(all,300));
+})();
+</script>
+<script>NLP.nav('nlp','layoutlmv2'); ML.renderMath(document.body);</script>
+</body>
+</html>

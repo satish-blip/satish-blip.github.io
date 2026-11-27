@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anomaly detection explained interactively: isolation forests, one-class SVMs and the local outlier factor</title>
+<meta name="description" content="Find the unusual points without labels, live in your browser: Gaussian and Mahalanobis baselines and the masking effect, isolation forests and path lengths, one-class SVMs with ν and γ, the local outlier factor for regions of different density, and how to evaluate detectors with very few labels.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Unsupervised learning</p>
+  <h1>Anomaly detection: <span class="grad">finding the points that do not fit</span></h1>
+  <p class="lede">A fraudulent card payment, a failing bearing, a mistyped claim amount, an intrusion on a network. Anomalies are rare, varied and usually unlabelled, so we cannot simply train a classifier. Instead we learn what normal looks like and flag what is far from it. This page builds four detectors that each define “far” differently and runs them side by side.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#gauss">1 · Distance from normal</a><a href="#iforest">2 · Isolation forest</a><a href="#ocsvm">3 · One-class SVM</a><a href="#lof">4 · Local outlier factor</a><a href="#compare">5 · Side by side</a><a href="#practice">6 · In practice</a><a href="#py">7 · Python</a><a href="#credits">8 · Credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is anomaly detection, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3>
+      <p>An <a class="term" data-t="outlier">anomaly</a> (or outlier) is an observation that is unlikely under the process that made most of the data. They are rare (often well under 1%), each kind is different, and new kinds appear all the time. So there are almost never enough labelled examples to learn them directly, and a classifier trained on last year’s frauds misses this year’s.</p>
+      <h3>The idea</h3>
+      <p>Model <i>normal</i> instead, then score every point by how badly it fits. Each detector on this page has its own notion of fitting badly:</p>
+      <ol class="steps2"><li><b>Far from the centre</b>, measured in standard deviations (Gaussian, Mahalanobis).</li><li><b>Easy to isolate</b> with a few random cuts (<a class="term" data-t="isolation-forest">isolation forest</a>).</li><li><b>Outside a boundary</b> drawn around most of the data (<a class="term" data-t="one-class-svm">one-class SVM</a>).</li><li><b>Less crowded than its neighbours</b> (<a class="term" data-t="lof">local outlier factor</a>).</li></ol>
+      <p>Each gives a score; a threshold, often set by the expected share of anomalies (the <a class="term" data-t="contamination-rate">contamination</a>), turns scores into flags for a person to check.</p>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>A bank teller who has seen thousands of customers does not need a list of every possible fraud. They notice the customer who withdraws ten times their usual amount, in a city they have never visited, at 3 a.m. They have learned normal, and that is enough to spot strange.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Fraud and intrusion screening</li><li>Machine and sensor monitoring</li><li>Data-quality checks before modelling</li><li>Finding new, unseen kinds of problem</li></ul></div><div class="con"><b>Watch out for</b><ul><li>“Unusual” is not the same as “bad”</li><li>Many outliers together can hide each other</li><li>Scaling and feature choice decide what counts as far</li><li>Thresholds need business costs, not defaults</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="anomaly-detection">Anomaly detection</a><a class="term" data-t="mahalanobis">Mahalanobis distance</a><a class="term" data-t="isolation-forest">Isolation forest</a><a class="term" data-t="one-class-svm">One-class SVM</a><a class="term" data-t="lof">LOF</a><a class="term" data-t="contamination-rate">Contamination</a><a class="term" data-t="novelty-detection">Novelty detection</a></div>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="gauss" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Distance from normal: z-scores, Mahalanobis and masking</h2>
+    <p class="sub">Grey dots are normal, red-ringed dots are the true anomalies (the detector never sees which is which). The ellipse is the flagging threshold: everything outside is flagged. Pink shading is the flagged region.</p>
+    <div class="plot sq" id="pM"></div>
+    <div class="seg" id="mData"></div>
+    <div class="seg" id="mFit"><button data-v="classic" class="on">Fit on all points</button><button data-v="robust">Robust fit (central 75%)</button></div>
+    <div class="stats" id="mStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>For one feature the classic rule flags a value whose <a class="term" data-t="z-score">z-score</a> \(|x-\mu|/\sigma\) exceeds 3. For several correlated features, distance must follow the shape of the data cloud, which is what the <a class="term" data-t="mahalanobis">Mahalanobis distance</a> does:</p>
+      <div class="mathbox c1">$$D_M(x)=\sqrt{(x-\mu)^\top\Sigma^{-1}(x-\mu)}.$$</div>
+      <p>It is the ordinary distance after rotating and rescaling the cloud into a round one, so a point can be unusual because of an odd <i>combination</i> of values (tall and light) even when each value alone is normal. If normal data are Gaussian in \(d\) dimensions, \(D_M^2\) follows a \(\chi^2_d\) distribution, which turns the threshold into a probability.</p>
+      <p>The catch is that \(\mu\) and \(\Sigma\) are estimated from data that contain the anomalies. Choose <b>Cluster of anomalies</b>: the 40 clustered outliers drag the mean towards them and stretch the covariance in their direction, so most of them no longer look far (set the share flagged to about 15%, their true share). This is <b>masking</b>. A robust fit estimates the centre and shape from the most central points only (the idea behind the minimum covariance determinant, <code>EllipticEnvelope</code> in scikit-learn); switch to it and the cluster stands out again.</p>
+      <p>Gaussian methods are fast and explainable, but they assume one roughly elliptical cloud. On the moons they flag the wrong places, which motivates the detectors below.</p>
+      <div class="ctl"><label for="mC"><span>Share flagged (contamination)</span><output id="mCOut"></output></label><input type="range" id="mC" min="0.01" max="0.2" step="0.005" value="0.1"></div>
+      <div class="algo" data-anim="mahal"><h5 class="algo-h">Algorithm: Mahalanobis outlier detection (robust)</h5><ol>
+        <li><span class="kw">input</span> points, share to flag \(c\)</li>
+        <li>estimate \(\mu,\Sigma\) from all points</li>
+        <li><span class="kw">repeat</span> a few times <span class="cm">robust version only</span></li>
+        <li class="i1">keep the 75% of points with the smallest \(D_M\); re-estimate \(\mu,\Sigma\) from them</li>
+        <li>score every point by \(D_M(x)\)</li>
+        <li>threshold \(\tau\leftarrow\) the \((1-c)\) quantile of the scores</li>
+        <li><span class="kw">return</span> points with \(D_M(x)>\tau\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="iforest" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Isolation forest: anomalies are easy to cut off</h2>
+    <p class="sub">Shading: the forest’s anomaly score (pink = above the flagging threshold). Tap any point to watch one random tree isolate it: each line is a random cut, and the count is how many cuts it took.</p>
+    <div class="plot sq" id="pI"></div>
+    <div class="seg" id="iData"></div>
+    <div class="stats" id="iStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Liu, Ting and Zhou (2008) turned the problem around: instead of describing normal points, measure how easy each point is to <i>isolate</i>. Pick a random feature and a random cut between its minimum and maximum; keep cutting the part that contains the point until it is alone. A point in a dense crowd needs many cuts; a lone point far away is usually separated in two or three. Tap a far point and then a central one to see the difference.</p>
+      <p>One tree is noisy, so build many, each on a small random subsample of \(\psi\) points (256 by default), and average the path length \(h(x)\). The <a class="term" data-t="isolation-forest">isolation forest</a> score compares it with the average path length of an unsuccessful search in a random binary tree of \(\psi\) points:</p>
+      <div class="mathbox c1">$$s(x)=2^{-\,E[h(x)]/c(\psi)},\qquad c(\psi)=2H_{\psi-1}-\frac{2(\psi-1)}{\psi},\quad H_i\approx\ln i+0.5772.$$</div>
+      <p>\(s\) near 1 means much shorter paths than usual (anomalous); around 0.5 or below means ordinary. Small subsamples are a feature, not a compromise: fewer normal points crowd around the anomalies, which reduces masking, and training is very fast, linear in \(n\). It needs no distance at all, so it works with mixed feature scales and in high dimensions, which is why it is often the first detector people try.</p>
+      <div class="ctl"><label for="iT"><span>Number of trees</span><output id="iTOut"></output></label><input type="range" id="iT" min="1" max="200" step="1" value="100"></div>
+      <div class="ctl"><label for="iS"><span>Subsample size ψ</span><output id="iSOut"></output></label><input type="range" id="iS" min="8" max="256" step="8" value="128"></div>
+      <div class="algo" data-anim="iforest"><h5 class="algo-h">Algorithm: isolation forest</h5><ol>
+        <li><span class="kw">input</span> points, number of trees \(t\), subsample size \(\psi\)</li>
+        <li><span class="kw">for</span> each tree: draw \(\psi\) points at random</li>
+        <li class="i1"><span class="kw">grow</span>: pick a random feature \(q\) and a random cut \(p\) between its min and max</li>
+        <li class="i1">split the points into \(x_q&lt;p\) and \(x_q\ge p\); grow each side until one point is left or depth \(\lceil\log_2\psi\rceil\)</li>
+        <li><span class="kw">for</span> a point \(x\): \(h(x)\) = number of cuts to reach its leaf (+ \(c(\text{leaf size})\))</li>
+        <li><span class="kw">return</span> \(s(x)=2^{-\bar h(x)/c(\psi)}\) <span class="cm">near 1 = anomaly</span></li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="ocsvm" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>One-class SVM: a boundary around most of the data</h2>
+    <p class="sub">The dark curve is where the decision function is zero; pink is outside. Ringed points are support vectors, the only points that shape the boundary.</p>
+    <div class="plot sq" id="pO"></div>
+    <div class="seg" id="oData"></div>
+    <div class="stats" id="oStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Schölkopf et al. (2001) adapted the <a href="../svm/">support vector machine</a> to data with one class only. Map the points into the feature space of an RBF <a class="term" data-t="kernel">kernel</a> \(K(x,x')=e^{-\gamma\lVert x-x'\rVert^2}\) and find a hyperplane that separates them from the origin with the largest margin, allowing a few points on the wrong side:</p>
+      <div class="mathbox c1">$$\min_{w,\xi,\rho}\ \tfrac12\lVert w\rVert^2+\frac{1}{\nu n}\sum_i\xi_i-\rho\quad\text{s.t.}\quad w^\top\phi(x_i)\ge\rho-\xi_i,\ \ \xi_i\ge0 .$$</div>
+      <p>The dual is a small quadratic programme, \(\min_\alpha\tfrac12\sum_{ij}\alpha_i\alpha_jK(x_i,x_j)\) with \(0\le\alpha_i\le\frac{1}{\nu n}\) and \(\sum_i\alpha_i=1\), solved here by SMO as on the SVM page. The decision function is \(f(x)=\sum_i\alpha_iK(x_i,x)-\rho\): positive inside, negative outside.</p>
+      <p>The parameter \(\nu\in(0,1]\) has a clean meaning: it is an upper bound on the fraction of training points left outside and a lower bound on the fraction of support vectors. \(\gamma\) sets the reach of each point, as in the SVM: small \(\gamma\) gives one smooth blob, large \(\gamma\) wraps every little group, eventually every point. Watch both stats as you move the sliders.</p>
+      <div class="ctl"><label for="oN"><span>ν (share allowed outside)</span><output id="oNOut"></output></label><input type="range" id="oN" min="0.02" max="0.5" step="0.01" value="0.08"></div>
+      <div class="ctl"><label for="oG"><span>γ (kernel width)</span><output id="oGOut"></output></label><input type="range" id="oG" min="-1.5" max="1.5" step="0.1" value="0"></div>
+      <div class="algo" data-anim="ocsvm"><h5 class="algo-h">Algorithm: one-class SVM by SMO</h5><ol>
+        <li><span class="kw">input</span> points, \(\nu\), kernel \(K\)</li>
+        <li>start with a feasible \(\alpha\): \(\lfloor\nu n\rfloor\) entries at \(1/\nu n\), the rest 0, \(\sum\alpha_i=1\)</li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1">gradient \(G_i=\sum_j\alpha_jK_{ij}\)</li>
+        <li class="i1">pick \(i\) with \(\alpha_i&gt;0\) and largest \(G_i\), \(j\) with \(\alpha_j&lt;1/\nu n\) and smallest \(G_j\)</li>
+        <li class="i1">move weight from \(i\) to \(j\) (clipped to the box) <span class="cm">keeps \(\sum\alpha=1\)</span></li>
+        <li><span class="kw">until</span> \(G_i-G_j\) is tiny</li>
+        <li>\(\rho\leftarrow G\) at the margin support vectors; <span class="kw">return</span> \(f(x)=\sum\alpha_iK(x_i,x)-\rho\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="lof" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Local outlier factor: less crowded than its neighbours</h2>
+    <p class="sub">Dot size grows with the LOF score; the most anomalous points are labelled. The mixed-density data has a tight cluster, a loose cluster, and a few points just outside the tight one: far by its standards, normal by the loose one’s.</p>
+    <div class="plot sq" id="pL"></div>
+    <div class="seg" id="lData"></div>
+    <div class="stats" id="lStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A global rule (“flag anything more than distance 1 from its neighbours”) cannot be right for both clusters at once. Breunig et al. (2000) compared each point’s density with the densities of its own neighbours. With \(N_k(x)\) the \(k\) nearest neighbours of \(x\):</p>
+      <ul><li><b>Reachability distance</b>: \(\text{reach}_k(x,o)=\max\{k\text{-dist}(o),\ d(x,o)\}\), which smooths out tiny distances inside a crowd.</li><li><b>Local reachability density</b>: \(\text{lrd}_k(x)=1\Big/\tfrac{1}{k}\sum_{o\in N_k(x)}\text{reach}_k(x,o)\).</li></ul>
+      <div class="mathbox c1">$$\text{LOF}_k(x)=\frac{1}{k}\sum_{o\in N_k(x)}\frac{\text{lrd}_k(o)}{\text{lrd}_k(x)}.$$</div>
+      <p>LOF ≈ 1: as dense as its neighbours. LOF well above 1: in a much emptier spot than its neighbours, i.e. a <i>local</i> outlier. On the mixed-density data, compare the labelled top scores with what the Mahalanobis and isolation-forest views flag: LOF catches the points hugging the tight cluster that global methods ignore.</p>
+      <p>\(k\) (typically 10 to 50) sets “local”: too small and scores are noisy, too large and small anomalous groups are treated as a cluster. LOF needs all-pairs neighbours, so it is slower than an isolation forest on big data, and plain LOF scores only the training points (scikit-learn’s <code>novelty=True</code> scores new ones).</p>
+      <div class="ctl"><label for="lK"><span>Neighbours k</span><output id="lKOut"></output></label><input type="range" id="lK" min="3" max="50" step="1" value="15"></div>
+      <div class="algo" data-anim="lof"><h5 class="algo-h">Algorithm: local outlier factor</h5><ol>
+        <li><span class="kw">input</span> points, neighbours \(k\)</li>
+        <li><span class="kw">for</span> each point: find \(N_k(x)\) and \(k\)-dist\((x)\) <span class="cm">distance to its k-th neighbour</span></li>
+        <li><span class="kw">for</span> each point: \(\text{lrd}(x)=k\big/\sum_{o\in N_k(x)}\max\{k\text{-dist}(o),d(x,o)\}\)</li>
+        <li><span class="kw">for</span> each point: \(\text{LOF}(x)=\) mean of \(\text{lrd}(o)/\text{lrd}(x)\) over \(o\in N_k(x)\)</li>
+        <li><span class="kw">return</span> LOF scores <span class="cm">≈1 normal, ≫1 outlier</span></li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="compare" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Four detectors, side by side</h2>
+    <p class="sub">The same data and the same share flagged for every method. Under each map: ROC AUC (how well the scores rank true anomalies above normal points; 1 is perfect, 0.5 is chance) and precision among the flagged points.</p>
+    <div class="seg" id="cData"></div>
+    <div class="cl-gal" id="cGal"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Detector</th><th>“Anomalous” means</th><th>Strengths</th><th>Weaknesses</th></tr>
+        <tr><td><b>Mahalanobis (robust)</b></td><td>Far from one elliptical centre</td><td>Fast, explainable, probabilistic</td><td>One cloud only; needs roughly Gaussian data</td></tr>
+        <tr><td><b>Isolation forest</b></td><td>Few random cuts isolate it</td><td>Scales to big, high-dimensional data; no distances</td><td>Axis-aligned cuts leave artefacts; weaker on local anomalies</td></tr>
+        <tr><td><b>One-class SVM</b></td><td>Outside a smooth kernel boundary</td><td>Flexible shapes; ν has a clear meaning</td><td>Sensitive to γ and scaling; \(O(n^2)\) kernel</td></tr>
+        <tr><td><b>LOF</b></td><td>Less dense than its neighbours</td><td>Handles mixed densities</td><td>Slow on big data; choice of k</td></tr>
+      </table></div>
+      <p>No detector wins everywhere; the benchmark study by Campos et al. (2016) found method rankings change from dataset to dataset. Practical advice: scale the features, try an isolation forest first, add LOF if densities vary, and compare on whatever labelled cases you have. For images, text or long sequences, use the same detectors on learned embeddings, or an autoencoder’s reconstruction error.</p>
+    </div>
+  </div>
+</section>
+
+<section id="practice" class="card">
+  <h2><span class="num">6</span>Anomaly detection in practice</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>Outlier or novelty detection?</h3>
+      <p><b>Outlier detection</b>: the training data already contain some anomalies, and we want to find them (all methods above). <a class="term" data-t="novelty-detection"><b>Novelty detection</b></a>: we train on data we trust to be clean and score new data later. The difference matters: a one-class SVM or LOF with <code>novelty=True</code> trained on clean data draws a tighter boundary.</p>
+      <h3>Setting the threshold</h3>
+      <p>Every detector outputs a score; the flag is a threshold. The <code>contamination</code> setting just picks the quantile. Better: estimate the cost of a missed anomaly versus a false alarm and the capacity of the people reviewing alerts (say 50 cases a day), then flag the top 50. That is why <b>precision at k</b>, the share of real anomalies among the top \(k\) scores, is often the metric that matters.</p>
+    </div>
+    <div>
+      <h3>Evaluating with few labels</h3>
+      <p>Collect labels from reviewed alerts and from known incidents. Use ranking metrics (ROC AUC, average precision, precision at k) rather than accuracy, which is meaningless at 1% prevalence (see <a href="../metrics/#confusion">metrics</a>). Be aware that labels from past alerts are biased towards what the old system flagged.</p>
+      <h3>When you do have labels</h3>
+      <p>If you have enough labelled anomalies of the kinds you care about, a supervised classifier with class weights usually beats unsupervised scores, and the anomaly score can become one of its features. Keep an unsupervised detector running alongside to catch new kinds. In time series, flag points far outside the forecast interval of a <a href="../time-series/">forecasting model</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">7</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.preprocessing <span class="k">import</span> StandardScaler
+<span class="k">from</span> sklearn.covariance <span class="k">import</span> EllipticEnvelope            <span class="c"># robust Gaussian (minimum covariance determinant)</span>
+<span class="k">from</span> sklearn.ensemble <span class="k">import</span> IsolationForest
+<span class="k">from</span> sklearn.svm <span class="k">import</span> OneClassSVM
+<span class="k">from</span> sklearn.neighbors <span class="k">import</span> LocalOutlierFactor
+<span class="k">from</span> sklearn.metrics <span class="k">import</span> roc_auc_score, average_precision_score
+
+X = StandardScaler().fit_transform(X_raw)
+det = {
+  <span class="s">"robust gaussian"</span>: EllipticEnvelope(contamination=<span class="s">0.05</span>, random_state=<span class="s">0</span>),
+  <span class="s">"isolation forest"</span>: IsolationForest(n_estimators=<span class="s">200</span>, max_samples=<span class="s">256</span>, contamination=<span class="s">0.05</span>, random_state=<span class="s">0</span>),
+  <span class="s">"one-class svm"</span>:   OneClassSVM(kernel=<span class="s">"rbf"</span>, nu=<span class="s">0.05</span>, gamma=<span class="s">"scale"</span>),
+}
+<span class="k">for</span> name, m <span class="k">in</span> det.items():
+    m.fit(X)
+    score = -m.decision_function(X)                               <span class="c"># higher = more anomalous</span>
+    print(name, roc_auc_score(y_anom, score), average_precision_score(y_anom, score))
+
+lof = LocalOutlierFactor(n_neighbors=<span class="s">20</span>, contamination=<span class="s">0.05</span>)
+flags = lof.fit_predict(X)                                        <span class="c"># -1 = outlier</span>
+score = -lof.negative_outlier_factor_
+new_scores = LocalOutlierFactor(n_neighbors=<span class="s">20</span>, novelty=<span class="k">True</span>).fit(X_clean).score_samples(X_new)</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">8</span>Sources and credits</h2>
+  <div class="prose">
+    <p>The demos, data and code on this page were written for this site. The side-by-side comparison takes its idea from the scikit-learn example <a href="https://scikit-learn.org/stable/auto_examples/miscellaneous/plot_anomaly_comparison.html" target="_blank" rel="noopener">“Comparing anomaly detection algorithms for outlier detection on toy datasets”</a>, and the outlier-versus-novelty distinction follows the <a href="https://scikit-learn.org/stable/modules/outlier_detection.html" target="_blank" rel="noopener">scikit-learn user guide on novelty and outlier detection</a>.</p>
+    <p>Original papers: Mahalanobis 1936; Rousseeuw 1984 and Rousseeuw and Van Driessen 1999 (minimum covariance determinant); Breunig, Kriegel, Ng and Sander 2000 (LOF); Schölkopf, Platt, Shawe-Taylor, Smola and Williamson 2001 (one-class SVM); Tax and Duin 2004 (support vector data description); Liu, Ting and Zhou 2008 and 2012 (isolation forest); Chandola, Banerjee and Kumar 2009 (anomaly detection survey); Campos et al. 2016 (evaluation of unsupervised outlier detection).</p>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+ {"q":"Why do anomaly detectors usually learn what ‘normal’ looks like instead of training a classifier on anomalies?","o":["Classifiers are too slow","Anomalies are rare, varied and new kinds keep appearing, so there are few or no representative labels","Normal data are always Gaussian","Anomalies cannot be plotted"],"a":1,"e":"A model of normal flags anything that does not fit, including kinds of anomaly never seen before. With plenty of labelled anomalies of known kinds, a supervised classifier can be added."},
+ {"q":"In an isolation forest, an anomaly typically has…","o":["A longer average path length","A shorter average path length, because few random cuts isolate it","More neighbours","A larger kernel value"],"a":1,"e":"The score \\(2^{-E[h(x)]/c(\\psi)}\\) approaches 1 when paths are much shorter than average."},
+ {"q":"What is ‘masking’ in Mahalanobis-based detection?","o":["Hiding features from the model","A group of outliers pulls the estimated mean and inflates the covariance so that they no longer look unusual","Using a mask to ignore missing values","Flagging too many normal points"],"a":1,"e":"Robust estimates (fitting on the central points only, as in the minimum covariance determinant) avoid it."},
+ {"q":"In a one-class SVM, the parameter ν is…","o":["The kernel width","An upper bound on the fraction of training points outside the boundary (and a lower bound on the fraction of support vectors)","The number of trees","The learning rate"],"a":1,"e":"This makes ν an intuitive stand-in for the expected contamination; γ controls how tightly the boundary wraps the data."},
+ {"q":"A point has LOF ≈ 3. This means…","o":["It has 3 neighbours","Its local density is about a third of its neighbours’ densities, so it is a local outlier","It is three standard deviations from the mean","It is a core point"],"a":1,"e":"LOF compares a point’s density with its neighbours’; values near 1 are normal, well above 1 are outliers even inside a sparse region."}
+]</script>
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything runs in your browser. Previous: <a href="../tsne-umap/">&larr; t-SNE and UMAP</a></p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../dl/assets/evo.js"></script>
+<script src="../assets/unsup.js"></script>
+<script>
+(function(){
+const {$} = ML;
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+if(window.EVO) EVO.render('#evoSlot','unsup');
+const P=()=>ML.palette();
+/* ---------- data: inliers + known anomalies (truth 1) ---------- */
+const AD={blob:'One cloud',mask:'Cluster of anomalies',moons:'Moons',density:'Mixed density'};
+function make(id){ const r=US.rng(31), X=[], y=[], g=()=>r.gauss();
+  if(id==='blob'){ for(let i=0;i<280;i++){ const a=g(), b=g(); X.push([.9*a, .55*a+.45*b]); y.push(0); } for(let i=0;i<20;i++){ let p; do{ p=[-3+6*r(),-3+6*r()]; } while(Math.hypot(p[0]/.9, p[1]-.55*p[0]/.9)<2.4); X.push(p); y.push(1); } }
+  else if(id==='mask'){ for(let i=0;i<270;i++){ const a=g(), b=g(); X.push([-.6+.8*a, -.5+.4*a+.45*b]); y.push(0); } for(let i=0;i<40;i++){ X.push([1.5+.15*g(), 1.2+.15*g()]); y.push(1); } for(let i=0;i<8;i++){ X.push([-3+6*r(),-3+1.2*r()+1.6]); y.push(1); } }
+  else if(id==='moons'){ const m=US.make('moons',260,5); m.X.forEach(p=>{ X.push(p); y.push(0); }); for(let i=0;i<22;i++){ let p, d; do{ p=[-3+6*r(),-3+6*r()]; d=Math.min(...m.X.map(q=>US.dist(p,q))); } while(d<.55); X.push(p); y.push(1); } }
+  else { for(let i=0;i<120;i++){ X.push([-1.6+.18*g(), 1.2+.18*g()]); y.push(0); } for(let i=0;i<150;i++){ X.push([1.1+.7*g(), -.6+.7*g()]); y.push(0); }
+    for(let i=0;i<10;i++){ const t=2*Math.PI*i/10; X.push([-1.6+.85*Math.cos(t), 1.2+.85*Math.sin(t)]); y.push(1); } for(let i=0;i<8;i++){ X.push([-3+6*r(), r()<.5? -2.9+.4*r() : 2.6+.4*r()]); y.push(1); } }
+  return {X,y}; }
+const DS={}; Object.keys(AD).forEach(k=>DS[k]=make(k));
+const seg=(id,cur,cb)=>{ const el=$('#'+id); el.innerHTML=Object.entries(AD).map(([k,v])=>`<button data-v="${k}"${k===cur?' class="on"':''}>${v}</button>`).join(''); ML.bindSeg(el,cb); if(ML.tileRow) ML.tileRow(el); };
+let cont=.1;   /* share flagged, shared by every section */
+const quant=(a,q)=>{ const s=a.slice().sort((u,v)=>u-v); return s[Math.min(s.length-1,Math.max(0,Math.floor(q*(s.length-1))))]; };
+/* shade by score: pink beyond the threshold, fading with distance from it; draw the threshold contour */
+function shade(plot, f, thr, scale, res=7){ plot.regions((x,y)=>{ const s=f([x,y]); return .5+.5*Math.tanh((s-thr)/scale); }, res, .9); plot.contour((x,y)=>f([x,y]), thr, {color:ML.palette().ink, width:2, res:res}); }
+function drawData(plot, D, flag, o={}){ const pal=P(), c=plot.ctx; c.save(); D.X.forEach((p,i)=>{ const X=plot.X(p[0]), Y=plot.Y(p[1]), r=o.size? o.size(i) : 3.4; c.beginPath(); c.arc(X,Y,r,0,7); c.fillStyle= flag[i]? pal.c2 : pal.muted; c.globalAlpha= flag[i]? 1 : .75; c.fill(); c.globalAlpha=1; c.lineWidth=1; c.strokeStyle=pal.dark?'#0b0d19':'#fff'; c.stroke();
+    if(D.y[i]){ c.beginPath(); c.arc(X,Y,r+3.2,0,7); c.lineWidth=1.8; c.strokeStyle=pal.c4; c.stroke(); } if(o.ring && o.ring(i)){ c.beginPath(); c.arc(X,Y,r+5.5,0,7); c.lineWidth=1.6; c.strokeStyle=pal.ink; c.stroke(); } }); c.restore(); }
+function metr(score, truth, thr){ const flag=score.map(s=>s>thr), tp=flag.filter((f,i)=>f&&truth[i]).length, nf=flag.filter(Boolean).length, np=truth.filter(Boolean).length; return {flag, auc:US.auc(score,truth), prec: nf? tp/nf : 0, rec: np? tp/np : 0, nf}; }
+const mstats=(m)=>stat('c1',m.auc.toFixed(3),'ROC AUC')+stat('c5',(100*m.prec).toFixed(0)+'%','precision of flags')+stat('c3',(100*m.rec).toFixed(0)+'%','anomalies caught')+stat('c4',m.nf,'points flagged');
+
+/* ---------- 1 · Mahalanobis ---------- */
+const pM=new ML.Plot('#pM'); let mD='mask', mFit='classic';
+function drawM(){ const D=DS[mD], G=US.gauss2(D.X, mFit==='robust'), sc=D.X.map(G.md), thr=quant(sc,1-cont), m=metr(sc,D.y,thr); pM.clear(); shade(pM,G.md,thr,.6); pM.grid(1); drawData(pM,D,m.flag);
+  const c=pM.ctx, pal=P(); c.save(); c.fillStyle=pal.ink; c.beginPath(); c.arc(pM.X(G.m[0]),pM.Y(G.m[1]),5,0,7); c.fill(); c.restore();
+  $('#mStats').innerHTML=mstats(m); }
+seg('mData', mD, v=>{ mD=v; drawM(); }); ML.bindSeg('mFit', v=>{ mFit=v; drawM(); });
+ML.bindRange('mC', v=>{ cont=v; drawM(); drawI(); drawO(); drawL(); drawC(); }, v=>(100*v).toFixed(1)+'%');
+
+/* ---------- 2 · isolation forest ---------- */
+const pI=new ML.Plot('#pI'); let iD='moons', iT=100, iS=128, IF=null, iKey='', iSel=-1;
+function fitI(){ const k=iD+iT+'|'+iS; if(k!==iKey){ IF=US.iforest(DS[iD].X,{trees:iT,sample:iS,seed:9}); iKey=k; } }
+function drawI(){ fitI(); const D=DS[iD], sc=D.X.map(IF.score), thr=quant(sc,1-cont), m=metr(sc,D.y,thr); pI.clear(); shade(pI,IF.score,thr,.03,8); drawData(pI,D,m.flag,{ring:i=>i===iSel});
+  let extra=''; if(iSel>=0){ /* replay one tree's cuts for the chosen point, within the bounding box of the data */ const x=D.X[iSel], t=IF.trees[0], c=pI.ctx, pal=P(); let nd=t, box=[[-3.2,3.2],[-3.2,3.2]], k=0; c.save(); c.strokeStyle=pal.ink; c.lineWidth=1.6;
+    while(!nd.leaf){ k++; const f=nd.f, s=nd.s; c.globalAlpha=.85; c.beginPath(); if(f===0){ c.moveTo(pI.X(s),pI.Y(box[1][0])); c.lineTo(pI.X(s),pI.Y(box[1][1])); } else { c.moveTo(pI.X(box[0][0]),pI.Y(s)); c.lineTo(pI.X(box[0][1]),pI.Y(s)); } c.stroke();
+      if(x[f]<s){ box[f]=[box[f][0],s]; nd=nd.l; } else { box[f]=[s,box[f][1]]; nd=nd.r; } }
+    c.globalAlpha=1; c.fillStyle=pal.c4; c.globalAlpha=.2; c.fillRect(pI.X(box[0][0]),pI.Y(box[1][1]),pI.X(box[0][1])-pI.X(box[0][0]),pI.Y(box[1][0])-pI.Y(box[1][1])); c.restore();
+    extra=stat('c4',k+(nd.size>1?' + c('+nd.size+')':''),'cuts in tree 1 for the chosen point')+stat('c2',IF.score(x).toFixed(3),'its score s(x)'); }
+  $('#iStats').innerHTML=mstats(m).split('</div>').slice(0,2).join('</div>')+'</div>'+(extra||stat('c3',US.cN(Math.min(iS,D.X.length)).toFixed(2),'c(ψ): average path length')+stat('c4','tap a point','to see one tree isolate it')); }
+pI.pointer({down:(x,y)=>{ iSel=pI.nearest(DS[iD].X,pI.X(x),pI.Y(y),16); drawI(); }});
+seg('iData', iD, v=>{ iD=v; iSel=-1; drawI(); }); ML.bindRange('iT', v=>{ iT=v; drawI(); }); ML.bindRange('iS', v=>{ iS=v; drawI(); });
+
+/* ---------- 3 · one-class SVM ---------- */
+const pO=new ML.Plot('#pO'); let oD='moons', oN=.08, oG=0, OC=null, oKey='';
+function drawO(){ const D=DS[oD], gam=Math.pow(10,oG), k=oD+oN+'|'+oG; if(k!==oKey){ OC=US.ocsvm(D.X,oN,gam); oKey=k; } const f=x=>-OC.f(x), sc=D.X.map(f), thr=0, m=metr(sc,D.y,thr);
+  pO.clear(); shade(pO,f,thr,.02,8); drawData(pO,D,m.flag,{ring:i=>OC.alpha[i]>1e-8});
+  $('#oStats').innerHTML=stat('c1',m.auc.toFixed(3),'ROC AUC of −f(x)')+stat('c4',(100*m.nf/D.X.length).toFixed(1)+'%','training points outside (≤ ν)')+stat('c3',(100*OC.nSV/D.X.length).toFixed(1)+'%','support vectors (≥ ν)')+stat('c5',(100*m.prec).toFixed(0)+'%','precision of flags'); }
+seg('oData', oD, v=>{ oD=v; drawO(); }); ML.bindRange('oN', v=>{ oN=v; drawO(); }, v=>v.toFixed(2)); ML.bindRange('oG', v=>{ oG=v; drawO(); }, v=>'γ = '+Math.pow(10,v).toFixed(2));
+
+/* ---------- 4 · LOF ---------- */
+const pL=new ML.Plot('#pL'); let lD='density', lK=15;
+function drawL(){ const D=DS[lD], L=US.lof(D.X,lK), sc=L.lof, thr=quant(sc,1-cont), m=metr(sc,D.y,thr); pL.clear(); pL.grid(1);
+  drawData(pL,D,m.flag,{size:i=>Math.min(12,2.2+2.6*Math.max(0,sc[i]-1))});
+  const top=[...sc.keys()].sort((a,b)=>sc[b]-sc[a]).slice(0,5), c=pL.ctx, pal=P(); c.save(); c.font='600 11.5px Inter,system-ui'; top.forEach(i=>{ const X=pL.X(D.X[i][0])+8, Y=pL.Y(D.X[i][1])-6; c.lineWidth=3; c.strokeStyle=pal.bg; c.strokeText(sc[i].toFixed(1),X,Y); c.fillStyle=pal.ink; c.fillText(sc[i].toFixed(1),X,Y); }); c.restore();
+  $('#lStats').innerHTML=mstats(m); }
+seg('lData', lD, v=>{ lD=v; drawL(); }); ML.bindRange('lK', v=>{ lK=v; drawL(); });
+
+/* ---------- 5 · side by side ---------- */
+let cD='density'; const NAMES=[['Robust Mahalanobis','m'],['Isolation forest','i'],['One-class SVM','o'],['LOF','l']];
+$('#cGal').innerHTML=NAMES.map(([t,k])=>`<figure><div class="plot sq" id="c_${k}"></div><figcaption><b>${t}</b><span id="c_${k}_s"></span></figcaption></figure>`).join(''); const CP={}; NAMES.forEach(([,k])=>CP[k]=new ML.Plot('#c_'+k));
+function drawC(){ const D=DS[cD]; const G=US.gauss2(D.X,true), F=US.iforest(D.X,{trees:100,sample:128,seed:9}), O=US.ocsvm(D.X,Math.max(.02,cont),1), L=US.lof(D.X,15);
+  const S={m:[G.md,.6], i:[F.score,.03], o:[x=>-O.f(x),.02], l:[L.scoreAt,.3]};
+  NAMES.forEach(([,k])=>{ const [f,scale]=S[k], sc= k==='l'? L.lof : D.X.map(f), thr=k==='o'? 0 : quant(sc,1-cont), m=metr(sc,D.y,thr), pl=CP[k]; pl.clear(); shade(pl,f,thr,scale,k==='l'?12:9); drawData(pl,D,m.flag,{size:()=>2.6}); $('#c_'+k+'_s').textContent=`AUC ${m.auc.toFixed(2)} · prec ${(100*m.prec).toFixed(0)}%`; }); }
+seg('cData', cD, v=>{ cD=v; drawC(); });
+
+drawM(); drawI(); drawO(); drawL(); drawC();
+pM.onResize=()=>drawM(); pI.onResize=()=>drawI(); pO.onResize=()=>drawO(); pL.onResize=()=>drawL(); let ct=0; Object.values(CP).forEach(p=>p.onResize=()=>{ clearTimeout(ct); ct=setTimeout(drawC,40); });
+ML.onTheme && ML.onTheme(()=>{ drawM(); drawI(); drawO(); drawL(); drawC(); });
+})();
+</script>
+<script>ML.nav('anomaly-detection'); ML.renderMath(document.body);</script>
+</body>
+</html>

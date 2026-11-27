@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reinforcement learning foundations: MDPs, Bellman equations and bandits, explained interactively</title>
+<meta name="description" content="Learning from rewards instead of labels: Markov decision processes on an editable gridworld, the Bellman equations, value iteration and policy iteration you can step through, the discount factor, and exploration versus exploitation with ε-greedy, UCB and Thompson sampling on multi-armed bandits.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-rl">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Step 8 &middot; Reinforcement learning</p>
+  <h1>Reinforcement learning: <span class="grad">learning from rewards</span></h1>
+  <p class="lede">Every model so far learned from examples with the right answer attached. Reinforcement learning has no answer key. An agent acts, the world responds with a reward, and the agent must work out which of its many past choices earned it. This page builds the foundations: the Markov decision process that describes the problem, the Bellman equations that every RL algorithm tries to solve, and the exploration dilemma at its heart.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#mdp">1 · The MDP</a><a href="#bellman">2 · Bellman &amp; value iteration</a><a href="#pi">3 · Policy iteration</a><a href="#bandit">4 · Bandits</a><a href="#watch">5 · One bandit, close up</a><a href="#next">6 · Planning to learning</a><a href="#py">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is reinforcement learning, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3>
+      <p>Some tasks are a sequence of decisions where nobody can tell you the right move, only how well things went in the end: playing a game, steering a robot, choosing which advert to show, deciding when to restock a warehouse. A good early move may only pay off many steps later, and a bad one may look fine at first.</p>
+      <h3>The idea</h3>
+      <p>In <a class="term" data-t="reinforcement-learning">reinforcement learning</a> an <a class="term" data-t="rl-agent">agent</a> observes a <a class="term" data-t="rl-state">state</a>, picks an <a class="term" data-t="rl-action">action</a>, and receives a <a class="term" data-t="rl-reward">reward</a> and a new state. Its goal is a <a class="term" data-t="rl-policy">policy</a>, a rule for choosing actions, that maximises the total future reward, the <a class="term" data-t="rl-return">return</a>.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Describe the problem as a <a class="term" data-t="mdp">Markov decision process</a>: states, actions, transition probabilities, rewards and a <a class="term" data-t="discount-factor">discount factor</a>.</li><li>Define how good each state is under a policy: the <a class="term" data-t="value-function">value function</a>.</li><li>Use the <a class="term" data-t="bellman-equation">Bellman equation</a>, which links the value of a state to the values of its neighbours, to compute or learn values.</li><li>Act greedily with respect to the values, while still <a class="term" data-t="exploration-exploitation">exploring</a> enough to find better options.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Learning to cook without a recipe. You try a dish, your family's faces are the reward, and you slowly learn which choices (more salt, less time in the oven) lead to good dinners. You also face the explorer's dilemma: cook the favourite again, or risk something new that might be better.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Sequential decisions with delayed consequences</li><li>Problems with a clear score but no labelled examples</li><li>Games, control, recommendation, and fine-tuning LLMs from feedback</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Needs many trials, often far more than supervised learning</li><li>Agents exploit badly designed rewards in surprising ways</li><li>Exploring in the real world can be costly or unsafe</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="reinforcement-learning">Reinforcement learning</a><a class="term" data-t="mdp">MDP</a><a class="term" data-t="rl-state">State</a><a class="term" data-t="rl-action">Action</a><a class="term" data-t="rl-reward">Reward</a><a class="term" data-t="rl-return">Return</a><a class="term" data-t="discount-factor">Discount factor</a><a class="term" data-t="rl-policy">Policy</a><a class="term" data-t="value-function">Value function</a><a class="term" data-t="q-function">Q-function</a><a class="term" data-t="bellman-equation">Bellman equation</a><a class="term" data-t="value-iteration">Value iteration</a><a class="term" data-t="policy-iteration">Policy iteration</a><a class="term" data-t="multi-armed-bandit">Multi-armed bandit</a><a class="term" data-t="epsilon-greedy">ε-greedy</a><a class="term" data-t="ucb">UCB</a><a class="term" data-t="thompson-sampling">Thompson sampling</a><a class="term" data-t="regret">Regret</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="mdp" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>A Markov decision process you can edit</h2>
+    <p class="sub">A robot on a grid. Green is the goal (+1), red is a pit (−1), grey cells are walls. Click a cell to cycle it: empty → wall → pit → goal. The robot is S.</p>
+    <div class="plot wide" id="pG"></div>
+    <div class="ctl"><label for="gSlip"><span>Slip probability</span><output id="gSlipOut"></output></label><input type="range" id="gSlip" min="0" max="0.6" step="0.05" value="0.2"></div>
+    <div class="ctl"><label for="gStep"><span>Reward per step</span><output id="gStepOut"></output></label><input type="range" id="gStep" min="-0.5" max="0.1" step="0.01" value="-0.04"></div>
+    <div class="ctl"><label for="gGam"><span>Discount γ</span><output id="gGamOut"></output></label><input type="range" id="gGam" min="0.5" max="0.99" step="0.01" value="0.95"></div>
+    <div class="ctl"><button class="btn primary" id="gRun">Run an episode</button> <button class="btn" id="gReset">Reset the grid</button></div>
+    <div class="stats" id="gStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Let us make the robot precise. A <a class="term" data-t="mdp">Markov decision process</a> is a tuple \((\mathcal S,\mathcal A,P,R,\gamma)\):</p>
+      <ul>
+        <li>\(\mathcal S\): the states, here the 35 cells.</li>
+        <li>\(\mathcal A\): the actions, here up, right, down, left.</li>
+        <li>\(P(s'\mid s,a)\): the probability of landing in \(s'\) after taking \(a\) in \(s\). With slip probability \(p\) the robot goes where it intended with probability \(1-p\) and veers left or right with probability \(p/2\) each. Bumping into a wall leaves it where it was.</li>
+        <li>\(R(s')\): the reward for arriving in \(s'\): +1 at the goal, −1 in a pit, and a small step reward everywhere else.</li>
+        <li>\(\gamma\in[0,1)\): the <a class="term" data-t="discount-factor">discount factor</a>.</li>
+      </ul>
+      <p>The word Markov means the next state depends only on the current state and action, not on how we got there. The robot's position is all it needs to know.</p>
+      <p>A <a class="term" data-t="rl-policy">policy</a> \(\pi(a\mid s)\) says what to do in each state. Following it from time \(t\) produces rewards \(r_{t+1},r_{t+2},\dots\), and we score the whole future by the discounted <a class="term" data-t="rl-return">return</a>:</p>
+      <div class="mathbox c1">$$G_t=r_{t+1}+\gamma r_{t+2}+\gamma^2 r_{t+3}+\dots=\sum_{k=0}^{\infty}\gamma^k r_{t+k+1}.$$</div>
+      <p>Why discount? A reward now is worth more than the same reward later (it is certain, and it can be used sooner), and with \(\gamma<1\) the sum stays finite even if the episode never ends. A useful rule of thumb: the agent effectively looks about \(1/(1-\gamma)\) steps ahead, so \(\gamma=0.95\) means about 20 steps.</p>
+      <p>Press <b>Run an episode</b>: the robot follows the best policy found in section 2 and the slip makes each run different. Now make the step reward very negative (−0.4): life is so painful that the robot takes the shortest route even past the pit, and with a step reward above 0 it stops wanting to finish at all. The reward you write down is the behaviour you get.</p>
+    </div>
+  </div>
+</section>
+
+<section id="bellman" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>The Bellman equation and value iteration</h2>
+    <p class="sub">The same grid. Colour and number show the current value estimate \(V(s)\); arrows show the greedy action. Sweep and watch values flow out from the goal.</p>
+    <div class="plot wide" id="pV"></div>
+    <div class="ctl"><button class="btn primary" id="vOne">One sweep</button> <button class="btn" id="vAll">Sweep until converged</button> <button class="btn" id="vZero">Set V = 0</button></div>
+    <div class="plot short" id="pD" style="margin-top:8px"></div>
+    <div class="stats" id="vStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>How good is a state? Under a policy \(\pi\), the <a class="term" data-t="value-function">value</a> of \(s\) is the return we expect when we start there and follow \(\pi\):</p>
+      <div class="mathbox c1">$$V^\pi(s)=\mathbb E_\pi\big[G_t\mid s_t=s\big],\qquad Q^\pi(s,a)=\mathbb E_\pi\big[G_t\mid s_t=s,\ a_t=a\big].$$</div>
+      <p>\(Q^\pi\), the <a class="term" data-t="q-function">action-value</a>, also fixes the first action. Now split the return into the first reward and everything after it: \(G_t=r_{t+1}+\gamma G_{t+1}\). Taking expectations gives the <a class="term" data-t="bellman-equation">Bellman expectation equation</a>, a link between a state's value and its neighbours' values:</p>
+      <div class="mathbox c2">$$V^\pi(s)=\sum_a\pi(a\mid s)\sum_{s'}P(s'\mid s,a)\big[R(s')+\gamma V^\pi(s')\big].$$</div>
+      <p>We want the best policy, not just any. The optimal value \(V^*(s)=\max_\pi V^\pi(s)\) satisfies the <b>Bellman optimality equation</b>, where the average over the policy becomes a max:</p>
+      <div class="mathbox c3">$$V^*(s)=\max_a\sum_{s'}P(s'\mid s,a)\big[R(s')+\gamma V^*(s')\big],\qquad \pi^*(s)=\arg\max_a\sum_{s'}P(s'\mid s,a)\big[R(s')+\gamma V^*(s')\big].$$</div>
+      <p><a class="term" data-t="value-iteration">Value iteration</a> turns this equation into an update: start from any guess, and replace every \(V(s)\) by the right-hand side. Each sweep pushes information one more step away from the rewards. Press <b>One sweep</b> a few times: after the first sweep only the cells next to the goal and pit know about them; after ten the whole grid does. The lower chart is the biggest change per sweep on a log scale. It falls along a straight line, because each sweep shrinks the error by at least a factor \(\gamma\).</p>
+      <div class="algo" data-anim="valueiter"><h5 class="algo-h">Algorithm: value iteration</h5><ol>
+        <li><span class="kw">input</span> MDP \((\mathcal S,\mathcal A,P,R)\), discount \(\gamma\), tolerance \(\theta\)</li>
+        <li>\(V(s)\leftarrow 0\) for every state <span class="cm">terminal states stay 0</span></li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1">\(\Delta\leftarrow 0\)</li>
+        <li class="i1"><span class="kw">for each</span> non-terminal state \(s\)</li>
+        <li class="i2">\(V_{\text{new}}(s)\leftarrow\max_a\sum_{s'}P(s'\mid s,a)\,[R(s')+\gamma V(s')]\)</li>
+        <li class="i2">\(\Delta\leftarrow\max(\Delta,\ |V_{\text{new}}(s)-V(s)|)\)</li>
+        <li class="i1">\(V\leftarrow V_{\text{new}}\)</li>
+        <li><span class="kw">until</span> \(\Delta&lt;\theta\)</li>
+        <li><span class="kw">return</span> greedy policy \(\pi(s)=\arg\max_a\sum_{s'}P(s'\mid s,a)[R(s')+\gamma V(s')]\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: why value iteration always converges</summary><div>
+        <p>Write one sweep as an operator, \((\mathcal T V)(s)=\max_a\sum_{s'}P(s'\mid s,a)[R(s')+\gamma V(s')]\). For any two value tables \(U,V\), the max of a difference is at most the difference of maxes, and the probabilities sum to one, so</p>
+        $$\|\mathcal T U-\mathcal T V\|_\infty\le\gamma\,\|U-V\|_\infty .$$
+        <p>\(\mathcal T\) is a <i>contraction</i>. By Banach's fixed-point theorem it has exactly one fixed point, \(V^*\), and repeating it from any start converges there geometrically: after \(k\) sweeps the error is at most \(\gamma^k\|V_0-V^*\|_\infty\). This is the straight line in the log chart. It also explains why \(\gamma\) close to 1 is slow: with \(\gamma=0.99\) you need about 460 sweeps to shrink the error 100-fold.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="pi" class="card">
+  <h2><span class="num">3</span>Policy iteration and dynamic programming</h2>
+  <div class="grid2 prose">
+    <div>
+      <p>Value iteration improves values and only reads off a policy at the end. <a class="term" data-t="policy-iteration">Policy iteration</a> alternates two clean steps instead:</p>
+      <ol>
+        <li><b>Policy evaluation.</b> For the current policy \(\pi\), solve the Bellman expectation equation. For a fixed policy it is linear in \(V\): \(V^\pi=R_\pi+\gamma P_\pi V^\pi\), so \(V^\pi=(I-\gamma P_\pi)^{-1}R_\pi\) (or sweep it to convergence).</li>
+        <li><b>Policy improvement.</b> Make the policy greedy with respect to \(V^\pi\): \(\pi'(s)=\arg\max_a Q^\pi(s,a)\).</li>
+      </ol>
+      <p>The policy improvement theorem says \(\pi'\) is at least as good as \(\pi\) in every state, and strictly better somewhere unless \(\pi\) is already optimal. There are finitely many deterministic policies, so policy iteration stops after a finite number of rounds, usually very few (often under ten, even for large problems).</p>
+    </div>
+    <div>
+      <p>Both methods are <a class="term" data-t="dynamic-programming">dynamic programming</a>: they solve a big problem (the best plan from every state) by reusing answers to smaller ones (the values of the next states). Both also need the model, \(P\) and \(R\), written down. That is called <b>planning</b>.</p>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th></th><th>Value iteration</th><th>Policy iteration</th></tr>
+        <tr><td>Each round</td><td>One cheap sweep with a max</td><td>A full evaluation, then one greedy step</td></tr>
+        <tr><td>Rounds needed</td><td>Many (\(\sim\log(1/\theta)/(1-\gamma)\))</td><td>Few</td></tr>
+        <tr><td>Stops when</td><td>Values change less than \(\theta\)</td><td>The policy stops changing</td></tr>
+      </table></div>
+      <p>In between sits <b>generalised policy iteration</b>: evaluate a little, improve a little, repeat. Almost every RL algorithm, including the deep ones on the <a href="../deep-rl/">next page</a>, is a version of this loop where the evaluation is learned from experience instead of computed from a model.</p>
+    </div>
+  </div>
+</section>
+
+<section id="bandit" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Exploration versus exploitation: the multi-armed bandit</h2>
+    <p class="sub">1,000 ten-armed bandit problems, 1,000 pulls each, averaged. Each strategy faces the same problems.</p>
+    <div class="ctl"><span class="lbl">Show</span><div class="seg" id="bSeg"><button data-v="r" class="on">Average reward</button><button data-v="o">% best arm</button><button data-v="g">Total regret</button></div></div>
+    <div class="plot wide" id="pB"></div>
+    <div class="ctl"><label for="bEps"><span>ε for ε-greedy</span><output id="bEpsOut"></output></label><input type="range" id="bEps" min="0.01" max="0.5" step="0.01" value="0.1"></div>
+    <div class="ctl"><label for="bC"><span>UCB exploration c</span><output id="bCOut"></output></label><input type="range" id="bC" min="0.1" max="4" step="0.1" value="2"></div>
+    <div class="stats" id="bStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Before sequences, strip RL down to a single decision repeated many times. A <a class="term" data-t="multi-armed-bandit">multi-armed bandit</a> has \(k\) slot machines (arms). Arm \(a\) pays a random reward with unknown mean \(q_*(a)\). You have 1,000 pulls. Which arms do you pull?</p>
+      <p>Keep an estimate for each arm, the average of the rewards it has paid so far, \(Q_t(a)\), updated incrementally after a pull: \(Q\leftarrow Q+\tfrac1N(r-Q)\). Always pulling the current best (greedy) is tempting but fragile: an arm that was unlucky on its first pull may never be tried again. The cost of not knowing is measured by <a class="term" data-t="regret">regret</a>, the reward lost against always pulling the best arm:</p>
+      <div class="mathbox c1">$$\text{Regret}_T=T\,q_*(a^*)-\sum_{t=1}^{T}q_*(a_t).$$</div>
+      <p>Three ways to explore:</p>
+      <ul>
+        <li><b><a class="term" data-t="epsilon-greedy">ε-greedy</a></b>: with probability ε pull a random arm, otherwise the best estimate. Simple, but it keeps exploring at rate ε forever, so regret grows linearly.</li>
+        <li><b><a class="term" data-t="ucb">UCB</a></b> (upper confidence bound): optimism in the face of uncertainty. Pull the arm with the highest plausible mean, \(Q_t(a)+c\sqrt{\ln t/N_t(a)}\). Rarely tried arms get a big bonus; the bonus shrinks as evidence comes in.</li>
+        <li><b><a class="term" data-t="thompson-sampling">Thompson sampling</a></b>: keep a Bayesian posterior for each arm's mean, draw one sample from each, and pull the arm whose sample is highest. Each arm is pulled with the probability that it is the best.</li>
+      </ul>
+      <p>Switch to <b>Total regret</b>: greedy and ε-greedy rise in straight lines, while UCB and Thompson bend over, growing only like \(\log T\), which Lai and Robbins proved is the best possible rate.</p>
+    </div>
+  </div>
+</section>
+
+<section id="watch" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>One bandit, close up</h2>
+    <p class="sub">Dashes: the true mean of each arm (hidden from the agent). Bars: the agent's estimate. Under each bar: how often it was pulled.</p>
+    <div class="ctl"><span class="lbl">Strategy</span><div class="seg" id="wSeg"><button data-v="eps" class="on">ε-greedy</button><button data-v="ucb">UCB</button><button data-v="ts">Thompson</button><button data-v="greedy">Greedy</button></div></div>
+    <div class="plot wide" id="pW"></div>
+    <div class="ctl"><button class="btn primary" id="w1">Pull once</button> <button class="btn" id="w50">Pull 50 times</button> <button class="btn" id="wNew">New bandit</button></div>
+    <div class="stats" id="wStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Pull a few times with each strategy on the same bandit. Greedy locks onto whichever arm looked good first. ε-greedy finds the best arm but keeps spending pulls on obviously bad ones. UCB tries everything once, then focuses, returning to an arm only when its bonus has grown. Thompson sampling behaves similarly but more smoothly: its random draws explore exactly as much as the uncertainty justifies.</p>
+      <div class="algo" data-anim="bandit"><h5 class="algo-h">Algorithm: ε-greedy and UCB bandit</h5><ol>
+        <li><span class="kw">input</span> \(k\) arms, budget \(T\), ε or \(c\)</li>
+        <li>\(Q(a)\leftarrow 0,\ N(a)\leftarrow 0\) for every arm</li>
+        <li><span class="kw">for</span> \(t=1,\dots,T\)</li>
+        <li class="i1"><span class="kw">choose</span> \(a_t\): random arm with prob. ε, else \(\arg\max_a Q(a)\) <span class="cm">ε-greedy</span></li>
+        <li class="i1"><span class="kw">or</span> \(a_t=\arg\max_a Q(a)+c\sqrt{\ln t/N(a)}\) <span class="cm">UCB; untried arms first</span></li>
+        <li class="i1">pull \(a_t\), observe reward \(r_t\)</li>
+        <li class="i1">\(N(a_t)\leftarrow N(a_t)+1\)</li>
+        <li class="i1">\(Q(a_t)\leftarrow Q(a_t)+\frac{1}{N(a_t)}\,(r_t-Q(a_t))\) <span class="cm">running mean</span></li>
+      </ol></div>
+      <p>Bandits are not only a toy. They choose which news headline to show, which drug dose to try next in adaptive trials, and which hyperparameters to evaluate next. Adding a context (features about the user) gives <b>contextual bandits</b>, the workhorse of online recommendation.</p>
+      <details class="deeper"><summary>Going deeper: where the UCB bonus comes from</summary><div>
+        <p>For rewards in \([0,1]\), Hoeffding's inequality bounds how far a sample mean of \(n\) pulls can be from the truth: \(\Pr\big(q_*(a)>Q(a)+u\big)\le e^{-2nu^2}\). Choose \(u\) so this probability is a small \(t^{-4}\), and you get \(u=\sqrt{2\ln t/n}\): the UCB1 bonus with \(c=\sqrt2\). With high probability every arm's true mean is below its upper bound, so a bad arm can only keep winning while its bonus is large, that is, while it has been pulled fewer than about \(\ln T/\Delta_a^2\) times, where \(\Delta_a\) is its gap to the best arm. Summing over arms gives regret \(O\big(\sum_a \ln T/\Delta_a\big)\).</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="next" class="card">
+  <h2><span class="num">6</span>From planning to learning</h2>
+  <div class="grid2 prose">
+    <div>
+      <p>Sections 2 and 3 assumed we know \(P\) and \(R\). Usually we do not: we can only act and see what happens. <b>Model-free</b> RL learns values or policies directly from sampled experience \((s,a,r,s')\). Two ways to estimate a value from experience:</p>
+      <ul>
+        <li><b><a class="term" data-t="monte-carlo-rl">Monte Carlo</a></b>: play a whole episode, then move \(V(s)\) towards the actual return \(G_t\). Unbiased, but noisy and must wait for the end.</li>
+        <li><b><a class="term" data-t="td-learning">Temporal difference</a></b>: after one step, move \(V(s)\) towards \(r+\gamma V(s')\), a target that uses the current estimate of the next state. It learns online and with less noise, at the cost of some bias. The difference \(\delta=r+\gamma V(s')-V(s)\) is the TD error.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Family</th><th>Learns</th><th>Examples (next page)</th></tr>
+        <tr><td>Value-based</td><td>\(Q(s,a)\), act greedily</td><td>Q-learning, SARSA, DQN</td></tr>
+        <tr><td>Policy-based</td><td>\(\pi_\theta(a\mid s)\) directly</td><td>REINFORCE</td></tr>
+        <tr><td>Actor–critic</td><td>Both: a policy and a value baseline</td><td>A2C, PPO, SAC</td></tr>
+        <tr><td>Model-based</td><td>\(P\) and \(R\), then plans</td><td>Dyna, MuZero, Dreamer</td></tr>
+      </table></div>
+      <p>Continue with <a href="../deep-rl/">Deep RL: Q-learning, DQN, policy gradients and PPO</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">7</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
+
+<span class="c"># value iteration for a tabular MDP: P[s, a, s'] probabilities, R[s'] rewards</span>
+<span class="k">def</span> value_iteration(P, R, gamma=<span class="s">0.95</span>, tol=<span class="s">1e-8</span>, terminal=()):
+    V = np.zeros(P.shape[<span class="s">0</span>])
+    <span class="k">while</span> True:
+        Q = P @ (R + gamma * V)            <span class="c"># shape (S, A): expected reward + discounted next value</span>
+        V_new = Q.max(axis=<span class="s">1</span>); V_new[list(terminal)] = <span class="s">0</span>
+        <span class="k">if</span> np.abs(V_new - V).max() &lt; tol: <span class="k">return</span> V_new, Q.argmax(axis=<span class="s">1</span>)
+        V = V_new
+
+<span class="c"># UCB1 on a k-armed bandit</span>
+<span class="k">def</span> ucb(pull, k, T, c=<span class="s">2.0</span>):
+    Q, N = np.zeros(k), np.zeros(k)
+    <span class="k">for</span> t <span class="k">in</span> range(<span class="s">1</span>, T + <span class="s">1</span>):
+        a = int(np.argmin(N)) <span class="k">if</span> N.min() == <span class="s">0</span> <span class="k">else</span> int(np.argmax(Q + c * np.sqrt(np.log(t) / N)))
+        r = pull(a); N[a] += <span class="s">1</span>; Q[a] += (r - Q[a]) / N[a]
+    <span class="k">return</span> Q, N
+
+<span class="c"># the standard toolkit for RL environments</span>
+<span class="k">import</span> gymnasium <span class="k">as</span> gym
+env = gym.make(<span class="s">"FrozenLake-v1"</span>, is_slippery=True)
+P = np.zeros((<span class="s">16</span>, <span class="s">4</span>, <span class="s">16</span>)); R = np.zeros(<span class="s">16</span>)
+<span class="k">for</span> s, acts <span class="k">in</span> env.unwrapped.P.items():
+    <span class="k">for</span> a, outcomes <span class="k">in</span> acts.items():
+        <span class="k">for</span> p, s2, r, done <span class="k">in</span> outcomes: P[s, a, s2] += p; R[s2] = max(R[s2], r)
+V, policy = value_iteration(P, R, gamma=<span class="s">0.99</span>, terminal=[<span class="s">5</span>, <span class="s">7</span>, <span class="s">11</span>, <span class="s">12</span>, <span class="s">15</span>])</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">8</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page was written for this site with its own gridworld, labs and code. The structure and notation follow Sutton and Barto, <a href="http://incompleteideas.net/book/the-book-2nd.html" target="_blank" rel="noopener"><i>Reinforcement Learning: An Introduction</i></a> (2nd edition, 2018), chapters 2 to 4; the ten-armed testbed in section 4 is their classic experiment. Original papers: Bellman 1957 (dynamic programming); Howard 1960 (policy iteration); Thompson 1933 (Thompson sampling); Lai and Robbins 1985 (the logarithmic lower bound on regret); Auer, Cesa-Bianchi and Fischer 2002 (UCB1).</p>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"In an MDP, what does the Markov property say?","o":["Rewards are always positive","The next state depends only on the current state and action, not on the earlier history","The agent must know the transition probabilities","Every episode ends in a finite number of steps"],"a":1,"e":"Markov means the present state carries all the information needed to predict what happens next. Knowing P is not required (model-free RL learns without it), and nothing forces rewards to be positive or episodes to end."},
+{"q":"With discount factor \\(\\gamma=0.9\\), roughly how many steps ahead does the agent effectively plan?","o":["About 2","About 10","About 90","Infinitely many"],"a":1,"e":"The effective horizon is about \\(1/(1-\\gamma)=10\\). Rewards further away are multiplied by \\(\\gamma^k\\), which becomes small after a few multiples of that horizon."},
+{"q":"Why does value iteration converge to the same answer from any starting guess?","o":["Because rewards are bounded","Because one Bellman optimality sweep is a \\(\\gamma\\)-contraction, so it has a unique fixed point","Because the greedy policy never changes","Because the grid is small"],"a":1,"e":"Each sweep shrinks the max distance between any two value tables by a factor \\(\\gamma\\). Banach's fixed-point theorem then guarantees a unique fixed point \\(V^*\\) and geometric convergence."},
+{"q":"On a bandit, why does ε-greedy with a fixed ε have regret that grows linearly in time?","o":["It never finds the best arm","It keeps pulling a random (often bad) arm a fraction ε of the time forever","Its estimates are biased","It explores too little at the start"],"a":1,"e":"ε-greedy does find the best arm, but a constant fraction ε of pulls stays random, each losing on average the gap to the best arm. UCB and Thompson sampling reduce exploration as uncertainty shrinks, giving logarithmic regret."},
+{"q":"UCB pulls the arm with the largest \\(Q(a)+c\\sqrt{\\ln t/N(a)}\\). What does the second term do?","o":["Penalises arms that pay a lot","Adds an optimism bonus that is large for rarely tried arms and shrinks as they are pulled","Makes the choice random","Discounts old rewards"],"a":1,"e":"The bonus is an upper confidence width: arms with few pulls are uncertain, so they might be better than they look. As \\(N(a)\\) grows, the bonus shrinks and the estimate dominates."}
+]</script>
+<p class="foot">Part of the <a href="../">Reinforcement learning</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/evo.js"></script>
+<script>
+(function(){
+const {$}=ML; const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+if(window.EVO) EVO.render('#evoSlot','rl');
+
+/* ---------- gridworld MDP ---------- */
+const NR=5, NC=7, MAP=['......G','.##.#.P','....#..','.#P....','S...#..'];
+let cells, slip=.2, stepR=-.04, gam=.95, V, sweeps=0, hist=[], ep=null, epTimer=0;
+const A=[[-1,0],[0,1],[1,0],[0,-1]];
+const isT=(r,c)=>cells[r][c]==='G'||cells[r][c]==='P';
+const open=(r,c)=>r>=0&&r<NR&&c>=0&&c<NC&&cells[r][c]!=='#';
+const mv=(r,c,a)=>{ const nr=r+A[a][0], nc=c+A[a][1]; return open(nr,nc)?[nr,nc]:[r,c]; };
+const trans=(r,c,a)=>slip>0?[[1-slip,...mv(r,c,a)],[slip/2,...mv(r,c,(a+1)%4)],[slip/2,...mv(r,c,(a+3)%4)]]:[[1,...mv(r,c,a)]];
+const rew=(r,c)=>cells[r][c]==='G'?1:cells[r][c]==='P'?-1:stepR;
+const zeros=()=>cells.map(row=>row.map(()=>0));
+const qv=(r,c,a,W)=>trans(r,c,a).reduce((s,[p,nr,nc])=>s+p*(rew(nr,nc)+gam*W[nr][nc]),0);
+const greedy=(r,c,W)=>{ let b=0, bv=-1e9; for(let a=0;a<4;a++){ const v=qv(r,c,a,W); if(v>bv+1e-12){ bv=v; b=a; } } return b; };
+function sweep(){ const Vn=zeros(); let d=0; for(let r=0;r<NR;r++) for(let c=0;c<NC;c++){ if(!open(r,c)||isT(r,c)) continue; let m=-1e9; for(let a=0;a<4;a++) m=Math.max(m,qv(r,c,a,V)); Vn[r][c]=m; d=Math.max(d,Math.abs(m-V[r][c])); } V=Vn; sweeps++; hist.push(d); return d; }
+function solved(){ let W=zeros(); for(let k=0;k<2000;k++){ const Vn=zeros(); let d=0; for(let r=0;r<NR;r++) for(let c=0;c<NC;c++){ if(!open(r,c)||isT(r,c)) continue; let m=-1e9; for(let a=0;a<4;a++) m=Math.max(m,qv(r,c,a,W)); Vn[r][c]=m; d=Math.max(d,Math.abs(m-W[r][c])); } W=Vn; if(d<1e-9) break; } return W; }
+let VS; // converged values, used by the episode runner
+function resetAll(){ cells=MAP.map(r=>r.split('')); V=zeros(); sweeps=0; hist=[]; ep=null; refresh(); }
+function refresh(){ VS=solved(); drawG(); drawV(); }
+const start=()=>{ for(let r=0;r<NR;r++) for(let c=0;c<NC;c++) if(cells[r][c]==='S') return [r,c]; return [NR-1,0]; };
+
+function layout(pl){ const s=Math.min((pl.w-16)/NC,(pl.h-16)/NR); return {s, ox:(pl.w-s*NC)/2, oy:(pl.h-s*NR)/2}; }
+function mix(a,b,t){ const A_=ML.rgb(a), B_=ML.rgb(b); return `rgb(${A_.map((x,i)=>Math.round(x+(B_[i]-x)*t)).join(',')})`; }
+function drawGrid(pl, W, o={}){ const P=ML.palette(), c=pl.ctx; pl.clear(); const {s,ox,oy}=layout(pl);
+  for(let r=0;r<NR;r++) for(let cc=0;cc<NC;cc++){ const x=ox+cc*s, y=oy+r*s, t=cells[r][cc]; let f=P.card;
+    if(t==='#') f=P.muted; else if(t==='G') f=P.c5; else if(t==='P') f=P.c2; else if(W){ const v=W[r][cc]; f=v>=0?mix(P.card,P.c5,Math.min(1,v)*.75):mix(P.card,P.c2,Math.min(1,-v)*.75); }
+    c.fillStyle=f; c.fillRect(x+1,y+1,s-2,s-2); c.strokeStyle=P.line; c.strokeRect(x+.5,y+.5,s-1,s-1);
+    c.textAlign='center'; c.textBaseline='middle';
+    if(t==='G'||t==='P'){ c.fillStyle='#fff'; c.font=`700 ${Math.round(s*.3)}px Inter,system-ui`; c.fillText(t==='G'?'+1':'−1',x+s/2,y+s/2); }
+    else if(t!=='#'){ if(W){ c.fillStyle=P.ink; c.font=`600 ${Math.max(9,Math.round(s*.2))}px "JetBrains Mono",monospace`; c.fillText(W[r][cc].toFixed(2),x+s/2,y+s*.74); }
+      if(o.arrows){ const a=greedy(r,cc,W||VS), L=s*.22, cx=x+s/2, cy=y+s*.36, dx=A[a][1]*L, dy=A[a][0]*L; c.strokeStyle=P.ink; c.fillStyle=P.ink; c.lineWidth=2; c.beginPath(); c.moveTo(cx-dx,cy-dy); c.lineTo(cx+dx,cy+dy); c.stroke();
+        const h=s*.09, ux=A[a][1], uy=A[a][0]; c.beginPath(); c.moveTo(cx+dx+ux*h*.6,cy+dy+uy*h*.6); c.lineTo(cx+dx-ux*h-uy*h,cy+dy-uy*h+ux*h); c.lineTo(cx+dx-ux*h+uy*h,cy+dy-uy*h-ux*h); c.closePath(); c.fill(); }
+      if(t==='S'){ c.fillStyle=P.c1; c.font=`700 ${Math.round(s*.22)}px Inter,system-ui`; c.fillText('S',x+s*.18,y+s*.18); } } }
+  if(o.path&&o.path.length){ c.save(); c.strokeStyle=P.c1; c.lineWidth=3; c.globalAlpha=.55; c.beginPath(); o.path.forEach(([r,cc],i)=>{ const X=ox+cc*s+s/2, Y=oy+r*s+s/2; i?c.lineTo(X,Y):c.moveTo(X,Y); }); c.stroke(); c.restore();
+    const [r,cc]=o.path[o.path.length-1]; c.fillStyle=P.c1; c.beginPath(); c.arc(ox+cc*s+s/2,oy+r*s+s/2,s*.2,0,7); c.fill(); c.strokeStyle='#fff'; c.lineWidth=2; c.stroke(); } }
+const pG=new ML.Plot('#pG',{equal:false}), pV=new ML.Plot('#pV',{equal:false}), pD=new ML.Plot('#pD',{equal:false});
+function drawG(){ drawGrid(pG, null, {arrows:true, path: ep?ep.path:null});
+  $('#gStats').innerHTML = ep ? stat('c1',ep.path.length-1,'steps taken')+stat(ep.G>=0?'c5':'c2',ep.G.toFixed(3),'discounted return G')+stat('c3',ep.end||'walking…','outcome')
+    : stat('c1',(VS[start()[0]][start()[1]]).toFixed(3),'V*(S): expected return from the start')+stat('c3',(1/(1-gam)).toFixed(0)+' steps','effective horizon 1/(1−γ)'); }
+function drawV(){ drawGrid(pV, V, {arrows:sweeps>0});
+  const pts=hist.map((d,i)=>[i+1,Math.log10(Math.max(d,1e-12))]);
+  if(pts.length) ML.chart(pD,[{pts,color:ML.palette().c1,dots:true,r:2.5}],{x0:0,x1:Math.max(10,pts.length),y0:Math.min(-6,...pts.map(p=>p[1])),y1:Math.max(0.2,...pts.map(p=>p[1])),xl:'sweep',yfmt:v=>'1e'+v});
+  else { pD.clear(); const c=pD.ctx, P=ML.palette(); c.fillStyle=P.muted; c.font='12px Inter,system-ui'; c.textAlign='center'; c.fillText('log10 of the biggest change per sweep appears here',pD.w/2,pD.h/2); }
+  const [sr,sc]=start(); $('#vStats').innerHTML=stat('c1',sweeps,'sweeps')+stat('c3',hist.length?hist[hist.length-1].toExponential(1):'–','last Δ')+stat('c5',V[sr][sc].toFixed(3),'V(S) now')+stat('c4',VS[sr][sc].toFixed(3),'V*(S) at convergence'); }
+function cyc(pl,e){ const r_=pl.cv.getBoundingClientRect(), {s,ox,oy}=layout(pl), cc=Math.floor((e.clientX-r_.left-ox)/s), r=Math.floor((e.clientY-r_.top-oy)/s);
+  if(r<0||r>=NR||cc<0||cc>=NC||cells[r][cc]==='S') return; const order=['.','#','P','G']; cells[r][cc]=order[(order.indexOf(cells[r][cc])+1)%4]; V=zeros(); sweeps=0; hist=[]; ep=null; clearInterval(epTimer); refresh(); }
+pG.cv.addEventListener('click',e=>cyc(pG,e)); pV.cv.addEventListener('click',e=>cyc(pV,e)); pG.cv.style.cursor=pV.cv.style.cursor='pointer';
+const reval=()=>{ V=zeros(); sweeps=0; hist=[]; ep=null; clearInterval(epTimer); refresh(); };
+ML.bindRange('gSlip',v=>{slip=v;reval();},v=>v.toFixed(2)); ML.bindRange('gStep',v=>{stepR=v;reval();},v=>v.toFixed(2)); ML.bindRange('gGam',v=>{gam=v;reval();},v=>v.toFixed(2));
+$('#gRun').addEventListener('click',()=>{ clearInterval(epTimer); const rng=Math.random; let [r,c]=start(); ep={path:[[r,c]],G:0,t:0};
+  epTimer=setInterval(()=>{ if(isT(r,c)||ep.t>=60){ clearInterval(epTimer); ep.end=isT(r,c)?(cells[r][c]==='G'?'reached the goal':'fell in the pit'):'gave up after 60 steps'; drawG(); return; }
+    const a=greedy(r,c,VS), T_=trans(r,c,a); let u=rng(), k=0; while(k<T_.length-1&&u>T_[k][0]){ u-=T_[k][0]; k++; } [r,c]=[T_[k][1],T_[k][2]]; ep.G+=Math.pow(gam,ep.t)*rew(r,c); ep.t++; ep.path.push([r,c]); drawG(); },220); });
+$('#gReset').addEventListener('click',()=>{ clearInterval(epTimer); resetAll(); });
+$('#vOne').addEventListener('click',()=>{ sweep(); drawV(); });
+$('#vAll').addEventListener('click',()=>{ for(let k=0;k<400;k++){ if(sweep()<1e-6) break; } drawV(); });
+$('#vZero').addEventListener('click',()=>{ V=zeros(); sweeps=0; hist=[]; drawV(); });
+pG.onResize=drawG; pV.onResize=drawV; pD.onResize=drawV;
+resetAll();
+
+/* ---------- ten-armed testbed ---------- */
+const K=10, TT=1000, RUNS=1000; let bEps=.1, bC=2, bShow='r', res=null;
+function runBandits(){ const rng=ML.rng(11), M=['greedy','eps','ucb','ts'], R={}, O={}, G={}; M.forEach(m=>{ R[m]=new Float64Array(TT); O[m]=new Float64Array(TT); G[m]=new Float64Array(TT); });
+  for(let run=0;run<RUNS;run++){ const q=[...Array(K)].map(()=>rng.gauss()); let best=0; for(let a=1;a<K;a++) if(q[a]>q[best]) best=a;     M.forEach(m=>{ const Q=new Float64Array(K), N=new Float64Array(K), S=new Float64Array(K); let reg=0; const r2=ML.rng(run*7+3);
+      for(let t=0;t<TT;t++){ let a=0;
+        if(m==='eps'&&r2()<bEps) a=Math.floor(r2()*K);
+        else if(m==='ucb'){ let un=-1; for(let i=0;i<K;i++) if(N[i]===0){ un=i; break; } if(un>=0) a=un; else { let bv=-1e9; for(let i=0;i<K;i++){ const v=Q[i]+bC*Math.sqrt(Math.log(t+1)/N[i]); if(v>bv){ bv=v; a=i; } } } }
+        else if(m==='ts'){ let bv=-1e9; for(let i=0;i<K;i++){ const v=S[i]/(N[i]+1)+r2.gauss()/Math.sqrt(N[i]+1); if(v>bv){ bv=v; a=i; } } }
+        else { let bv=-1e9; for(let i=0;i<K;i++) if(Q[i]>bv){ bv=Q[i]; a=i; } }
+        const r=q[a]+r2.gauss(); N[a]++; S[a]+=r; Q[a]+=(r-Q[a])/N[a]; reg+=q[best]-q[a]; R[m][t]+=r/RUNS; O[m][t]+=(a===best?100:0)/RUNS; G[m][t]+=reg/RUNS; } }); }
+  return {R,O,G}; }
+const pB=new ML.Plot('#pB',{equal:false});
+const NAMES={greedy:'Greedy',eps:'ε-greedy',ucb:'UCB',ts:'Thompson'};
+function drawB(){ if(!res) return; const P=ML.palette(), col={greedy:P.muted,eps:P.c4,ucb:P.c1,ts:P.c3}, src=bShow==='r'?res.R:bShow==='o'?res.O:res.G, sm=(arr)=>{ const out=[]; for(let t=0;t<TT;t+=5){ let s=0,n=0; for(let k=Math.max(0,t-10);k<=Math.min(TT-1,t+10);k++){ s+=arr[k]; n++; } out.push([t+1,s/n]); } return out; };
+  const ser=Object.keys(NAMES).map(m=>({pts:bShow==='g'?[...src[m]].map((v,t)=>[t+1,v]).filter((_,t)=>t%5===0):sm(src[m]),color:col[m],width:2.2}));
+  const fr=ML.chart(pB,ser,{x0:0,x1:TT,y0:0,xl:'pull',yfmt:bShow==='o'?(v=>v+'%'):undefined}); const c=pB.ctx; c.save(); c.font='600 12px Inter,system-ui';
+  Object.keys(NAMES).forEach((m,i)=>{ c.fillStyle=col[m]; c.fillRect(58,16+i*17,12,4); c.fillText(NAMES[m],76,22+i*17); }); c.restore();
+  const last=m=>src[m][TT-1];
+  $('#bStats').innerHTML=Object.keys(NAMES).map((m,i)=>stat(['c6','c4','c1','c3'][i],bShow==='o'?last(m).toFixed(0)+'%':last(m).toFixed(bShow==='g'?0:2),NAMES[m]+(bShow==='r'?' reward at pull 1000':bShow==='o'?' picks the best arm':' total regret'))).join(''); }
+function rerun(){ $('#bStats').innerHTML=stat('c1','running…','1,000 problems × 4 strategies'); setTimeout(()=>{ res=runBandits(); drawB(); },20); }
+let bT=0; const deb=()=>{ clearTimeout(bT); bT=setTimeout(rerun,250); };
+ML.bindRange('bEps',v=>{bEps=v;deb();},v=>v.toFixed(2)); ML.bindRange('bC',v=>{bC=v;deb();},v=>v.toFixed(1)); ML.bindSeg('bSeg',v=>{bShow=v;drawB();}); pB.onResize=drawB;
+if('IntersectionObserver' in window){ const io=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)){ io.disconnect(); rerun(); } },{rootMargin:'300px'}); io.observe($('#pB')); } else rerun();
+
+/* ---------- one bandit close up ---------- */
+const pW=new ML.Plot('#pW',{equal:false}); let wM='eps', wq, wQ, wN, wS, wt, wTot, wReg, wLast=-1, wSeed=1;
+function wNew(){ const r=ML.rng(97*wSeed++); wq=[...Array(K)].map(()=>r.gauss()); wReset(); }
+function wReset(){ wQ=new Array(K).fill(0); wN=new Array(K).fill(0); wS=new Array(K).fill(0); wt=0; wTot=0; wReg=0; wLast=-1; drawW(); }
+const gauss=()=>{ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
+function wPull(){ let a=0;
+  if(wM==='eps'&&Math.random()<bEps) a=Math.floor(Math.random()*K);
+  else if(wM==='ucb'){ const un=wN.indexOf(0); if(un>=0) a=un; else { let bv=-1e9; for(let i=0;i<K;i++){ const v=wQ[i]+bC*Math.sqrt(Math.log(wt+1)/wN[i]); if(v>bv){ bv=v; a=i; } } } }
+  else if(wM==='ts'){ let bv=-1e9; for(let i=0;i<K;i++){ const v=wS[i]/(wN[i]+1)+gauss()/Math.sqrt(wN[i]+1); if(v>bv){ bv=v; a=i; } } }
+  else { let bv=-1e9; for(let i=0;i<K;i++) if(wQ[i]>bv){ bv=wQ[i]; a=i; } }
+  const r=wq[a]+gauss(); wN[a]++; wS[a]+=r; wQ[a]+=(r-wQ[a])/wN[a]; wt++; wTot+=r; wReg+=Math.max(...wq)-wq[a]; wLast=a; }
+function drawW(){ const P=ML.palette(), c=pW.ctx; pW.clear(); const L=40, Rr=12, T=16, B=44, W=pW.w-L-Rr, H=pW.h-T-B, lo=-3, hi=3, fy=v=>T+H-(Math.max(lo,Math.min(hi,v))-lo)/(hi-lo)*H, bw=W/K, best=wq.indexOf(Math.max(...wq));
+  c.strokeStyle=P.line; c.lineWidth=1; c.font='11px Inter,system-ui'; c.fillStyle=P.muted; c.textAlign='right'; for(let v=-3;v<=3;v++){ c.beginPath(); c.moveTo(L,fy(v)+.5); c.lineTo(L+W,fy(v)+.5); c.stroke(); c.fillText(v,L-6,fy(v)+4); }
+  for(let i=0;i<K;i++){ const x=L+i*bw; c.fillStyle=i===wLast?P.c4:P.c1; c.globalAlpha=wN[i]?.8:.15; c.fillRect(x+bw*.18,Math.min(fy(0),fy(wQ[i])),bw*.64,Math.abs(fy(wQ[i])-fy(0))); c.globalAlpha=1;
+    c.strokeStyle=i===best?P.c5:P.ink; c.lineWidth=3; c.setLineDash([5,3]); c.beginPath(); c.moveTo(x+bw*.1,fy(wq[i])); c.lineTo(x+bw*.9,fy(wq[i])); c.stroke(); c.setLineDash([]);
+    if(wM==='ucb'&&wN[i]&&wt>0){ const u=wQ[i]+bC*Math.sqrt(Math.log(wt+1)/wN[i]); c.strokeStyle=P.c3; c.lineWidth=1.5; c.beginPath(); c.moveTo(x+bw/2,fy(wQ[i])); c.lineTo(x+bw/2,fy(u)); c.stroke(); c.beginPath(); c.moveTo(x+bw*.35,fy(u)); c.lineTo(x+bw*.65,fy(u)); c.stroke(); }
+    c.fillStyle=P.ink; c.textAlign='center'; c.font='600 11px Inter,system-ui'; c.fillText('arm '+(i+1),x+bw/2,T+H+15); c.fillStyle=P.muted; c.font='11px "JetBrains Mono",monospace'; c.fillText('n='+wN[i],x+bw/2,T+H+30); }
+  if(wM==='ucb'){ c.fillStyle=P.c3; c.textAlign='left'; c.font='11px Inter,system-ui'; c.fillText('cyan whiskers: UCB upper bound',L+6,T+12); }
+  $('#wStats').innerHTML=stat('c1',wt,'pulls')+stat('c3',wt?(wTot/wt).toFixed(3):'–','average reward')+stat('c5',Math.max(...wq).toFixed(3),'best possible average')+stat('c4',wReg.toFixed(1),'regret so far'); }
+ML.bindSeg('wSeg',v=>{wM=v;wReset();}); $('#w1').addEventListener('click',()=>{ wPull(); drawW(); }); $('#w50').addEventListener('click',()=>{ for(let i=0;i<50;i++) wPull(); drawW(); }); $('#wNew').addEventListener('click',wNew); pW.onResize=drawW;
+wNew();
+ML.onTheme&&ML.onTheme(()=>{ drawG(); drawV(); drawB(); drawW(); });
+})();
+</script>
+<script>NLP.nav('rl','rl-foundations'); ML.renderMath(document.body);</script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Projections and least squares, explained interactively</title>
+<meta name="description" content="Projecting a vector onto a line and onto a plane, the projection matrix, why the residual is perpendicular, and how least squares regression is exactly a projection, with draggable 2-D and rotatable 3-D diagrams.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-math">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Mathematical concepts &middot; Linear algebra</p>
+  <h1>Projections and <span class="grad">least squares</span></h1>
+  <p class="lede">Very often we want a point we cannot reach, and must settle for the closest point we can. In linear algebra that closest point is a projection, and finding it is one short derivation. The same derivation, written with data, is linear regression.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#line">1 · Onto a line</a><a href="#plane">2 · Onto a plane</a><a href="#lsq">3 · Least squares</a><a href="#ortho">4 · Orthonormal bases</a><a href="#ml">5 · In ML</a><a href="#py">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a projection, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>On the <a href="../matrices/#inverse">previous page</a>, \(Ax=b\) had no solution when \(b\) lay off the line that \(A\) squashed everything onto. Real data is like that all the time. With 47 houses and a model with 2 parameters, we have 47 equations and 2 unknowns. No straight line passes through every point, so \(X\theta=y\) has no exact solution.</p>
+      <p>The sensible fallback is: find the reachable point \(p\) that is <b>closest</b> to \(b\). That point is the <a class="term" data-t="projection">projection</a> of \(b\), and the key fact about it is simple: the error \(b-p\) is perpendicular to everything we could reach.</p>
+      <h3>How it works</h3>
+      <ol class="steps2"><li>Decide what is reachable: a line through \(a\), or the span of the columns of \(A\).</li><li>Write the closest point as \(p=A\hat x\) for some unknown \(\hat x\).</li><li>Demand that the error \(e=b-A\hat x\) is orthogonal to every column: \(A^\top e=0\).</li><li>Solve \(A^\top A\hat x=A^\top b\). This is the normal equation of least squares.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>The shadow of a pole at noon. The sun is straight overhead, so light falls perpendicular to the ground and the shadow is the closest point on the ground to every point of the pole. A low evening sun casts a longer, slanted shadow. That shadow is still a projection, but not the closest one.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Best approximation when exact is impossible</li><li>Splitting a vector into "explained" + "left over"</li><li>One formula for regression, PCA and denoising</li></ul></div><div class="con"><b>Watch out for</b><ul><li>\(A^\top A\) must be invertible (independent columns)</li><li>Squared error lets outliers pull the projection</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="projection">Projection</a><a class="term" data-t="orthogonal">Orthogonal</a><a class="term" data-t="residual-reg">Residual</a><a class="term" data-t="column-space">Column space</a><a class="term" data-t="normal-equations">Normal equations</a><a class="term" data-t="least-squares">Least squares</a><a class="term" data-t="orthonormal">Orthonormal</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="line" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Projecting onto a line</h2>
+    <p class="sub">Drag \(a\) (purple, sets the line) and \(b\) (orange). The green point is the projection \(p\); the dashed segment is the error \(e=b-p\).</p>
+    <div class="plot sq" id="pL"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The points on the line through \(a\) are the multiples \(t\,a\). We want the \(t\) that brings \(t\,a\) closest to \(b\). Here are two ways to find it, and they agree.</p>
+      <ol class="derive">
+        <li><div class="eq">\(f(t)=\|b-t\,a\|^2=b\cdot b-2t\,a\cdot b+t^2\,a\cdot a\)</div><div class="why">The squared distance from \(b\) to a point on the line: a parabola in \(t\).</div></li>
+        <li><div class="eq">\(f'(t)=-2\,a\cdot b+2t\,a\cdot a=0\;\Rightarrow\;\hat t=\dfrac{a\cdot b}{a\cdot a}\)</div><div class="why">Calculus: set the derivative to zero at the bottom of the parabola.</div></li>
+        <li><div class="eq">\(a\cdot(b-\hat t\,a)=a\cdot b-\hat t\,a\cdot a=0\)</div><div class="why">Geometry: the same \(\hat t\) makes the error perpendicular to \(a\). The closest point is where the error is orthogonal.</div></li>
+      </ol>
+<details class="deeper"><summary>Going deeper: why "orthogonal" really means "closest"</summary><div><p>Let \(p\) be the point on the line with \(b-p\perp a\), and let \(q\) be any other point on the line. Then \(p-q\) is a multiple of \(a\), so it is perpendicular to \(b-p\), and Pythagoras gives</p>
+$$\|b-q\|^2=\|b-p\|^2+\|p-q\|^2\ \ge\ \|b-p\|^2 ,$$
+<p>with equality only when \(q=p\). So the orthogonal foot is the unique closest point. The same argument works for any subspace, in any dimension, and for any inner product. That is why projection theorems hold even for spaces of functions (for example, Fourier series are projections).</p></div></details>
+      <div class="mathbox c5">$$p=\frac{a^\top b}{a^\top a}\,a=\underbrace{\frac{a\,a^\top}{a^\top a}}_{P}\,b .$$</div>
+      <p>The matrix \(P\) does the projecting. Projecting twice changes nothing (the shadow of a shadow is itself), so \(P^2=P\). It is also symmetric, \(P^\top=P\). Those two properties characterise orthogonal projections.</p>
+      <div class="texout" id="lTex"></div>
+      <div class="stats" id="lStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="plane" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Projecting onto a plane</h2>
+    <p class="sub">Drag to rotate. The plane is everything \(A\hat x\) can reach. Use the sliders to move \(b\).</p>
+    <div class="plot sq" id="p3"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Now let the reachable set be a plane through the origin, spanned by two columns \(a_1, a_2\) of a \(3\times2\) matrix \(A\). A point on the plane is \(A\hat x=\hat x_1a_1+\hat x_2a_2\). The same principle applies: the error must be perpendicular to the plane, which means perpendicular to <i>both</i> columns.</p>
+      <ol class="derive">
+        <li><div class="eq">\(a_1^\top(b-A\hat x)=0,\quad a_2^\top(b-A\hat x)=0\)</div><div class="why">The error is orthogonal to each direction in the plane.</div></li>
+        <li><div class="eq">\(A^\top(b-A\hat x)=0\)</div><div class="why">Stack the two equations: the rows of \(A^\top\) are the columns of \(A\).</div></li>
+        <li><div class="eq">\(A^\top A\,\hat x=A^\top b\;\Rightarrow\;\hat x=(A^\top A)^{-1}A^\top b\)</div><div class="why">These are the <a class="term" data-t="normal-equations">normal equations</a>. \(A^\top A\) is invertible exactly when the columns are independent.</div></li>
+      </ol>
+      <div class="mathbox c1">$$p=A\hat x=\underbrace{A(A^\top A)^{-1}A^\top}_{P}\,b .$$</div>
+      <p>When \(A\) is a single column \(a\), this collapses back to the formula from section 1, because \(a^\top a\) is just a number.</p>
+<details class="deeper"><summary>Going deeper: the anatomy of a projection matrix</summary><div><p><b>Symmetric:</b> \(P^\top=(A(A^\top A)^{-1}A^\top)^\top=A(A^\top A)^{-1}A^\top=P\), using that \(A^\top A\) is symmetric. <b>Idempotent:</b> \(P^2=A(A^\top A)^{-1}(A^\top A)(A^\top A)^{-1}A^\top=P\).</p>
+<p>Conversely, any symmetric \(P\) with \(P^2=P\) is an orthogonal projection onto its column space. Its eigenvalues can only be 0 or 1: if \(Pv=\lambda v\) then \(\lambda v=P^2v=\lambda^2v\). Directions inside the subspace have eigenvalue 1 and are kept; directions perpendicular to it have eigenvalue 0 and are removed. \(I-P\) is also a projection, onto the orthogonal complement, and every vector splits uniquely as \(b=Pb+(I-P)b\).</p>
+<p>Since the trace is the sum of eigenvalues, \(\operatorname{tr}P=\operatorname{rank}A\). In regression this is the number of parameters, also called the model's <b>degrees of freedom</b>, and it is why the noise variance is estimated with \(n-p\) in the denominator.</p></div></details>
+      <div class="ctl"><label for="b1"><span>\(b_1\)</span><output id="b1Out"></output></label><input type="range" id="b1" min="-2" max="2" step="0.05" value="1"></div>
+      <div class="ctl"><label for="b2"><span>\(b_2\)</span><output id="b2Out"></output></label><input type="range" id="b2" min="-2" max="2" step="0.05" value="0.6"></div>
+      <div class="ctl"><label for="b3"><span>\(b_3\)</span><output id="b3Out"></output></label><input type="range" id="b3" min="-2" max="2" step="0.05" value="1.8"></div>
+      <div class="texout" id="pTex"></div>
+    </div>
+  </div>
+</section>
+
+<section id="lsq" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Least squares is a projection</h2>
+    <p class="sub">Drag the points. The solid line is the least-squares fit; the dashed line is your own guess, set by the sliders. Vertical segments are residuals.</p>
+    <div class="plot wide" id="pR"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Here is the payoff. Fit \(h_\theta(x)=\theta_0+\theta_1x\) to \(n\) points. Stack the inputs into a design matrix with a column of ones (for \(\theta_0\)) and a column of \(x\)'s:</p>
+      <div class="mathbox c2">$$X=\begin{bmatrix}1&x^{(1)}\\ \vdots&\vdots\\ 1&x^{(n)}\end{bmatrix},\qquad y=\begin{bmatrix}y^{(1)}\\ \vdots\\ y^{(n)}\end{bmatrix}\in\mathbb R^n .$$</div>
+      <p>Every possible line gives a vector of predictions \(X\theta\), and all of those vectors form a 2-D plane (the <a class="term" data-t="column-space">column space</a>) inside \(\mathbb R^n\). The target \(y\) is almost never on that plane. Minimising the squared error \(\|y-X\theta\|^2\) means finding the point of the plane nearest to \(y\). That is a projection, so section 2 gives the answer immediately:</p>
+      <div class="mathbox c1">$$X^\top X\,\hat\theta=X^\top y,\qquad \hat y=X\hat\theta=Py .$$</div>
+      <p>The condition \(X^\top e=0\) has a concrete meaning. Its first row says \(\sum_i e^{(i)}=0\): the residuals balance out. Its second says \(\sum_i x^{(i)}e^{(i)}=0\): the residuals are uncorrelated with \(x\). Move the sliders away from the fit and both sums stop being zero.</p>
+      <div class="ctl"><label for="g0"><span>Your guess: intercept \(\theta_0\)</span><output id="g0Out"></output></label><input type="range" id="g0" min="-2" max="4" step="0.05" value="0.5"></div>
+      <div class="ctl"><label for="g1"><span>Your guess: slope \(\theta_1\)</span><output id="g1Out"></output></label><input type="range" id="g1" min="-1" max="2" step="0.02" value="0.8"></div>
+      <div class="tblwrap"><table class="tbl" id="rTbl"></table></div>
+      <details class="deeper"><summary>Going deeper: the calculus route, and why squared error</summary><div><p>Andrew Ng's notes derive the same equations with matrix calculus. Write \(J(\theta)=\tfrac12\|X\theta-y\|^2=\tfrac12(X\theta-y)^\top(X\theta-y)\). Expanding, \(J=\tfrac12\theta^\top X^\top X\theta-\theta^\top X^\top y+\tfrac12y^\top y\), and the gradient is</p>
+$$\nabla_\theta J=X^\top X\theta-X^\top y .$$
+<p>Setting it to zero gives the normal equations. \(J\) is a convex bowl because its Hessian \(X^\top X\) is positive semi-definite (\(v^\top X^\top Xv=\|Xv\|^2\ge0\)), so this stationary point is the global minimum. Geometry and calculus give the same answer.</p>
+<p>Why squared error rather than absolute error? If \(y^{(i)}=\theta^\top x^{(i)}+\varepsilon^{(i)}\) with independent Gaussian noise \(\varepsilon\sim\mathcal N(0,\sigma^2)\), the log-likelihood is \(-\frac{1}{2\sigma^2}\sum_i(y^{(i)}-\theta^\top x^{(i)})^2\) plus a constant. Maximising likelihood is then exactly least squares (see <a href="../inference/#mle">maximum likelihood</a>). The <b>Gauss–Markov theorem</b> adds that, even without assuming Gaussian noise, least squares has the smallest variance among unbiased linear estimators, as long as the noise has zero mean, constant variance and no correlation.</p></div></details>
+<div class="algo"><h5 class="algo-h">Algorithm: least squares, two ways</h5><ol><li><span class="kw">input</span> design matrix \(X\) (\(n\times p\), first column all ones), targets \(y\)</li><li><span class="cm">Route A: normal equations (simple, less stable)</span></li><li>\(G \leftarrow X^\top X\); \(g \leftarrow X^\top y\)</li><li>solve \(G\theta = g\) (Cholesky, since \(G\) is symmetric positive definite)</li><li><span class="cm">Route B: QR (what libraries do)</span></li><li>\(Q, R \leftarrow \text{QR}(X)\); solve \(R\theta = Q^\top y\) by back substitution</li><li>\(\hat y \leftarrow X\theta\); \(e \leftarrow y - \hat y\) <span class="cm">check: Xᵀe ≈ 0</span></li><li><span class="kw">return</span> \(\theta\), \(\hat y\), \(e\)</li></ol></div>
+<p class="hint">See the <a href="../../ml/linear-regression/">linear regression page</a> for the same fit with gradient descent, standard errors and R².</p>
+    </div>
+  </div>
+</section>
+
+<section id="ortho" class="card">
+  <h2><span class="num">4</span>Orthonormal bases make projection easy</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>The formula \(A(A^\top A)^{-1}A^\top\) has an inverse in the middle, which is the expensive and fragile part. It disappears if the columns are <a class="term" data-t="orthonormal">orthonormal</a>: unit length and mutually perpendicular. Call such a matrix \(Q\). Then \(Q^\top Q=I\), and</p>
+      <div class="mathbox c3">$$P=QQ^\top,\qquad p=\sum_k (q_k\cdot b)\,q_k .$$</div>
+      <p>In words: the coordinate of \(b\) along each \(q_k\) is just a dot product, and the projection is the sum of those pieces. No system of equations to solve. This is why so many algorithms first build an orthonormal basis. Gram–Schmidt does it by taking each new column and subtracting its projections onto the previous ones; written as matrices, that is the QR factorisation on the <a href="../decompositions/#qr">decompositions page</a>.</p>
+    </div>
+    <div class="ex"><b>Worked example</b>
+      <p>Let \(q_1=\tfrac{1}{\sqrt2}(1,1,0)\), \(q_2=(0,0,1)\) and \(b=(3,1,2)\).</p>
+      <p>\(q_1\cdot b=\tfrac{1}{\sqrt2}(3+1)=2\sqrt2\), \(q_2\cdot b=2\).</p>
+      <p>\(p=2\sqrt2\cdot\tfrac{1}{\sqrt2}(1,1,0)+2\,(0,0,1)=(2,2,2)\).</p>
+      <p>Check: \(e=b-p=(1,-1,0)\), and \(e\cdot q_1=0\), \(e\cdot q_2=0\). The error is perpendicular to the plane, as promised.</p>
+    </div>
+  </div>
+</section>
+
+<section id="ml" class="card">
+  <h2><span class="num">5</span>Where projections show up in ML</h2>
+  <div class="grid3 prose">
+    <div><h3>Linear regression</h3><p>The fitted values are \(\hat y=Py\) and the residuals are \((I-P)y\). The "hat matrix" \(P\) is the projection; its diagonal entries (leverages) tell you how much each point pulls on its own fit.</p></div>
+    <div><h3>PCA</h3><p><a href="../../ml/pca/">PCA</a> projects data onto the \(k\) orthonormal directions that keep the most variance. Because those directions are orthonormal, the projection is \(QQ^\top x\), and the reconstruction error is what is left over.</p></div>
+    <div><h3>Fisher's LDA</h3><p><a href="../../ml/lda-gda/">LDA</a> projects onto one direction \(w\) chosen so that the two classes' shadows are far apart and narrow.</p></div>
+    <div><h3>Removing a direction</h3><p>To remove an unwanted direction \(u\) from word vectors (say a bias direction), replace \(x\) by \(x-(u\cdot x)u\): subtract the projection.</p></div>
+    <div><h3>Ridge regression</h3><p>Ridge replaces \(X^\top X\) by \(X^\top X+\lambda I\). It is no longer a pure projection: it shrinks the fit towards zero, trading a little bias for a lot less variance. See <a href="../../ml/regularisation/">regularisation</a>.</p></div>
+    <div><h3>Attention outputs</h3><p>An attention head's output is a weighted sum of value vectors, so it always lies in their span. Each head can only write to its own small subspace of the residual stream.</p></div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python (NumPy)</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
+a, b = np.array([<span class="s">2.</span>, <span class="s">1.</span>]), np.array([<span class="s">1.</span>, <span class="s">3.</span>])
+p = (a @ b) / (a @ a) * a               <span class="c"># projection onto the line through a</span>
+P = np.outer(a, a) / (a @ a); np.allclose(P @ P, P)   <span class="c"># idempotent</span>
+x = np.array([<span class="s">1.</span>, <span class="s">2.</span>, <span class="s">3.</span>, <span class="s">4.</span>]); y = np.array([<span class="s">1.2</span>, <span class="s">1.9</span>, <span class="s">3.2</span>, <span class="s">3.8</span>])
+X = np.column_stack([np.ones_like(x), x])
+theta = np.linalg.solve(X.T @ X, X.T @ y)          <span class="c"># normal equations</span>
+theta, *_ = np.linalg.lstsq(X, y, rcond=<span class="k">None</span>)   <span class="c"># same answer, numerically safer (QR/SVD)</span>
+e = y - X @ theta; X.T @ e                         <span class="c"># ≈ [0, 0]: residual ⟂ columns</span>
+Q, R = np.linalg.qr(X); np.allclose(Q @ Q.T @ y, X @ theta)   <span class="c"># projection with an orthonormal basis</span></pre>
+</section>
+<p class="foot">Part of the <a href="../">Mathematical concepts</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script>
+(function(){
+const {$} = ML, LA=ML.LA;
+/* ---- 1. onto a line ---- */
+const pL=new ML.Plot('#pL',{bounds:{x0:-5,x1:5,y0:-5,y1:5}}); const LV=[{v:[3,1]},{v:[1.5,3]}];
+function drawL(){ const P=ML.palette(), a=LV[0].v, b=LV[1].v, aa=LA.dot(a,a)||1e-9, t=LA.dot(a,b)/aa, p=[t*a[0],t*a[1]], e=[b[0]-p[0],b[1]-p[1]], ne=Math.hypot(...e);
+  MX.axes(pL); pL.hline(-a[1],a[0],0,{color:P.c1,width:1.5,alpha:.4});
+  pL.line(b[0],b[1],p[0],p[1],{color:P.c4,width:2,dash:[5,4]});
+  if(ne>0.2 && Math.hypot(...p)>0.2){ const na=Math.sqrt(aa), s=Math.sign(t)||1; MX.rightAngle(pL,p,[-s*a[0]/na,-s*a[1]/na],[e[0]/ne,e[1]/ne]); }
+  MX.vec(pL,a,P.c1,'a'); MX.vec(pL,b,P.c4,'b'); MX.vec(pL,p,P.c5,'p',{width:3.5});
+  const Pm=[[a[0]*a[0]/aa,a[0]*a[1]/aa],[a[1]*a[0]/aa,a[1]*a[1]/aa]];
+  MX.set('lTex',`\\hat t=\\frac{a\\cdot b}{a\\cdot a}=\\frac{${MX.n(LA.dot(a,b))}}{${MX.n(aa)}}=${MX.n(t,3)},\\quad P=${MX.mtex(Pm,3)}`,true);
+  $('#lStats').innerHTML=`<div class="stat c5"><b>(${p[0].toFixed(2)}, ${p[1].toFixed(2)})</b><span>p, the closest point</span></div><div class="stat c4"><b>${ne.toFixed(3)}</b><span>‖e‖, the distance</span></div><div class="stat c1"><b>${LA.dot(a,e).toFixed(3)}</b><span>a · e (always 0)</span></div>`; }
+MX.dragVecs(pL,LV,drawL); pL.onResize=drawL;
+
+/* ---- 2. onto a plane, simple 3-D ---- */
+const p3=new ML.Plot('#p3',{bounds:{x0:-3,x1:3,y0:-3,y1:3}}); let yaw=-0.7, pitch=0.45, bvec=[1,0.6,1.8];
+const A3=[[1,0],[0.2,1],[0.3,-0.2]], a1=[1,0.2,0.3], a2=[0,1,-0.2];
+const proj=v=>{ const cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch); const x=cy*v[0]-sy*v[1], y1=sy*v[0]+cy*v[1]; return [x, cp*v[2]-sp*y1]; };
+function L3(u,v,st){ const a=proj(u), b=proj(v); p3.line(a[0],a[1],b[0],b[1],st); }
+function draw3(){ const P=ML.palette(), b=bvec; const AtA=LA.mul(LA.T(A3),A3), xh=LA.mv(LA.inv(AtA),LA.mv(LA.T(A3),b)), p=LA.mv(A3,xh), e=b.map((x,i)=>x-p[i]);
+  p3.clear(); const S=1.5, corners=[[-S,-S],[S,-S],[S,S],[-S,S]].map(([s,t])=>a1.map((x,i)=>s*x+t*a2[i]));
+  MX.poly(p3,corners.map(proj),P.c1,.13,P.c1);
+  for(let k=-1.5;k<=1.5;k+=0.75){ L3(a1.map((x,i)=>k*x-S*a2[i]),a1.map((x,i)=>k*x+S*a2[i]),{color:P.c1,width:1,alpha:.25}); L3(a2.map((x,i)=>k*x-S*a1[i]),a2.map((x,i)=>k*x+S*a1[i]),{color:P.c1,width:1,alpha:.25}); }
+  [[2.6,0,0,'x₁'],[0,2.6,0,'x₂'],[0,0,2.6,'x₃']].forEach(([x,y,z,l])=>{ L3([0,0,0],[x,y,z],{color:P.muted,width:1.2,alpha:.7}); const q=proj([x,y,z]); p3.text(l,q[0],q[1],{color:P.muted,font:'11px Inter,system-ui',dx:3}); });
+  const o=proj([0,0,0]), pb=proj(b), pp=proj(p), A1=proj(a1), A2=proj(a2);
+  p3.arrow(o[0],o[1],A1[0],A1[1],{color:P.c1,width:2.5}); p3.arrow(o[0],o[1],A2[0],A2[1],{color:P.c3,width:2.5});
+  p3.text('a₁',A1[0],A1[1],{color:P.c1,dx:5,dy:-5,halo:true,font:'italic 600 14px Newsreader,Georgia,serif'}); p3.text('a₂',A2[0],A2[1],{color:P.c3,dx:5,dy:-5,halo:true,font:'italic 600 14px Newsreader,Georgia,serif'});
+  p3.line(pb[0],pb[1],pp[0],pp[1],{color:P.c4,width:2,dash:[5,4]});
+  p3.arrow(o[0],o[1],pp[0],pp[1],{color:P.c5,width:3.5}); p3.arrow(o[0],o[1],pb[0],pb[1],{color:P.c4,width:3});
+  p3.text('b',pb[0],pb[1],{color:P.c4,dx:6,dy:-6,halo:true,font:'italic 600 15px Newsreader,Georgia,serif'}); p3.text('p',pp[0],pp[1],{color:P.c5,dx:6,dy:12,halo:true,font:'italic 600 15px Newsreader,Georgia,serif'});
+  MX.set('pTex',`\\hat x=${MX.vtex(xh)},\\ p=A\\hat x=${MX.vtex(p)},\\ e=${MX.vtex(e)},\\ A^\\top e=${MX.vtex(LA.mv(LA.T(A3),e),3)}`,true); }
+let drag=null; p3.pointer({down:(x,y,ev)=>{ drag=[ev.clientX,ev.clientY,yaw,pitch]; }, move:(x,y,ev)=>{ if(!drag) return; yaw=drag[2]+(ev.clientX-drag[0])*0.01; pitch=Math.max(-1.4,Math.min(1.4,drag[3]+(ev.clientY-drag[1])*0.01)); draw3(); }, up:()=>{ drag=null; }});
+['b1','b2','b3'].forEach((id,i)=>ML.bindRange(id,v=>{ bvec[i]=v; draw3(); },v=>v.toFixed(2))); p3.onResize=draw3;
+
+/* ---- 3. least squares ---- */
+const pR=new ML.Plot('#pR',{bounds:{x0:-0.5,x1:6.5,y0:-0.5,y1:6},equal:false}); const PTS=[[1,1.2],[2,1.6],[3,3.1],[4,3.3],[5,4.6]]; let g0=0.5,g1=0.8, dragI=-1;
+function fit(){ const n=PTS.length, X=PTS.map(p=>[1,p[0]]), y=PTS.map(p=>p[1]), XtX=LA.mul(LA.T(X),X), Xty=LA.mv(LA.T(X),y); return LA.solve(XtX,Xty)||[0,0]; }
+function drawR(){ const P=ML.palette(), th=fit(); pR.clear(); pR.grid(1,true);
+  pR.line(-1,th[0]-th[1],7,th[0]+7*th[1],{color:P.c1,width:2.5}); pR.line(-1,g0-g1,7,g0+7*g1,{color:P.c4,width:2,dash:[6,4]});
+  PTS.forEach(p=>{ const yh=th[0]+th[1]*p[0]; pR.line(p[0]+0.04,p[1],p[0]+0.04,yh,{color:P.c1,width:2,alpha:.6}); const yg=g0+g1*p[0]; pR.line(p[0]-0.04,p[1],p[0]-0.04,yg,{color:P.c4,width:2,alpha:.6}); });
+  pR.points(PTS.map(p=>p),PTS.map(()=>0),{color:()=>P.ink,r:6});
+  const row=(name,t)=>{ const e=PTS.map(p=>p[1]-t[0]-t[1]*p[0]), s1=e.reduce((a,b)=>a+b,0), s2=e.reduce((a,b,i)=>a+b*PTS[i][0],0), sse=e.reduce((a,b)=>a+b*b,0); return `<tr><td>${name}</td><td>${t[0].toFixed(2)}</td><td>${t[1].toFixed(2)}</td><td>${s1.toFixed(3)}</td><td>${s2.toFixed(3)}</td><td>${sse.toFixed(3)}</td></tr>`; };
+  $('#rTbl').innerHTML=`<tr><th></th><th>θ₀</th><th>θ₁</th><th>Σ eᵢ</th><th>Σ xᵢeᵢ</th><th>‖e‖²</th></tr>`+row('least squares',th).replace('<tr>','<tr class="best">')+row('your guess',[g0,g1]); }
+pR.pointer({down:(x,y)=>{ dragI=pR.nearest(PTS,pR.X(x),pR.Y(y),24); }, move:(x,y)=>{ if(dragI>=0){ PTS[dragI]=[Math.max(0,Math.min(6,x)),Math.max(0,Math.min(5.8,y))]; drawR(); } }, up:()=>{ dragI=-1; }});
+ML.bindRange('g0',v=>{g0=v;drawR();},v=>v.toFixed(2)); ML.bindRange('g1',v=>{g1=v;drawR();},v=>v.toFixed(2)); pR.onResize=drawR;
+ML.onTheme(()=>{ drawL(); draw3(); drawR(); });
+drawL(); draw3(); drawR();
+})();
+</script>
+<script>NLP.nav('math','projections'); ML.renderMath(document.body);</script>
+</body>
+</html>

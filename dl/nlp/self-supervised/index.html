@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Self-supervised & contrastive learning: SimCLR, collapse, masked autoencoders, CLIP, DINO</title>
+<meta name="description" content="How models learn from unlabelled data by making labels out of the data itself: SimCLR and the NT-Xent loss trained live (and the collapse you get without negatives), masked autoencoding at 75% masking and why images need so much more masking than text, and how SimCLR, BYOL, DINO, MAE and CLIP compare.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<style>
+.src{font-size:12.5px;color:var(--muted);margin:10px 0 0;border-left:3px solid var(--line);padding-left:10px}
+.src a{color:inherit;text-decoration:underline;text-decoration-color:var(--line)}
+.ss-sq{aspect-ratio:1/1;max-width:420px}
+.ss-imgs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0}
+.ss-imgs figure{margin:0;text-align:center;font-size:11.5px;color:var(--muted)}
+.ss-imgs canvas{width:100%;height:auto;image-rendering:pixelated;border-radius:6px;border:1px solid var(--line);background:var(--soft)}
+.ss-tab{width:100%;border-collapse:collapse;font-size:13px}
+.ss-tab th,.ss-tab td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+.ss-tab th{background:var(--soft);font-weight:600}
+</style>
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Vision &amp; multimodal &middot; Representation learning</p>
+  <h1>Self-supervised learning: <span class="grad">labels from the data itself</span></h1>
+  <p class="lede">Labels are expensive; raw images, audio and text are nearly free. Self-supervised learning invents a task whose answer is already in the data (fill in the hidden patch, recognise two crops of the same photo) and trains a network on billions of examples of it. The network has to understand the data to do the task, and what it learns transfers to the tasks we actually care about with very few labels. This page trains a contrastive model live, shows the collapse it must avoid, works through masked autoencoding, and compares the main families.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#simclr">1 · Contrastive learning</a><a href="#collapse">2 · Collapse</a><a href="#mae">3 · Masked autoencoders</a><a href="#compare">4 · SimCLR, BYOL, DINO, MAE, CLIP</a><a href="#py">5 · Python</a><a href="#credits">6 · Sources &amp; credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is self-supervised learning, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A supervised image model needs millions of labelled pictures. Most data has no labels, and labels capture only what the labeller was asked about (“dog”), not everything in the picture. Can a network learn useful features, the kind that make later tasks easy, from unlabelled data alone?</p>
+      <h3>The idea</h3><p>Make a <a class="term" data-t="pretext-task">pretext task</a> from the data itself. Hide part of the input and predict it (masked modelling, as in BERT and <a class="term" data-t="mae">MAE</a>). Or take two random <a class="term" data-t="data-augmentation">augmentations</a> of the same image and train their embeddings to agree, while disagreeing with other images (<a class="term" data-t="contrastive-learning">contrastive learning</a>). Then throw the task away and keep the encoder.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Collect lots of unlabelled data.</li><li>Define a pretext task whose answer is in the data.</li><li>Pre-train an encoder on it at scale.</li><li>Evaluate with a <a class="term" data-t="linear-probe">linear probe</a>: freeze the encoder, fit a linear classifier on a few labels.</li><li>Fine-tune or use the features directly for search, clustering or detection.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A child shown thousands of toys from every angle, in every light, never told their names. They come to know that the red car seen from above and the red car seen from the side are the same object, and different from the blue truck. When an adult finally says “car” once, the child generalises immediately, because the hard part, knowing what makes objects the same or different, was already learnt.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Uses unlabelled data, which is plentiful</li><li>Features that transfer to many tasks with few labels</li><li>The basis of foundation models in vision, speech and text</li></ul></div><div class="con"><b>Watch out for</b><ul><li><a class="term" data-t="representation-collapse">Collapse</a>: every input mapped to the same vector</li><li>The augmentations decide what the model ignores</li><li>Pre-training is expensive; evaluation needs care</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="self-supervised">Self-supervised</a><a class="term" data-t="pretext-task">Pretext task</a><a class="term" data-t="data-augmentation">Augmentation</a><a class="term" data-t="contrastive-learning">Contrastive learning</a><a class="term" data-t="nt-xent">NT-Xent / InfoNCE</a><a class="term" data-t="temperature">Temperature</a><a class="term" data-t="representation-collapse">Collapse</a><a class="term" data-t="mae">MAE</a><a class="term" data-t="linear-probe">Linear probe</a><a class="term" data-t="dino">DINO</a><a class="term" data-t="clip">CLIP</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. <a href="../clip/">CLIP</a> and the <a href="../visual-tokenisation/">Vision Transformer</a> have their own chapters; masked language modelling is in <a href="../transformers/">Transformers</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="simclr" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Contrastive learning: SimCLR trained live</h2>
+    <p class="sub">400 unlabelled “images” are 6-number vectors: a little meaning hidden among a lot of nuisance (think viewpoint and lighting). Augmentation changes the nuisance. The network maps each input to a point on a circle; colours are hidden classes it never sees.</p>
+    <div class="plot ss-sq" id="scPlot"></div>
+    <div class="ctl"><label for="scT"><span>Temperature τ</span><output id="scTOut"></output></label><input type="range" id="scT" min="0.05" max="1" step="0.05" value="0.2"></div>
+    <div class="ctl"><div class="seg" id="scNeg"><button data-v="1" class="on">With negatives (NT-Xent)</button><button data-v="0">Positives only</button></div></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="scGo">Retrain</button></div>
+    <div class="plot wide" id="scLoss" style="aspect-ratio:16/6"></div>
+    <div class="stats" id="scStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>SimCLR takes a batch of \(N\) images and makes two random <a class="term" data-t="data-augmentation">augmentations</a> of each (crop, colour jitter, blur, flip), giving \(2N\) views. An encoder and a small projection head map every view to a vector, normalised to unit length, \(z_i\). For a view \(i\), its partner \(j\) is the <b>positive</b>; the other \(2N-2\) views are <b>negatives</b>. With cosine similarity \(s_{ik}=z_i^\top z_k\), the <a class="term" data-t="nt-xent">NT-Xent loss</a> (normalised temperature-scaled cross-entropy, also called InfoNCE) is</p>
+      <div class="mathbox c1">$$\ell_{i}=-\log\frac{\exp(s_{ij}/\tau)}{\sum_{k\ne i}\exp(s_{ik}/\tau)},\qquad \mathcal L=\frac{1}{2N}\sum_{i=1}^{2N}\ell_i .$$</div>
+      <p>It is a softmax classification: out of \(2N-1\) candidates, pick the one that came from the same image. Solving it needs features that survive augmentation (the meaning) and ignore what augmentation changes (the nuisance). In the lab, the raw inputs are dominated by nuisance, so a nearest-neighbour classifier on them is poor; after training, the hidden classes form separate arcs on the circle and the same classifier does far better, although no label was ever used.</p>
+      <div class="algo" data-anim="simclr"><h5 class="algo-h">Algorithm: one SimCLR step</h5><ol>
+        <li><span class="kw">input</span> batch \(x_1..x_N\), augmentation family \(\mathcal A\), encoder \(f\), head \(g\), temperature \(\tau\)</li>
+        <li><span class="kw">for</span> each \(x_n\): two views \(\tilde x_{2n-1}=a(x_n),\ \tilde x_{2n}=a'(x_n)\) with \(a,a'\sim\mathcal A\)</li>
+        <li>\(z_i\leftarrow g(f(\tilde x_i))/\lVert g(f(\tilde x_i))\rVert\) for all \(2N\) views</li>
+        <li>similarity matrix \(s_{ik}=z_i^\top z_k\); mask the diagonal</li>
+        <li>\(\mathcal L\leftarrow\) mean cross-entropy of \(\text{softmax}_k(s_{ik}/\tau)\) against the partner of \(i\)</li>
+        <li>update \(f, g\) by gradient descent; after training keep \(f\), discard \(g\)</li>
+      </ol></div>
+      <p>The <a class="term" data-t="temperature">temperature</a> \(\tau\) sets how hard the softmax is. Small \(\tau\) focuses the loss on the hardest negatives (the most similar wrong images), which spreads embeddings out; too small and training becomes unstable. Large \(\tau\) treats all negatives alike and the classes blur together. Big batches matter too: more negatives per step make the task harder and the features better, which is why SimCLR used batches of 4,096.</p>
+      <details class="deeper"><summary>Going deeper: why InfoNCE works, and the projection head</summary><div>
+        <p>InfoNCE is a lower bound on the mutual information between the two views: \(I(v_1;v_2)\ge\log(2N-1)-\mathcal L\). Wang and Isola (2020) give a cleaner picture: the loss rewards <b>alignment</b> (positives close) and <b>uniformity</b> (embeddings spread evenly over the sphere). The projection head \(g\) is thrown away because it learns to discard information the augmentations made irrelevant, such as colour, which may still be useful downstream; the layer before it keeps more.</p>
+      </div></details>
+      <p class="src">Adapted from: Chen et al., <a href="https://arxiv.org/abs/2002.05709" target="_blank" rel="noopener">A Simple Framework for Contrastive Learning of Visual Representations</a> (SimCLR, 2020); van den Oord et al., <a href="https://arxiv.org/abs/1807.03748" target="_blank" rel="noopener">Contrastive Predictive Coding</a> (InfoNCE, 2018); Wang and Isola (ICML 2020).</p>
+    </div>
+  </div>
+</section>
+
+<section id="collapse" class="card">
+  <h2><span class="num">2</span>Collapse, and five ways to avoid it</h2>
+  <div class="prose">
+    <p>Switch the lab to “positives only” and press Retrain. Every point slides to the same spot on the circle. The loss is perfect (any two views of an image are identical, because <i>every</i> output is identical) and the representation is useless. This is <a class="term" data-t="representation-collapse">representation collapse</a>, the central problem of learning from agreement alone. Every self-supervised method is, in part, a trick to rule it out:</p>
+    <ul>
+      <li><b>Negatives</b> (SimCLR, MoCo): push other images away. MoCo keeps a queue of past embeddings from a slowly updated momentum encoder, so it gets many negatives without huge batches.</li>
+      <li><b>Asymmetry</b> (BYOL, SimSiam): one branch has an extra predictor and the other gets no gradient (stop-gradient), often with a momentum-averaged target network. Collapse is a solution, but the training dynamics never find it.</li>
+      <li><b>Centring and sharpening</b> (<a class="term" data-t="dino">DINO</a>): a student matches a momentum teacher's softmax output over many “prototypes”; the teacher's outputs are centred (no prototype can dominate) and sharpened (each output must be confident).</li>
+      <li><b>Variance and decorrelation</b> (Barlow Twins, VICReg): penalise embedding dimensions that have low variance across the batch or are correlated with each other, which a collapsed solution violates.</li>
+      <li><b>Reconstruction</b> (MAE, BEiT): predict the actual missing content. A constant output cannot reconstruct anything, so collapse is impossible by construction.</li>
+    </ul>
+    <p class="src">Adapted from: He et al., MoCo (2020); Grill et al., <a href="https://arxiv.org/abs/2006.07733" target="_blank" rel="noopener">BYOL</a> (2020); Chen and He, SimSiam (2021); Caron et al., <a href="https://arxiv.org/abs/2104.14294" target="_blank" rel="noopener">DINO</a> (2021); Bardes et al., VICReg (2022).</p>
+  </div>
+</section>
+
+<section id="mae" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Masked autoencoders: why 75%?</h2>
+    <p class="sub">An image cut into 8 × 8 patches. Hide a share of them at random. The right panel fills the holes the cheap way, by averaging neighbouring visible pixels. If that works, the task teaches nothing.</p>
+    <div class="ss-imgs"><figure><canvas id="maeA" width="64" height="64"></canvas><figcaption>original</figcaption></figure><figure><canvas id="maeB" width="64" height="64"></canvas><figcaption>what the encoder sees</figcaption></figure><figure><canvas id="maeC" width="64" height="64"></canvas><figcaption>filled by interpolation</figcaption></figure></div>
+    <div class="ctl"><div class="seg" id="maeI"><button data-v="0" class="on">Shapes</button><button data-v="1">Stripes</button><button data-v="2">Face</button></div></div>
+    <div class="ctl"><label for="maeR"><span>Share of patches masked</span><output id="maeROut"></output></label><input type="range" id="maeR" min="0.05" max="0.95" step="0.05" value="0.75"></div>
+    <div class="row" style="margin:6px 0"><button class="btn" id="maeNew">New random mask</button></div>
+    <div class="plot wide" id="maePlot" style="aspect-ratio:16/7"></div>
+    <div class="stats" id="maeStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>BERT hides 15% of the words in a sentence and predicts them. Language is dense with meaning: a missing word is hard to guess without understanding the sentence. Images are the opposite, highly redundant: a missing patch can often be filled from its neighbours with no understanding at all. The chart shows this directly: at 15% masking, plain interpolation already reconstructs the image well, so a network trained on that task could get away with learning to blur.</p>
+      <p>The <a class="term" data-t="mae">masked autoencoder</a> (MAE) therefore masks <b>75%</b> of the patches. Now the visible patches are scattered, neighbours are usually missing too, and filling the holes needs a model of what objects look like. The architecture is asymmetric and that makes it cheap:</p>
+      <ul><li>A large <a href="../visual-tokenisation/">ViT</a> encoder sees <b>only the visible 25%</b> of patches, no mask tokens, so pre-training costs about a quarter of the compute.</li><li>A small decoder receives the encoded patches plus a learnt mask token at every hidden position and predicts the pixels.</li><li>The loss is mean squared error on the <b>masked</b> patches only (with each patch's pixels normalised):</li></ul>
+      <div class="mathbox c1">$$\mathcal L=\frac{1}{|M|}\sum_{p\in M}\big\lVert \hat x_p-x_p\big\rVert^2,\qquad M=\text{masked patches}.$$</div>
+      <p>After pre-training the decoder is discarded and the encoder, now run on all patches, is fine-tuned. MAE-pretrained ViTs fine-tune to state-of-the-art accuracy, although their frozen features are weaker for linear probing than contrastive or DINO features, a recurring trade-off between reconstruction and invariance objectives.</p>
+      <div class="algo" data-anim="maskpatch"><h5 class="algo-h">Algorithm: one MAE training step</h5><ol>
+        <li><span class="kw">input</span> image cut into patches, mask ratio \(r=0.75\)</li>
+        <li>shuffle the patches; keep the first \((1-r)\) share as visible, the rest form \(M\)</li>
+        <li>encode the visible patches (with their position embeddings) using the ViT encoder</li>
+        <li>insert a shared mask token at every position in \(M\); run the light decoder</li>
+        <li>loss = MSE between predicted and true pixels on \(M\) only; update both</li>
+      </ol></div>
+      <p class="src">Adapted from: He et al., <a href="https://arxiv.org/abs/2111.06377" target="_blank" rel="noopener">Masked Autoencoders Are Scalable Vision Learners</a> (CVPR 2022); Devlin et al., BERT (2019); Bao et al., BEiT (2022).</p>
+    </div>
+  </div>
+</section>
+
+<section id="compare" class="card">
+  <h2><span class="num">4</span>SimCLR, BYOL, DINO, MAE and CLIP compared</h2>
+  <div style="overflow-x:auto">
+  <table class="ss-tab">
+    <tr><th>Method</th><th>Pretext task</th><th>Stops collapse by</th><th>Data</th><th>Best known for</th></tr>
+    <tr><td><b>SimCLR</b> (2020)</td><td>Two augmented views of an image should match, other images should not</td><td>Negatives in a large batch</td><td>Images</td><td>Showing augmentations and big batches are what matter</td></tr>
+    <tr><td><b>MoCo</b> (2020)</td><td>Same, with a queue of negatives from a momentum encoder</td><td>Negatives in a queue</td><td>Images</td><td>Contrastive learning without giant batches</td></tr>
+    <tr><td><b>BYOL / SimSiam</b> (2020–21)</td><td>Predict the other view's embedding</td><td>Predictor + stop-gradient (+ momentum target)</td><td>Images</td><td>Showing negatives are not strictly required</td></tr>
+    <tr><td><b>DINO / DINOv2</b> (2021–23)</td><td>Student matches a momentum teacher across global and local crops</td><td>Centring and sharpening the teacher</td><td>Images (curated, 142M for v2)</td><td>Features good enough to use frozen; attention maps that segment objects</td></tr>
+    <tr><td><b>MAE</b> (2022)</td><td>Reconstruct 75% masked patches</td><td>Reconstruction (cannot collapse)</td><td>Images</td><td>Cheap pre-training and strong fine-tuning of ViTs</td></tr>
+    <tr><td><b>CLIP</b> (2021)</td><td>Match each image to its own caption among the batch's captions</td><td>Negatives (other image–text pairs)</td><td>400M image–text pairs</td><td>Zero-shot classification, text-to-image search, guiding generators</td></tr>
+    <tr><td><b>wav2vec 2.0</b> (2020)</td><td>Pick the true quantised speech unit for masked frames among distractors</td><td>Negatives + codebook diversity loss</td><td>Raw audio</td><td>Speech recognition from 10 minutes of labels (see <a href="../audio/">Audio</a>)</td></tr>
+  </table>
+  </div>
+  <div class="prose">
+    <p><a href="../clip/">CLIP</a> is the same NT-Xent idea applied across two modalities: the two “views” are an image and its caption, with separate encoders for each. That is why the same loss shows up in the CLIP chapter, in two-tower recommenders (in-batch negatives) and in dense retrieval for <a href="../rag/">RAG</a>: contrastive learning is a general recipe for making embeddings in which “belongs together” means “close”.</p>
+    <p class="src">Sources for the table: the papers cited in sections 1–3; Radford et al., <a href="https://arxiv.org/abs/2103.00020" target="_blank" rel="noopener">CLIP</a> (2021); Oquab et al., <a href="https://arxiv.org/abs/2304.07193" target="_blank" rel="noopener">DINOv2</a> (2023); Baevski et al., wav2vec 2.0 (2020).</p>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">5</span>The same thing in Python</h2>
+  <p class="sub">The NT-Xent loss in PyTorch, frozen DINOv2 features with a linear probe, and a pretrained MAE from Hugging Face.</p>
+<pre class="code"><span class="c"># pip install torch torchvision transformers scikit-learn pillow</span>
+<span class="k">import</span> torch, torch.nn.functional <span class="k">as</span> F
+
+<span class="c"># ---- 1. NT-Xent (InfoNCE) for a batch of N image pairs ----</span>
+<span class="k">def</span> <span class="f">nt_xent</span>(z1, z2, tau=0.2):
+    z = F.normalize(torch.cat([z1, z2]), dim=1)              <span class="c"># (2N, d) unit vectors</span>
+    sim = z @ z.T / tau                                       <span class="c"># cosine similarities / temperature</span>
+    sim.fill_diagonal_(<span class="f">float</span>(<span class="s">"-inf"</span>))                         <span class="c"># a view is not its own candidate</span>
+    n = <span class="f">len</span>(z1)
+    target = torch.cat([torch.arange(n, 2 * n), torch.arange(0, n)])   <span class="c"># partner of each view</span>
+    <span class="k">return</span> F.cross_entropy(sim, target)
+
+<span class="c"># SimCLR-style augmentations</span>
+<span class="k">from</span> torchvision <span class="k">import</span> transforms <span class="k">as</span> T
+augment = T.Compose([T.RandomResizedCrop(224, scale=(0.2, 1.0)), T.RandomHorizontalFlip(),
+                     T.RandomApply([T.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                     T.RandomGrayscale(0.2), T.GaussianBlur(23), T.ToTensor()])
+
+<span class="c"># ---- 2. Frozen DINOv2 features + a linear probe ----</span>
+dino = torch.hub.load(<span class="s">"facebookresearch/dinov2"</span>, <span class="s">"dinov2_vits14"</span>).eval()
+prep = T.Compose([T.Resize(256), T.CenterCrop(224), T.ToTensor(),
+                  T.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
+
+@torch.no_grad()
+<span class="k">def</span> <span class="f">embed</span>(pil_images):
+    <span class="k">return</span> <span class="f">dino</span>(torch.stack([<span class="f">prep</span>(im) <span class="k">for</span> im <span class="k">in</span> pil_images])).numpy()   <span class="c"># (n, 384) CLS features</span>
+
+<span class="c"># from sklearn.linear_model import LogisticRegression</span>
+<span class="c"># probe = LogisticRegression(max_iter=2000).fit(embed(train_imgs), train_labels)</span>
+<span class="c"># print(probe.score(embed(test_imgs), test_labels))</span>
+
+<span class="c"># ---- 3. A pretrained masked autoencoder ----</span>
+<span class="k">from</span> transformers <span class="k">import</span> AutoImageProcessor, ViTMAEForPreTraining
+proc = AutoImageProcessor.from_pretrained(<span class="s">"facebook/vit-mae-base"</span>)
+mae = ViTMAEForPreTraining.from_pretrained(<span class="s">"facebook/vit-mae-base"</span>)   <span class="c"># mask_ratio 0.75 by default</span>
+<span class="c"># out = mae(**proc(images=pil_image, return_tensors="pt"))</span>
+<span class="c"># out.loss: MSE on the masked patches; out.mask: which patches were hidden; out.logits: predicted pixels</span>
+</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">6</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page is written for this site in its own words, with its own labs and synthetic data. The methods come from these papers:</p>
+    <ul>
+      <li>Chen et al., <a href="https://arxiv.org/abs/2002.05709" target="_blank" rel="noopener">SimCLR</a> (2020); He et al., MoCo (2020); van den Oord et al., CPC / InfoNCE (2018); Wang and Isola, alignment and uniformity (2020).</li>
+      <li>Grill et al., BYOL (2020); Chen and He, SimSiam (2021); Zbontar et al., Barlow Twins (2021); Bardes et al., VICReg (2022).</li>
+      <li>Caron et al., <a href="https://arxiv.org/abs/2104.14294" target="_blank" rel="noopener">DINO</a> (2021); Oquab et al., DINOv2 (2023).</li>
+      <li>He et al., <a href="https://arxiv.org/abs/2111.06377" target="_blank" rel="noopener">MAE</a> (2022); Bao et al., BEiT (2022); Devlin et al., BERT (2019).</li>
+      <li>Radford et al., CLIP (2021); Baevski et al., wav2vec 2.0 (2020). PyTorch, torchvision and Hugging Face Transformers documentation, for the Python section.</li>
+    </ul>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"In SimCLR, what is the positive for a given augmented view?","o":["Any image of the same class","The other augmented view of the same image","The original un-augmented image only","A random image from the batch"],"a":1,"e":"Classes are unknown. The positive is the other view of the same image; all other views in the batch are negatives."},
+{"q":"What goes wrong if you train two views to agree with no negatives and no other safeguard?","o":["The model overfits to the augmentations","Representation collapse: every input maps to the same vector","The loss diverges to infinity","Nothing; this is BYOL"],"a":1,"e":"A constant output makes all views agree perfectly. BYOL avoids this only through its asymmetric predictor and stop-gradient."},
+{"q":"Why does MAE mask 75% of image patches while BERT masks about 15% of words?","o":["Images have fewer patches than sentences have words","Images are highly redundant, so low masking can be solved by interpolation without understanding","ViTs cannot see more than 25% of an image","It was chosen at random"],"a":1,"e":"Neighbouring pixels predict a missing patch well; heavy masking forces the model to learn what objects look like. It also makes the encoder four times cheaper."},
+{"q":"What does lowering the temperature τ in NT-Xent do?","o":["Makes all negatives count equally","Sharpens the softmax so the loss focuses on the hardest negatives","Removes the positive pair","Has no effect on gradients"],"a":1,"e":"Dividing by a small τ magnifies similarity differences, so the most similar negatives dominate the loss."},
+{"q":"How is a self-supervised encoder usually evaluated with a linear probe?","o":["Fine-tune all layers on the full labelled set","Freeze the encoder and train only a linear classifier on its features","Measure the pretext loss","Count its parameters"],"a":1,"e":"A linear probe tests how linearly separable the frozen features already are."}
+]</script>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/gen.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette();
+const pct=x=>(100*x).toFixed(0)+'%';
+function gs(){ let u=0; while(!u) u=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(6.283185*Math.random()); }
+
+/* ---------- 1. SimCLR on synthetic data ---------- */
+const NC=4, DIM=6, PROTO=[[1,0],[0,1],[-1,0],[0,-1]];
+const ROT=(()=>{ const r=ML.rng(17), M=[...Array(DIM)].map(()=>[...Array(DIM)].map(()=>r.gauss())); /* Gram–Schmidt */
+  for(let i=0;i<DIM;i++){ for(let j=0;j<i;j++){ const d=M[i].reduce((s,v,k)=>s+v*M[j][k],0); M[i]=M[i].map((v,k)=>v-d*M[j][k]); } const n=Math.hypot(...M[i]); M[i]=M[i].map(v=>v/n); } return M; })();
+const mix=v=>ROT.map(row=>row.reduce((s,w,k)=>s+w*v[k],0));
+let SC=null;
+function scData(){ const r=ML.rng(4), items=[]; for(let i=0;i<400;i++){ const c=i%NC, s=[PROTO[c][0]+.3*r.gauss(),PROTO[c][1]+.3*r.gauss()]; items.push({c,s}); } return items; }
+const view=it=>mix([it.s[0]+.1*gs(),it.s[1]+.1*gs(),3*gs(),3*gs(),3*gs(),3*gs()]);
+const scP=new ML.Plot('#scPlot'), scL=new ML.Plot('#scLoss',{equal:false}); let net, hist=[], raf=0, it=0, raw=null, fixedViews=null;
+function emb(x){ const y=net.run(x), n=Math.hypot(y[0],y[1])||1e-9; return [y[0]/n,y[1]/n]; }
+function knn(pts,labels){ let ok=0; for(let i=0;i<pts.length;i++){ let best=1e9,bc=-1; for(let j=0;j<pts.length;j++){ if(i===j) continue; let d=0; for(let k=0;k<pts[i].length;k++) d+=(pts[i][k]-pts[j][k])**2; if(d<best){ best=d; bc=labels[j]; } } if(bc===labels[i]) ok++; } return ok/pts.length; }
+function scStart(){ cancelAnimationFrame(raf); SC=scData(); net=GX.MLP([DIM,32,32,2],{act:'tanh',seed:3}); hist=[]; it=0; fixedViews=SC.map(view);
+  raw=knn(fixedViews,SC.map(x=>x.c)); loop(); }
+function step(){ const tau=+$('#scT').value, neg=$('#scNeg .on').dataset.v==='1', N=32, V=[], C=[];
+  for(let n=0;n<N;n++){ const itx=SC[Math.floor(Math.random()*SC.length)]; V.push(view(itx),view(itx)); }
+  const F=V.map(v=>net.fwd(v)), H=F.map(f=>f.y), nr=H.map(h=>Math.hypot(h[0],h[1])||1e-9), Z=H.map((h,i)=>[h[0]/nr[i],h[1]/nr[i]]), M=2*N;
+  const G=Z.map(()=>[0,0]); let L=0;
+  for(let i=0;i<M;i++){ const j=i^1;
+    if(neg){ const s=[]; let mx=-1e9; for(let k=0;k<M;k++){ s[k]=k===i?-1e9:(Z[i][0]*Z[k][0]+Z[i][1]*Z[k][1])/tau; if(s[k]>mx) mx=s[k]; }
+      let den=0; for(let k=0;k<M;k++) if(k!==i) den+=Math.exp(s[k]-mx); L+=-(s[j]-mx)+Math.log(den);
+      for(let k=0;k<M;k++){ if(k===i) continue; const p=Math.exp(s[k]-mx)/den, w=(p-(k===j?1:0))/tau/M; G[i][0]+=w*Z[k][0]; G[i][1]+=w*Z[k][1]; G[k][0]+=w*Z[i][0]; G[k][1]+=w*Z[i][1]; } }
+    else { const s=Z[i][0]*Z[j][0]+Z[i][1]*Z[j][1]; L+=-s/tau; G[i][0]-=Z[j][0]/tau/M; G[i][1]-=Z[j][1]/tau/M; } }
+  for(let i=0;i<M;i++){ const d=G[i][0]*Z[i][0]+G[i][1]*Z[i][1]; const gh=[(G[i][0]-Z[i][0]*d)/nr[i],(G[i][1]-Z[i][1]*d)/nr[i]]; net.bwd(F[i].c,gh); }
+  net.adam(3e-3,1,{clip:5}); return L/M; }
+let lossEma=null;
+function loop(){ const t0=performance.now(); while(performance.now()-t0<14&&it<1500){ const l=step(); lossEma=lossEma==null?l:.97*lossEma+.03*l; if(it%10===0) hist.push([it,lossEma]); it++; } drawSc(); if(it<1500) raf=requestAnimationFrame(loop); }
+function drawSc(){ if(!net) return; const P=P0(), cols=[P.c1,P.c2,P.c5,P.c4], E=fixedViews.map(emb), c=scP.ctx;
+  scP.setBounds({x0:-1.35,x1:1.35,y0:-1.35,y1:1.35}); scP.clear(); c.strokeStyle=P.line; c.lineWidth=1.5; c.beginPath(); c.arc(scP.X(0),scP.Y(0),Math.abs(scP.X(1)-scP.X(0)),0,7); c.stroke();
+  E.forEach((e,i)=>{ const rr=1+.06*((i*37)%11-5)/5; c.fillStyle=cols[SC[i].c]; c.globalAlpha=.75; c.beginPath(); c.arc(scP.X(e[0]*rr),scP.Y(e[1]*rr),3,0,7); c.fill(); }); c.globalAlpha=1;
+  if(hist.length>1) GX.chart(scL,[{pts:hist,color:P.c1,width:2,label:'training loss'}],{x0:0,x1:1500});
+  const acc=knn(E,SC.map(x=>x.c)), ang=E.map(e=>Math.atan2(e[1],e[0])), mean=[E.reduce((s,e)=>s+e[0],0)/E.length,E.reduce((s,e)=>s+e[1],0)/E.length];
+  GX.stats('#scStats',[[pct(raw),'nearest-neighbour accuracy on raw inputs','c3'],[pct(acc),'same, on learnt embeddings','c5'],[Math.hypot(...mean).toFixed(2),'collapse meter (1 = all in one spot)','c2'],[String(it),'steps','c4']]); }
+ML.bindRange('scT',scStart,v=>(+v).toFixed(2)); ML.bindSeg('scNeg',scStart); $('#scGo').onclick=scStart; scP.onResize=drawSc; scL.onResize=drawSc;
+(()=>{ const el=$('#scPlot'); if(!('IntersectionObserver' in window)) return scStart(); let done=false; const io=new IntersectionObserver(es=>{ if(!done&&es.some(e=>e.isIntersecting)){ done=true; io.disconnect(); scStart(); } },{rootMargin:'100px'}); io.observe(el); })();
+
+/* ---------- 3. masked patches ---------- */
+const S=64, PS=8, NP=S/PS; let img=0, mseed=1;
+function makeImg(k){ const a=new Float32Array(S*S*3);
+  for(let y=0;y<S;y++) for(let x=0;x<S;x++){ let r,g,b; const u=x/S, v=y/S;
+    if(k===0){ r=.95-.4*v; g=.9-.3*u; b=.8; if((x-20)**2+(y-22)**2<140){ r=.9; g=.3; b=.25; } if(x>34&&x<56&&y>30&&y<52){ r=.2; g=.45; b=.85; } if(y>52){ r=.35; g=.65; b=.3; } }
+    else if(k===1){ const s=Math.sin((x+.6*y)/3.2); r=.5+.4*s; g=.5+.3*Math.sin(y/5); b=.6-.3*s; }
+    else { r=.95; g=.85; b=.7; const d=Math.hypot(x-32,y-34); if(d>24){ r=.3; g=.5; b=.75; } if(Math.hypot(x-24,y-28)<4||Math.hypot(x-40,y-28)<4){ r=g=b=.15; } if(y>40&&y<44&&Math.abs(x-32)<10){ r=.75; g=.25; b=.3; } if(y<16&&d<=24){ r=.35; g=.2; b=.1; } }
+    a.set([r,g,b],(y*S+x)*3); }
+  return a; }
+function maskFor(ratio,seed){ const r=ML.rng(seed), ids=[...Array(NP*NP).keys()]; for(let i=ids.length-1;i>0;i--){ const j=Math.floor(r()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]]; } const m=new Uint8Array(NP*NP); ids.slice(0,Math.round(ratio*NP*NP)).forEach(i=>m[i]=1); return m; }
+function fill(a,m){ /* iterative neighbour averaging from visible pixels */ const known=new Uint8Array(S*S), out=Float32Array.from(a);
+  for(let y=0;y<S;y++) for(let x=0;x<S;x++) known[y*S+x]=m[Math.floor(y/PS)*NP+Math.floor(x/PS)]?0:1;
+  if(!known.some(k=>k)) { out.fill(.5); return out; }
+  for(let y=0;y<S;y++) for(let x=0;x<S;x++) if(!known[y*S+x]) out.set([.5,.5,.5],(y*S+x)*3);
+  for(let pass=0;pass<160;pass++){ for(let y=0;y<S;y++) for(let x=0;x<S;x++){ const i=y*S+x; if(known[i]) continue; let s0=0,s1=0,s2=0,n=0; [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy])=>{ const X=x+dx,Y=y+dy; if(X<0||Y<0||X>=S||Y>=S) return; const j=(Y*S+X)*3; s0+=out[j]; s1+=out[j+1]; s2+=out[j+2]; n++; }); out.set([s0/n,s1/n,s2/n],i*3); } }
+  return out; }
+function paint(id,a,m){ const cv=$(id), c=cv.getContext('2d'), d=c.createImageData(S,S); for(let i=0;i<S*S;i++){ const hidden=m&&m[Math.floor(Math.floor(i/S)/PS)*NP+Math.floor((i%S)/PS)]; d.data[i*4]=hidden?128:a[i*3]*255; d.data[i*4+1]=hidden?128:a[i*3+1]*255; d.data[i*4+2]=hidden?128:a[i*3+2]*255; d.data[i*4+3]=hidden?60:255; } c.putImageData(d,0,0); }
+function err(a,b,m){ let s=0,n=0; for(let i=0;i<S*S;i++){ if(!m[Math.floor(Math.floor(i/S)/PS)*NP+Math.floor((i%S)/PS)]) continue; for(let k=0;k<3;k++){ s+=(a[i*3+k]-b[i*3+k])**2; } n++; } return n?s/(n*3):0; }
+const mP=new ML.Plot('#maePlot',{equal:false}); let curve=null;
+function curveFor(k){ const a=makeImg(k), out=[]; for(let r=.05;r<=.951;r+=.1){ let e=0; for(let s=0;s<3;s++){ const m=maskFor(r,100+s); e+=err(a,fill(a,m),m); } out.push([r,e/3]); } return out; }
+function drawMae(){ const P=P0(), ratio=+$('#maeR').value, a=makeImg(img), m=maskFor(ratio,mseed), f=fill(a,m);
+  paint('#maeA',a,null); paint('#maeB',a,m); paint('#maeC',f,null);
+  if(!curve) curve=curveFor(img);
+  const e=err(a,f,m), base=(()=>{ let s=0; const mu=[0,1,2].map(k=>{ let t=0; for(let i=0;i<S*S;i++) t+=a[i*3+k]; return t/(S*S); }); for(let i=0;i<S*S;i++) for(let k=0;k<3;k++) s+=(a[i*3+k]-mu[k])**2; return s/(S*S*3); })();
+  GX.chart(mP,[{pts:curve,color:P.c2,width:2.5,dots:true,label:'interpolation error on hidden patches'},{pts:[[0.05,base],[0.95,base]],color:P.muted,width:1.5,dash:[5,4],label:'guessing the mean colour'}],{x0:0,x1:1,y0:0,y1:Math.max(base,...curve.map(c=>c[1]))*1.1,xl:'share of patches masked',vline:ratio,xfmt:v=>Math.round(v*100)+'%',yfmt:v=>v.toFixed(3)});
+  const vis=NP*NP-m.reduce((s,v)=>s+v,0);
+  GX.stats('#maeStats',[[vis+' of '+NP*NP,'patches the encoder processes','c1'],[(NP*NP/Math.max(1,vis)).toFixed(1)+'×','cheaper than encoding all patches','c5'],[(100*e/base).toFixed(0)+'%','interpolation error vs guessing the mean','c2']]); }
+ML.bindRange('maeR',drawMae,v=>Math.round(v*100)+'%'); ML.bindSeg('maeI',v=>{ img=+v; curve=null; drawMae(); }); $('#maeNew').onclick=()=>{ mseed++; drawMae(); }; mP.onResize=drawMae; drawMae();
+})();
+</script>
+<script>NLP.nav('nlp','self-supervised'); ML.renderMath(document.body);</script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Decision Tree Lab</title>
+<meta name="description" content="Interactive decision trees (CART) in the browser: grow a tree one split at a time, see every candidate threshold scored by Gini or entropy, the tree diagram synced with the partition of the plane, and how depth causes overfitting.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Algorithms"></nav></div></header>
+
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Trees</p>
+  <h1>Decision <span class="grad">Trees</span></h1>
+  <p class="lede">Linear models draw one boundary through the whole space. A decision tree does something closer to how people reason: it asks a short sequence of yes/no questions like "is \(x_1\le0.4\)?" and each answer narrows things down. Geometrically, every question cuts a region in two, so the tree carves the plane into rectangles. Grow one here split by split: at every step the algorithm tries every threshold on every feature and keeps the one that makes the children purest. Click any node to see that search laid out.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#lab">1 · Grow a tree</a><a href="#split">2 · How a split is chosen</a><a href="#maths">3 · The maths</a><a href="#depth">4 · Depth and overfitting</a><a href="#code">5 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a decision tree, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A bank wants to flag risky loan applications and, crucially, explain each decision to the applicant. "Your score was −0.37" is not an explanation. "Your income is under 30k and you already have two loans" is. We want a classifier whose reasoning is a short list of readable rules.</p>
+      <h3>The idea</h3><p>A <a class="term" data-t="decision-tree">decision tree</a> is a flowchart of yes/no questions about the features: "Is \(x_1 &lt; 0.3\)? If yes, is \(x_2 &gt; 1.2\)?" Each answer sends a point down one branch until it reaches a <a class="term" data-t="leaf">leaf</a>, which holds the prediction: the majority class of the training points that ended up there.</p><p>Which questions? The tree is grown greedily: at every <a class="term" data-t="node">node</a> it tries every possible question and keeps the <a class="term" data-t="split">split</a> that makes the two groups as "pure" (single-class) as possible, measured by <a class="term" data-t="gini">Gini impurity</a> or <a class="term" data-t="entropy">entropy</a>. Because every question is about one feature, the boundary is made of horizontal and vertical steps.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Start with all training points in one node.</li><li>Try every feature and every threshold; score each split by the drop in impurity.</li><li>Keep the best split and repeat on each child.</li><li>Stop at a <a class="term" data-t="max-depth">maximum depth</a>, a minimum leaf size or a pure node; optionally <a class="term" data-t="pruning">prune</a> back.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>The game "20 questions", or a doctor’s triage chart: each question narrows the possibilities until the answer is obvious. A good first question ("is it alive?") splits the possibilities roughly in half; a bad one ("is it a giraffe?") almost never helps. Choosing good questions is the whole game.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Easy to explain and draw</li><li>No feature scaling needed</li><li>Handles mixed and non-linear data</li><li>Captures interactions between features automatically</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Deep trees overfit badly</li><li>Small changes in the data can change the whole tree</li><li>Staircase boundaries for diagonal patterns</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="decision-tree">Decision tree</a><a class="term" data-t="node">Node</a><a class="term" data-t="leaf">Leaf</a><a class="term" data-t="split">Split</a><a class="term" data-t="impurity">Impurity</a><a class="term" data-t="gini">Gini</a><a class="term" data-t="entropy">Entropy / information gain</a><a class="term" data-t="max-depth">Max depth</a><a class="term" data-t="pruning">Pruning</a><a class="term" data-t="overfitting">Overfitting</a><a class="term" data-t="variance">Variance</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. Background maths: <a href="../../math/probability/">probability</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="lab" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Grow a tree, one split at a time</h2>
+    <p class="sub">Press <b>Play</b> or step with ▶. Splits are added in breadth-first order (the root first, then its children, and so on). The orange line is the newest split; thin rectangles are the current leaves. Notice how the first few cuts do most of the work and later ones tidy up small corners.</p>
+    <div class="plot sq" id="mainPlot"></div>
+    <div class="player" style="margin-top:12px"><button class="btn" id="prev">◀</button><button class="btn primary" id="play">Play</button><button class="btn" id="next">▶</button><input type="range" id="kR" min="0" max="1" value="0" style="flex:1;min-width:140px"><span class="pos" id="kPos"></span></div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="controls">
+        <div class="ctl"><span class="lbl">Dataset</span><div class="dsrow" id="dsPick"></div></div>
+        <div class="ctl"><span class="lbl">Impurity criterion</span><div class="seg" id="cSeg"><button data-v="gini" class="on">Gini</button><button data-v="entropy">Entropy</button><button data-v="error">Misclassification</button></div></div>
+        <div class="ctl"><label for="depth"><span>Max depth</span><output id="depthOut"></output></label><input type="range" id="depth" min="1" max="14" value="6"></div>
+        <div class="ctl"><label for="leaf"><span>Min samples per leaf</span><output id="leafOut"></output></label><input type="range" id="leaf" min="1" max="30" value="1"></div>
+        <div class="grid2" style="gap:12px">
+          <div class="ctl"><label for="nPts">Points <output id="nPtsOut"></output></label><input type="range" id="nPts" min="20" max="400" step="10" value="200"></div>
+          <div class="ctl"><label for="noise">Noise <output id="noiseOut"></output></label><input type="range" id="noise" min="0" max="1" step="0.05" value="0.3"></div>
+        </div>
+        <div class="row"><button class="btn" id="resample">New sample</button></div>
+      </div>
+    </div>
+    <div class="card"><div class="stats" id="stats"></div><p class="hint">Press <b>New sample</b> a few times with depth 6 and watch how different the trees are. That instability is the main weakness of a single tree.</p></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2 style="font-size:18px">Tree diagram <span class="pill">click a node</span></h2>
+  <p class="sub">Each box shows the rule, the number of training points and the class counts [class 0 | class 1]. Colour = share of class 1. Left branch = rule true. To classify a new point, start at the top and follow the answers down.</p>
+  <div class="treebox" id="treeBox"></div>
+</section>
+
+<section id="split" class="card">
+  <h2><span class="num">2</span>How a split is chosen: <span id="selName" class="pill"></span></h2>
+  <p class="sub">This is the heart of the method, so let us see it in full for the node you clicked. Every candidate question is tried and given a score; the tree simply keeps the best one.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot short" id="scanPlot"></div>
+      <div class="legend"><span><i class="sw" style="background:var(--c1)"></i>split on \(x_1\)</span><span><i class="sw" style="background:var(--c3)"></i>split on \(x_2\)</span><span>★ best (chosen) threshold</span></div>
+      <p class="hint">Every possible threshold (midpoints between consecutive sorted values) for both features, scored by impurity decrease. CART is <b>greedy</b>: it takes the highest point, without looking ahead.</p>
+      <div class="plot sq" id="nodePlot" style="max-width:340px;margin:12px auto 0"></div>
+    </div>
+    <div class="prose">
+      <div id="calc"></div>
+      <div class="note warn"><b>Why greedy fails on XOR.</b> At the root of the XOR dataset no single cut improves purity much, because each half still holds both classes in equal parts. Select <b>XOR</b> and look at the root's scan: the curve is almost flat. The tree still gets there with depth, but the first split is close to arbitrary.</div>
+    </div>
+  </div>
+</section>
+
+<section id="maths" class="card">
+  <h2><span class="num">3</span>The maths</h2>
+  <p class="sub">Three questions: how do we measure how mixed a node is, how do we score a split, and when do we stop?</p>
+  <div class="grid2 prose">
+    <div>
+      <h3>Step 1: measure how mixed a node is</h3>
+      <p>We want a number that is 0 when a node holds only one class and largest when it is a 50/50 mix. With \(p\) the fraction of class 1 in a node, three common choices are:</p>
+      <div class="mathbox c1">$$\begin{aligned}\text{Gini}&amp;=1-p^2-(1-p)^2=2p(1-p)\\ \text{Entropy}&amp;=-p\log_2p-(1-p)\log_2(1-p)\\ \text{Error}&amp;=\min(p,\,1-p)\end{aligned}$$</div>
+      <p>Each has a story. <b>Gini</b> is the chance that two points drawn at random from the node have different labels. <b>Entropy</b> is the average number of yes/no questions needed to identify a point's label (1 bit for a fair coin, 0 bits for a certain one). <b>Error</b> is the fraction you would get wrong by predicting the majority.</p>
+      <div class="plot short" id="impPlot"></div>
+      <div class="legend"><span><i class="sw" style="background:var(--c1)"></i>Gini</span><span><i class="sw" style="background:var(--c4)"></i>Entropy (scaled by ½ to compare)</span><span><i class="sw" style="background:var(--c3)"></i>Misclassification</span></div>
+      <p class="hint">Gini and entropy are strictly concave, so a split that makes children purer on average always reduces them. Misclassification error is piecewise linear: many useful splits leave it unchanged, which is why it is a poor criterion for growing trees.</p>
+      <details class="deeper"><summary>Going deeper: why concavity matters, with numbers</summary><div>
+        <p>Take a parent with 400 points of class 0 and 400 of class 1 (\(p=0.5\)). Split A gives children (300, 100) and (100, 300); split B gives (200, 400) and (200, 0). Both children-weighted misclassification errors are \(\tfrac12\cdot\tfrac14+\tfrac12\cdot\tfrac14=0.25\) for A and \(\tfrac34\cdot\tfrac13+\tfrac14\cdot0=0.25\) for B. Misclassification cannot tell them apart. Gini: A gives \(2\cdot\tfrac34\cdot\tfrac14=0.375\) in both children, so 0.375; B gives \(\tfrac34\cdot2\cdot\tfrac13\cdot\tfrac23+\tfrac14\cdot0=0.333\). Gini prefers B, which has a pure child that will never need splitting again.</p>
+        <p>In general, the weighted average of the children's \(p\) values is the parent's \(p\). For a strictly concave \(I\), Jensen's inequality gives \(\tfrac{n_L}{n}I(p_L)+\tfrac{n_R}{n}I(p_R)\le I(p)\), with equality only if \(p_L=p_R\). So any split that changes the class mix strictly reduces Gini or entropy, while a linear-piece criterion can stay flat.</p>
+      </div></details>
+    </div>
+    <div>
+      <h3>Step 2: score a split</h3>
+      <p>A split on feature \(j\) at threshold \(t\) sends \(n_L\) points left and \(n_R\) right. Its score is how much it lowers impurity, weighting each child by its size so that a tiny pure child cannot win on its own:</p>
+      <div class="mathbox c3">$$\Delta(j,t)=I(\text{parent})-\frac{n_L}{n}I(\text{left})-\frac{n_R}{n}I(\text{right}),\qquad (j^\star,t^\star)=\arg\max_{j,\,t}\Delta(j,t)$$</div>
+      <p>The search costs \(O(d\,n\log n)\) per node: sort each feature once and sweep the thresholds while updating class counts. With entropy, \(\Delta\) is the <b>information gain</b>: how many bits of uncertainty about the label the question removes.</p>
+      <h3>Step 3: grow recursively, then stop (CART)</h3>
+      <div class="algo"><h5 class="algo-h">Algorithm: growing a classification tree (CART)</h5><ol>
+        <li><span class="kw">function</span> Grow(points \(S\), depth)</li>
+        <li class="i1"><span class="kw">if</span> \(S\) is pure <span class="kw">or</span> depth = max depth <span class="kw">or</span> \(|S|&lt;2\cdot\)min leaf <span class="kw">then</span></li>
+        <li class="i2"><span class="kw">return</span> Leaf(majority class of \(S\), class fractions)</li>
+        <li class="i1">best \(\leftarrow\) none</li>
+        <li class="i1"><span class="kw">for</span> each feature \(j\) <span class="kw">do</span></li>
+        <li class="i2">sort \(S\) by \(x_j\); start with all points on the right</li>
+        <li class="i2"><span class="kw">for</span> each point in sorted order <span class="kw">do</span> <span class="cm">move it to the left, update counts in O(1)</span></li>
+        <li class="i3">\(t\leftarrow\) midpoint to the next distinct value</li>
+        <li class="i3"><span class="kw">if</span> both sides ≥ min leaf <span class="kw">and</span> \(\Delta(j,t)&gt;\) best <span class="kw">then</span> best \(\leftarrow(j,t)\)</li>
+        <li class="i1"><span class="kw">if</span> best is none <span class="kw">then return</span> Leaf(majority class of \(S\))</li>
+        <li class="i1">\(L\leftarrow\{x\in S:x_{j^\star}\le t^\star\}\); \(R\leftarrow S\setminus L\)</li>
+        <li class="i1"><span class="kw">return</span> Node(\(j^\star,t^\star\), Grow(\(L\), depth+1), Grow(\(R\), depth+1))</li>
+      </ol></div>
+      <h3>Controlling complexity</h3>
+      <p>A fully grown tree reaches zero training error on any data without duplicate points: it can always keep cutting until every leaf has one point. That is memorisation, not learning. Limit depth or leaf size, or grow fully and then <b>prune</b> by cost-complexity, which charges \(\alpha\) per leaf:</p>
+      <div class="mathbox c4">$$R_\alpha(T)=\sum_{\text{leaves }m}n_m\,I_m+\alpha\,|T|$$</div>
+      <p>Trees are unstable (high variance): small data changes can change the top split and everything below it. That weakness is exactly what bagging and random forests fix on the <a href="../ensembles/">next page</a>.</p>
+      <details class="deeper"><summary>Going deeper: weakest-link pruning</summary><div>
+        <p>For each internal node \(t\), compare keeping its subtree \(T_t\) with collapsing it to a leaf. The subtree is worth keeping only while \(\alpha&lt;g(t)=\frac{R(t)-R(T_t)}{|T_t|-1}\), the impurity reduction it buys per extra leaf. Weakest-link pruning repeatedly collapses the node with the smallest \(g(t)\), giving a nested sequence of trees, one for each range of \(\alpha\). Cross-validation then picks the \(\alpha\) (and so the tree) with the best held-out score. This is scikit-learn's <code>cost_complexity_pruning_path</code>. It is better than stopping early because a split that looks useless now (XOR's root) can enable very useful splits below it.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="depth" class="card">
+  <h2><span class="num">4</span>Depth and overfitting</h2>
+  <div class="grid2">
+    <div><div class="plot wide" id="depthPlot"></div><div class="legend"><span><i class="sw" style="background:var(--c3)"></i>training accuracy</span><span><i class="sw" style="background:var(--c2)"></i>test accuracy (fresh 400 points)</span><span>dashed: current max depth</span></div></div>
+    <div class="prose"><p>Training accuracy climbs to 100% as the tree deepens. Test accuracy peaks and then falls, or flattens, as the extra leaves carve out noise. The gap between the two curves is variance. Raise the noise slider and watch the peak move to a shallower depth: noisier data has less real structure to find.</p><div class="note" id="depthNote"></div>
+      <p>Trees have real strengths: they need no feature scaling, handle mixed feature types, capture interactions automatically and are easy to read. Their boundaries are always <b>axis-aligned</b> staircases, so a diagonal line needs many splits; compare <b>Linear blobs</b> here with <a href="../logistic-regression/">logistic regression</a>.</p></div>
+  </div>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">5</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.tree <span class="k">import</span> DecisionTreeClassifier, plot_tree, export_text
+
+tree = DecisionTreeClassifier(criterion=<span class="s">"gini"</span>, max_depth=<span class="s">6</span>, min_samples_leaf=<span class="s">1</span>).<span class="f">fit</span>(X, y)
+<span class="f">print</span>(export_text(tree, feature_names=[<span class="s">"x1"</span>, <span class="s">"x2"</span>]))
+plot_tree(tree, filled=<span class="k">True</span>)
+
+<span class="c"># cost-complexity pruning path, then pick alpha by cross-validation</span>
+path = tree.<span class="f">cost_complexity_pruning_path</span>(X, y)
+pruned = DecisionTreeClassifier(ccp_alpha=path.ccp_alphas[<span class="s">-3</span>]).<span class="f">fit</span>(X, y)
+
+<span class="c"># the split search for one feature, by hand</span>
+<span class="k">def</span> <span class="f">gini</span>(c0, c1): n = c0 + c1; <span class="k">return</span> <span class="s">0</span> <span class="k">if</span> n == <span class="s">0</span> <span class="k">else</span> <span class="s">2</span> * (c0 / n) * (c1 / n)
+order = np.argsort(x); xs, ys = x[order], y[order]
+L, R = [<span class="s">0</span>, <span class="s">0</span>], [(ys == <span class="s">0</span>).sum(), (ys == <span class="s">1</span>).sum()]
+<span class="k">for</span> i <span class="k">in</span> range(len(xs) - <span class="s">1</span>):
+    L[ys[i]] += <span class="s">1</span>; R[ys[i]] -= <span class="s">1</span>
+    gain = gini(*map(sum, zip(L, R))) - (i + <span class="s">1</span>) / n * gini(*L) - (n - i - <span class="s">1</span>) / n * gini(*R)</pre>
+</section>
+
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything is computed in your browser in plain JavaScript.</p>
+</main>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/gloss.js"></script>
+<script src="../assets/models.js"></script>
+<script src="../assets/tree.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML, Mo=ML.models;
+ML.nav('decision-trees'); ML.renderMath(document.body);
+const S={ds:'moons', n:200, noise:0.3, seed:7, crit:'gini', depth:6, leaf:1, X:[], y:[], t:null, k:0, sel:null, timer:null};
+const main=new ML.Plot('#mainPlot');
+function load(){ const d=ML.dataset(S.ds,S.n,S.noise,S.seed); S.X=d.X; S.y=d.y; }
+function grow(){ S.t=Mo.Tree(S.X,S.y,{criterion:S.crit,maxDepth:S.depth,minLeaf:S.leaf}); $('#kR').max=S.t.splits; S.k=S.t.splits; $('#kR').value=S.k; S.sel=S.t.root; }
+const nodeAt=k=>S.t.nodes.find(nd=>nd.order===k-1);
+function draw(){ const P=ML.palette(), t=S.t, k=S.k; main.clear(); main.regions((x,y)=>t.probaK([x,y],k),4); main.grid(1);
+  ML.drawPartitions(main,t,k,{highlight: k>0?nodeAt(k):null});
+  if(S.sel && S.sel!==t.root) ML.drawPartitions(main,t,k,{alpha:0,highlight:S.sel,box:true});
+  let ok=0; S.X.forEach((x,i)=>{ if((t.probaK(x,k)>=0.5?1:0)===S.y[i]) ok++; });
+  main.points(S.X,S.y,{r:3.8});
+  const leaves=t.nodes.filter(nd=>(nd.leaf||!(nd.order<k)) && (!nd.parent||nd.parent.order<k)).length;
+  $('#kPos').textContent=`split ${k} / ${t.splits}`;
+  $('#stats').innerHTML=[['c1',k,'splits so far'],['c3',leaves,'leaves'],['c5',ML.pct(ok/S.X.length),'training accuracy'],['c4',t.depth,'final depth']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  const box=$('#treeBox'); box.innerHTML=''; box.appendChild(ML.treeSVG(t,{k,selected:S.sel,newest:k>0?nodeAt(k):null,onClick:nd=>{ S.sel=nd; draw(); }}));
+  drawScan(); }
+
+/* split search for the selected node */
+const scanP=new ML.Plot('#scanPlot',{equal:false}), nodeP=new ML.Plot('#nodePlot');
+function drawScan(){ const P=ML.palette(), nd=S.sel||S.t.root, w=new Array(S.X.length).fill(1);
+  const sc=[0,1].map(f=>Mo.scanFeature(S.X,S.y,w,nd.idx,f,S.crit));
+  $('#selName').textContent = nd===S.t.root ? 'root node' : `node at depth ${nd.depth} (n = ${nd.n})`;
+  const series=sc.map((s,f)=>({pts:s.cands.map(c=>[c.thr,c.gain]),color:f?P.c3:P.c1,width:2}));
+  if(!series[0].pts.length && !series[1].pts.length){ scanP.clear(); } else {
+    const r=ML.chart(scanP,series,{y0:0,xl:'threshold t'}); let best=null; sc.forEach((s,f)=>s.cands.forEach(c=>{ if(c.nl>=S.leaf&&c.nr>=S.leaf&&(!best||c.gain>best.gain+1e-12)) best={...c,f}; }));
+    if(best){ const c=scanP.ctx; const X=r.fx(best.thr), Y=r.fy(best.gain); c.save(); c.fillStyle=P.star; c.strokeStyle=P.ink; c.beginPath(); for(let k=0;k<10;k++){ const rr=k%2?4:9, a=-Math.PI/2+k*Math.PI/5; c.lineTo(X+rr*Math.cos(a),Y+rr*Math.sin(a)); } c.closePath(); c.fill(); c.stroke(); c.restore(); }
+    calc(nd,sc,best); }
+  // node plot: the node's points and its box
+  nodeP.clear(); nodeP.grid(1); const inN=new Set(nd.idx); nodeP.points(S.X,S.y,{r:3.4,alpha:i=>inN.has(i)?1:.12});
+  ML.drawPartitions(nodeP,S.t,0,{alpha:0,highlight:nd.leaf?null:Object.assign({},nd,{order:-1}),box:true}); }
+function calc(nd,sc,best){ const I=ML.models.impurity[S.crit], nm={gini:'Gini',entropy:'H',error:'E'}[S.crit];
+  const [c0,c1]=nd.count, p=c1/(c0+c1);
+  let h=`<h3 style="margin-top:0">Impurity of this node</h3><div class="mathbox c1">`+ML.tex(`n=${nd.n},\\ [${c0}\\,|\\,${c1}],\\ p=\\tfrac{${c1}}{${nd.n}}=${fmt(p,3)}\\ \\Rightarrow\\ ${nm}=${fmt(I(c0,c1),4)}`,true)+'</div>';
+  if(!best){ h+='<p>This node cannot be split further (pure, or too small for the leaf-size limit).</p>'; $('#calc').innerHTML=h; return; }
+  const [L0,L1]=best.L, [R0,R1]=best.R, nl=L0+L1, nr=R0+R1;
+  h+=`<h3>Best split: \\(x_${best.f+1}\\le ${fmt(best.thr,3)}\\)</h3><div class="mathbox c3">`+
+    ML.tex(`\\text{left: }[${L0}\\,|\\,${L1}],\\ ${nm}_L=${fmt(I(L0,L1),4)}\\qquad \\text{right: }[${R0}\\,|\\,${R1}],\\ ${nm}_R=${fmt(I(R0,R1),4)}`,true)+
+    ML.tex(`\\Delta=${fmt(I(c0,c1),4)}-\\tfrac{${nl}}{${nd.n}}(${fmt(I(L0,L1),4)})-\\tfrac{${nr}}{${nd.n}}(${fmt(I(R0,R1),4)})=\\mathbf{${fmt(best.gain,4)}}`,true)+'</div>';
+  const other=sc[1-best.f].cands.reduce((a,c)=>(!a||c.gain>a.gain)?c:a,null);
+  if(other) h+=`<p>The best cut on the other feature, \\(x_${2-best.f}\\le${fmt(other.thr,3)}\\), would only give \\(\\Delta=${fmt(other.gain,4)}\\).</p>`;
+  h+=`<p class="hint">Tried ${sc[0].cands.length+sc[1].cands.length} candidate thresholds in total.</p>`;
+  $('#calc').innerHTML=h; ML.renderMath($('#calc')); }
+
+/* impurity curves */
+const impP=new ML.Plot('#impPlot',{equal:false});
+function drawImp(){ const P=ML.palette(), g=[],e=[],m=[]; for(let p=0;p<=1.0001;p+=0.01){ g.push([p,2*p*(1-p)]); e.push([p,0.5*Mo.impurity.entropy(1-p,p)]); m.push([p,Math.min(p,1-p)]); }
+  ML.chart(impP,[{pts:g,color:P.c1,width:2.5},{pts:e,color:P.c4,width:2.5},{pts:m,color:P.c3,width:2.5}],{y0:0,y1:0.55,xl:'p = fraction of class 1'}); }
+
+/* depth curve */
+const depthP=new ML.Plot('#depthPlot',{equal:false});
+function drawDepth(){ const P=ML.palette(), test=ML.dataset(S.ds,400,S.noise,S.seed+101), tr=[], te=[];
+  for(let d=1;d<=14;d++){ const t=Mo.Tree(S.X,S.y,{criterion:S.crit,maxDepth:d,minLeaf:S.leaf}); tr.push([d,ML.accuracy(t,S.X,S.y)]); te.push([d,ML.accuracy(t,test.X,test.y)]); }
+  ML.chart(depthP,[{pts:tr,color:P.c3,dots:true,width:2.5},{pts:te,color:P.c2,dots:true,width:2.5}],{vline:S.depth,xl:'max depth',yfmt:v=>(100*v).toFixed(0)+'%'});
+  const b=te.reduce((a,c)=>c[1]>a[1]?c:a); $('#depthNote').innerHTML=`On this data the best test accuracy is <b>${ML.pct(b[1])}</b> at depth <b>${b[0]}</b>. At depth 14 it is ${ML.pct(te[13][1])} while training accuracy is ${ML.pct(tr[13][1])}.`; }
+
+/* player + controls */
+function setK(k){ S.k=Math.max(0,Math.min(S.t.splits,k)); $('#kR').value=S.k; if(S.k>0) S.sel=nodeAt(S.k); else S.sel=S.t.root; draw(); }
+$('#prev').onclick=()=>{ stopP(); setK(S.k-1); }; $('#next').onclick=()=>{ stopP(); setK(S.k+1); };
+$('#kR').oninput=()=>{ stopP(); setK(+$('#kR').value); };
+function stopP(){ if(S.timer){ clearInterval(S.timer); S.timer=null; $('#play').textContent='Play'; } }
+$('#play').onclick=()=>{ if(S.timer){ stopP(); return; } if(S.k>=S.t.splits) setK(0); $('#play').textContent='Pause'; S.timer=setInterval(()=>{ if(S.k>=S.t.splits){ stopP(); return; } setK(S.k+1); }, 700); };
+function rebuild(){ stopP(); grow(); draw(); drawDepth(); }
+ML.datasetPicker('dsPick',S.ds,id=>{ S.ds=id; load(); rebuild(); });
+ML.bindSeg('cSeg',v=>{ S.crit=v; rebuild(); });
+ML.bindRange('depth',v=>{ S.depth=v; rebuild(); }); ML.bindRange('leaf',v=>{ S.leaf=v; rebuild(); });
+ML.bindRange('nPts',v=>{ S.n=v; load(); rebuild(); }); ML.bindRange('noise',v=>{ S.noise=v; load(); rebuild(); },v=>v.toFixed(2));
+$('#resample').onclick=()=>{ S.seed++; load(); rebuild(); };
+main.onResize=draw; scanP.onResize=nodeP.onResize=drawScan; impP.onResize=drawImp; depthP.onResize=drawDepth; ML.onTheme(()=>{ draw(); drawImp(); drawDepth(); });
+load(); grow(); setK(S.t.splits); drawImp(); drawDepth();
+})();
+</script>
+</body>
+</html>

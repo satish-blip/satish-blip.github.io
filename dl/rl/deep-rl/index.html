@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Deep reinforcement learning: Q-learning, DQN, policy gradients, actor-critic and PPO, explained interactively</title>
+<meta name="description" content="Learning to act from experience: Q-learning and SARSA trained live on cliff walking, DQN with replay buffers, target networks and the overestimation bias behind Double DQN, REINFORCE with and without a baseline, actor-critic and GAE, PPO's clipped objective, and how RLHF uses it to fine-tune language models.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-rl">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Step 8 &middot; Reinforcement learning</p>
+  <h1>Deep RL: <span class="grad">from Q-tables to PPO</span></h1>
+  <p class="lede">The <a href="../rl-foundations/">foundations page</a> solved MDPs when the rules were known. Real agents do not get the rules; they learn from what happens when they act. This page follows the two great families of model-free RL, learning action values and learning policies directly, from a table you can watch fill up to the neural-network methods that play Atari, control robots and fine-tune chatbots.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#qlearn">1 · Q-learning &amp; SARSA</a><a href="#dqn">2 · DQN</a><a href="#pg">3 · Policy gradients</a><a href="#ac">4 · Actor–critic</a><a href="#ppo">5 · PPO</a><a href="#rlhf">6 · RL for LLMs</a><a href="#py">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is deep reinforcement learning, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3>
+      <p>Value iteration needs the transition probabilities and a table entry for every state. A video game has more screen states than atoms in the universe, and nobody gives you its rules. We need methods that learn from sampled experience and generalise between states they have never seen.</p>
+      <h3>The idea</h3>
+      <p>Two routes. <b>Value-based</b>: learn the <a class="term" data-t="q-function">Q-function</a> from experience with <a class="term" data-t="q-learning">Q-learning</a>, then act greedily; replace the table with a neural network and you have <a class="term" data-t="dqn">DQN</a>. <b>Policy-based</b>: make the <a class="term" data-t="rl-policy">policy</a> itself a network and push up the probability of actions that led to high <a class="term" data-t="rl-return">return</a> (<a class="term" data-t="policy-gradient">policy gradient</a>). <a class="term" data-t="actor-critic">Actor–critic</a> methods such as <a class="term" data-t="ppo">PPO</a> combine both.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Act in the environment, collect transitions \((s,a,r,s')\).</li><li>Value route: nudge \(Q(s,a)\) towards the target \(r+\gamma\max_{a'}Q(s',a')\) (the <a class="term" data-t="td-learning">TD</a> target).</li><li>Policy route: nudge \(\log\pi_\theta(a\mid s)\) up in proportion to how much better than expected the outcome was (the <a class="term" data-t="advantage">advantage</a>).</li><li>Stabilise with tricks: <a class="term" data-t="replay-buffer">replay buffers</a>, <a class="term" data-t="target-network">target networks</a>, baselines and clipped updates.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Learning to ride a bike. Nobody gives you the equations of balance. You try, wobble, fall (negative reward) or glide (positive reward), and gradually your body learns which small corrections work in which situations, including situations slightly different from any you practised.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Huge or continuous state spaces (pixels, joint angles)</li><li>Problems where only a simulator or a score is available</li><li>Superhuman play in Go, Atari and StarCraft; aligning LLMs</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Unstable training and high variance between random seeds</li><li>Millions of interactions needed; simulators help</li><li>Reward hacking: the agent optimises what you wrote, not what you meant</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="q-learning">Q-learning</a><a class="term" data-t="sarsa">SARSA</a><a class="term" data-t="td-learning">TD learning</a><a class="term" data-t="on-policy">On-policy / off-policy</a><a class="term" data-t="dqn">DQN</a><a class="term" data-t="replay-buffer">Replay buffer</a><a class="term" data-t="target-network">Target network</a><a class="term" data-t="double-dqn">Double DQN</a><a class="term" data-t="policy-gradient">Policy gradient</a><a class="term" data-t="reinforce">REINFORCE</a><a class="term" data-t="rl-baseline">Baseline</a><a class="term" data-t="advantage">Advantage</a><a class="term" data-t="actor-critic">Actor–critic</a><a class="term" data-t="gae">GAE</a><a class="term" data-t="ppo">PPO</a><a class="term" data-t="rlhf">RLHF</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="qlearn" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Q-learning and SARSA on the cliff</h2>
+    <p class="sub">Walk from S to G. Each step costs −1; stepping onto the cliff costs −100 and sends you back to S. Both agents explore with ε-greedy. Lines: each agent's current greedy route.</p>
+    <div class="plot short" id="pC"></div>
+    <div class="plot short" id="pCr" style="margin-top:8px"></div>
+    <div class="ctl"><label for="cA"><span>Learning rate α</span><output id="cAOut"></output></label><input type="range" id="cA" min="0.05" max="1" step="0.05" value="0.5"></div>
+    <div class="ctl"><label for="cE"><span>Exploration ε</span><output id="cEOut"></output></label><input type="range" id="cE" min="0" max="0.3" step="0.01" value="0.1"></div>
+    <div class="ctl"><button class="btn primary" id="c50">Train 50 episodes</button> <button class="btn" id="c500">Train 500</button> <button class="btn" id="cR">Start over</button></div>
+    <div class="stats" id="cStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Without a model we cannot compute \(\sum_{s'}P(s'\mid s,a)[\dots]\), but every step of experience gives one sample of it. <a class="term" data-t="q-learning">Q-learning</a> keeps a table \(Q(s,a)\) and, after each transition \((s,a,r,s')\), moves the entry a fraction α towards a sampled Bellman optimality target:</p>
+      <div class="mathbox c1">$$Q(s,a)\leftarrow Q(s,a)+\alpha\Big[\underbrace{r+\gamma\max_{a'}Q(s',a')}_{\text{TD target}}-Q(s,a)\Big].$$</div>
+      <p>The bracket is the TD error. Note the \(\max\): the target assumes we will act greedily from \(s'\) on, even though the agent actually explores. That makes Q-learning <a class="term" data-t="on-policy">off-policy</a>: it learns the value of the greedy policy while following a different, exploratory one. With enough exploration and a suitably shrinking α it converges to \(Q^*\).</p>
+      <p><a class="term" data-t="sarsa">SARSA</a> differs in one symbol. It uses the action \(a'\) it really takes next, so it learns the value of the policy it follows, exploration included (on-policy):</p>
+      <div class="mathbox c3">$$Q(s,a)\leftarrow Q(s,a)+\alpha\big[r+\gamma\,Q(s',a')-Q(s,a)\big].$$</div>
+      <p>Train 500 episodes and compare the routes. Q-learning (violet) learns the shortest path, right along the cliff edge: optimal if you never slip. SARSA (cyan) knows that it explores 10% of the time, so it takes the safe route one row up, and its returns <i>during training</i> are better. Set ε to 0 and both converge to the edge. This is the classic example from Sutton and Barto, and the whole difference between on- and off-policy learning.</p>
+      <div class="algo" data-anim="qlearn"><h5 class="algo-h">Algorithm: tabular Q-learning</h5><ol>
+        <li><span class="kw">input</span> step size α, discount γ, exploration ε</li>
+        <li>\(Q(s,a)\leftarrow 0\) for all \(s,a\)</li>
+        <li><span class="kw">for each</span> episode: \(s\leftarrow\) start state</li>
+        <li class="i1"><span class="kw">repeat until</span> \(s\) is terminal</li>
+        <li class="i2">\(a\leftarrow\) ε-greedy action from \(Q(s,\cdot)\)</li>
+        <li class="i2">take \(a\), observe \(r, s'\)</li>
+        <li class="i2">\(Q(s,a)\leftarrow Q(s,a)+\alpha\,[\,r+\gamma\max_{a'}Q(s',a')-Q(s,a)\,]\) <span class="cm">SARSA: \(Q(s',a')\) with the next action actually chosen</span></li>
+        <li class="i2">\(s\leftarrow s'\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="dqn" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>DQN, and why the max is too optimistic</h2>
+    <p class="sub">All actions are truly worth 0. Each estimate is the truth plus noise. Histogram of the target value over 4,000 trials: the plain max (orange) versus the Double-DQN estimate (cyan).</p>
+    <div class="plot wide" id="pO"></div>
+    <div class="ctl"><label for="oK"><span>Number of actions</span><output id="oKOut"></output></label><input type="range" id="oK" min="1" max="18" step="1" value="6"></div>
+    <div class="ctl"><label for="oS"><span>Noise in each estimate σ</span><output id="oSOut"></output></label><input type="range" id="oS" min="0.1" max="2" step="0.1" value="1"></div>
+    <div class="stats" id="oStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A table needs one entry per state; Atari screens make that impossible. <a class="term" data-t="dqn">DQN</a> (Mnih et al., 2015) replaces the table by a network \(Q_\theta(s,a)\) that takes the screen and outputs one value per action, and trains it by gradient descent on the squared TD error:</p>
+      <div class="mathbox c1">$$L(\theta)=\mathbb E_{(s,a,r,s')\sim\mathcal D}\Big[\big(r+\gamma\max_{a'}Q_{\bar\theta}(s',a')-Q_\theta(s,a)\big)^2\Big].$$</div>
+      <p>Naively this is unstable, because the target moves every time \(\theta\) moves and consecutive frames are almost identical. Two fixes made it work:</p>
+      <ul>
+        <li><b><a class="term" data-t="replay-buffer">Experience replay</a></b>: store transitions in a buffer \(\mathcal D\) of the last million steps and train on random minibatches, which breaks the correlation between consecutive samples and reuses each experience many times.</li>
+        <li><b><a class="term" data-t="target-network">Target network</a></b>: compute targets with a frozen copy \(\bar\theta\), refreshed every few thousand steps, so the network is not chasing its own tail.</li>
+      </ul>
+      <p>A third problem is in the lab. The target uses \(\max_{a'}\) of <i>noisy</i> estimates, and the maximum of noisy numbers is biased upwards: \(\mathbb E[\max_a\hat Q(a)]\ge\max_a\mathbb E[\hat Q(a)]\). Errors compound through bootstrapping. <a class="term" data-t="double-dqn">Double DQN</a> picks the action with the online network but evaluates it with the target network, \(Q_{\bar\theta}(s',\arg\max_{a'}Q_\theta(s',a'))\); because the two sets of errors are independent, the bias disappears. Increase the number of actions and watch the orange histogram slide right while the cyan one stays at 0.</p>
+      <div class="algo" data-anim="dqn"><h5 class="algo-h">Algorithm: DQN with replay and a target network</h5><ol>
+        <li>initialise \(Q_\theta\), target \(\bar\theta\leftarrow\theta\), empty buffer \(\mathcal D\)</li>
+        <li><span class="kw">for</span> step \(t=1,2,\dots\)</li>
+        <li class="i1">act ε-greedily on \(Q_\theta(s,\cdot)\); store \((s,a,r,s')\) in \(\mathcal D\)</li>
+        <li class="i1">sample a random minibatch from \(\mathcal D\)</li>
+        <li class="i1">\(y\leftarrow r+\gamma\max_{a'}Q_{\bar\theta}(s',a')\) <span class="cm">0 if s′ is terminal</span></li>
+        <li class="i1">gradient step on \((y-Q_\theta(s,a))^2\)</li>
+        <li class="i1"><span class="kw">every</span> \(C\) steps: \(\bar\theta\leftarrow\theta\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: the deadly triad and the Rainbow upgrades</summary><div>
+        <p>Sutton and Barto call the combination of <i>function approximation</i>, <i>bootstrapping</i> (targets built from estimates) and <i>off-policy</i> learning the deadly triad: with all three, value estimates can diverge to infinity even on tiny problems (Baird's counterexample). DQN has all three; replay and target networks make divergence rare in practice, not impossible.</p>
+        <p>Rainbow (Hessel et al., 2018) stacked six improvements on DQN: Double DQN; prioritised replay (sample transitions with large TD error more often); duelling networks (separate heads for \(V(s)\) and the advantage \(A(s,a)\)); multi-step returns; distributional RL (learn the whole distribution of returns, not its mean); and noisy networks for exploration.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="pg" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Policy gradients: REINFORCE, with and without a baseline</h2>
+    <p class="sub">A softmax policy over 3 actions with true mean rewards 1.0, 1.2 and 0.8 (plus noise), trained by REINFORCE. 40 seeds; thick line = their average probability of choosing the best action.</p>
+    <div class="ctl"><span class="lbl">Baseline</span><div class="seg" id="gSeg"><button data-v="0">None</button><button data-v="1" class="on">Running mean of rewards</button></div></div>
+    <div class="plot wide" id="pPG"></div>
+    <div class="ctl"><label for="gLr"><span>Learning rate</span><output id="gLrOut"></output></label><input type="range" id="gLr" min="0.01" max="0.3" step="0.01" value="0.1"></div>
+    <div class="ctl"><label for="gOff"><span>Reward offset (add to every reward)</span><output id="gOffOut"></output></label><input type="range" id="gOff" min="0" max="20" step="1" value="5"></div>
+    <div class="stats" id="gStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Value methods learn \(Q\) and act greedily; that is awkward for continuous actions (a max over infinitely many torques) and for policies that should be random. <a class="term" data-t="policy-gradient">Policy-gradient</a> methods instead parameterise the policy \(\pi_\theta(a\mid s)\), for example a network with a softmax output, and climb the expected return \(J(\theta)=\mathbb E_{\tau\sim\pi_\theta}[G(\tau)]\) directly.</p>
+      <p>The problem is that \(J\) depends on \(\theta\) through which trajectories happen, and we cannot differentiate through the environment. The <b>log-derivative trick</b> fixes that. Since \(\nabla_\theta p_\theta=p_\theta\nabla_\theta\log p_\theta\), and the environment's own probabilities do not depend on \(\theta\):</p>
+      <div class="mathbox c1">$$\nabla_\theta J(\theta)=\mathbb E_{\pi_\theta}\Big[\sum_{t}\nabla_\theta\log\pi_\theta(a_t\mid s_t)\,\big(G_t-b(s_t)\big)\Big].$$</div>
+      <p>Read it as: make actions more likely in proportion to how good their outcome was. <a class="term" data-t="reinforce">REINFORCE</a> (Williams, 1992) estimates this expectation from sampled episodes. The <a class="term" data-t="rl-baseline">baseline</a> \(b(s)\) can be any function of the state: it leaves the expectation unchanged (because \(\mathbb E[\nabla\log\pi]=0\)) but can cut the variance enormously.</p>
+      <p>Try it. With no baseline and rewards offset by +5, every action gets reinforced after every pull, just by different amounts, so the policy wanders and the seeds disagree. A running-mean baseline turns rewards into "better or worse than usual" and learning becomes fast and consistent. Raise the offset to 20 without a baseline and it barely learns at all.</p>
+      <div class="algo" data-anim="reinforce"><h5 class="algo-h">Algorithm: REINFORCE with a baseline</h5><ol>
+        <li><span class="kw">input</span> policy \(\pi_\theta\), learning rate η</li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1">run one episode with \(\pi_\theta\): \(s_0,a_0,r_1,\dots,s_T\)</li>
+        <li class="i1"><span class="kw">for</span> \(t=0,\dots,T-1\): \(G_t\leftarrow\sum_{k\ge t}\gamma^{k-t}r_{k+1}\)</li>
+        <li class="i1">\(\theta\leftarrow\theta+\eta\sum_t\nabla_\theta\log\pi_\theta(a_t\mid s_t)\,(G_t-b(s_t))\)</li>
+        <li class="i1">update the baseline \(b\) towards the observed returns</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: the gradient of a softmax policy</summary><div>
+        <p>For a softmax over action preferences \(h_\theta(s,a)\), \(\pi(a\mid s)=e^{h(s,a)}/\sum_b e^{h(s,b)}\), and \(\nabla\log\pi(a\mid s)=\nabla h(s,a)-\sum_b\pi(b\mid s)\nabla h(s,b)\). With one preference per action (the lab), the update on the chosen action \(a\) is \(+\eta(1-\pi_a)(G-b)\) and on every other action \(b\) it is \(-\eta\,\pi_b\,(G-b)\): the chosen action is pushed up exactly when its return beats the baseline.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="ac" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Actor–critic and generalised advantage estimation</h2>
+    <p class="sub">How much weight GAE puts on the TD error \(k\) steps ahead, \((\gamma\lambda)^k\). λ = 0 trusts the critic after one step; λ = 1 uses the whole Monte Carlo return.</p>
+    <div class="plot short" id="pL"></div>
+    <div class="ctl"><label for="lL"><span>λ</span><output id="lLOut"></output></label><input type="range" id="lL" min="0" max="1" step="0.01" value="0.95"></div>
+    <div class="ctl"><label for="lG"><span>γ</span><output id="lGOut"></output></label><input type="range" id="lG" min="0.8" max="0.999" step="0.001" value="0.99"></div>
+    <div class="stats" id="lStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The best baseline is close to the state's value, \(b(s)\approx V(s)\), and then \(G_t-V(s_t)\) estimates the <a class="term" data-t="advantage">advantage</a> \(A(s,a)=Q(s,a)-V(s)\): how much better this action was than the policy's average. An <a class="term" data-t="actor-critic">actor–critic</a> learns both at once: the <b>actor</b> is the policy \(\pi_\theta\), the <b>critic</b> is a value network \(V_\phi\) trained by regression on returns.</p>
+      <p>The critic also lets us replace the noisy full return by a bootstrapped one. The one-step TD error \(\delta_t=r_{t+1}+\gamma V(s_{t+1})-V(s_t)\) is itself an advantage estimate: low variance, but biased if \(V\) is wrong. <a class="term" data-t="gae">Generalised advantage estimation</a> blends all horizons with a single knob λ:</p>
+      <div class="mathbox c1">$$\hat A_t^{\text{GAE}(\gamma,\lambda)}=\sum_{k=0}^{\infty}(\gamma\lambda)^k\,\delta_{t+k}.$$</div>
+      <p>λ = 0 gives the one-step TD error; λ = 1 gives the Monte Carlo advantage \(G_t-V(s_t)\). Values around 0.9 to 0.97 work well in practice. <b>A2C</b> runs several environments in parallel and averages their gradients synchronously; <b>A3C</b> did the same asynchronously on CPU threads. <b>SAC</b> (soft actor–critic) adds an entropy bonus to keep the policy random and is a strong default for continuous control.</p>
+    </div>
+  </div>
+</section>
+
+<section id="ppo" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>PPO: take a big step, but not too big</h2>
+    <p class="sub">The PPO objective for one action as a function of the probability ratio \(r=\pi_\theta/\pi_{\text{old}}\). Shaded: where the clip makes the gradient zero.</p>
+    <div class="ctl"><span class="lbl">Advantage</span><div class="seg" id="pSeg"><button data-v="1" class="on">Positive (good action)</button><button data-v="-1">Negative (bad action)</button></div></div>
+    <div class="plot wide" id="pP"></div>
+    <div class="ctl"><label for="pE"><span>Clip range ε</span><output id="pEOut"></output></label><input type="range" id="pE" min="0.05" max="0.5" step="0.01" value="0.2"></div>
+    <div class="ctl"><label for="pR"><span>Current ratio r</span><output id="pROut"></output></label><input type="range" id="pR" min="0.2" max="2" step="0.01" value="1.35"></div>
+    <div class="stats" id="pStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Policy gradients are on-policy: each batch of experience supports one small step, then it is stale. Taking many gradient steps on the same batch is tempting but dangerous: the policy drifts far from the one that collected the data, and one bad update can destroy it. Trust-region methods (TRPO) bound the change with a KL-divergence constraint. <a class="term" data-t="ppo">Proximal policy optimisation</a> (Schulman et al., 2017) gets the same effect with a simple clip.</p>
+      <p>Write the probability ratio \(r_t(\theta)=\pi_\theta(a_t\mid s_t)/\pi_{\text{old}}(a_t\mid s_t)\). The plain surrogate \(r_t\hat A_t\) has the same gradient as the policy gradient at \(r=1\). PPO maximises</p>
+      <div class="mathbox c1">$$L^{\text{CLIP}}(\theta)=\mathbb E_t\Big[\min\big(r_t(\theta)\hat A_t,\ \operatorname{clip}(r_t(\theta),1-\varepsilon,1+\varepsilon)\,\hat A_t\big)\Big].$$</div>
+      <p>For a good action (\(\hat A&gt;0\)) the objective rises with \(r\) until \(r=1+\varepsilon\), then goes flat: no reward for making it even more likely in this update. For a bad action it stops paying to push \(r\) below \(1-\varepsilon\). The min makes it a pessimistic bound, so moving the other way (making a bad action more likely) is never clipped. Move the ratio slider into the shaded region: the gradient becomes zero and that sample stops pulling.</p>
+      <div class="algo" data-anim="ppo"><h5 class="algo-h">Algorithm: PPO with clipping (actor–critic)</h5><ol>
+        <li><span class="kw">for</span> iteration \(=1,2,\dots\)</li>
+        <li class="i1">run \(\pi_{\theta_{\text{old}}}\) in \(N\) environments for \(T\) steps</li>
+        <li class="i1">compute advantages \(\hat A_t\) with GAE and returns for the critic</li>
+        <li class="i1"><span class="kw">for</span> \(K\) epochs, over minibatches</li>
+        <li class="i2">\(r_t\leftarrow\pi_\theta(a_t\mid s_t)/\pi_{\theta_{\text{old}}}(a_t\mid s_t)\)</li>
+        <li class="i2">ascend \(L^{\text{CLIP}}-c_1(V_\phi(s_t)-\hat G_t)^2+c_2\,\mathcal H[\pi_\theta(\cdot\mid s_t)]\)</li>
+        <li class="i1">\(\theta_{\text{old}}\leftarrow\theta\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="rlhf" class="card">
+  <h2><span class="num">6</span>RL for language models: RLHF, DPO and verifiable rewards</h2>
+  <div class="grid2 prose">
+    <div>
+      <p>A language model is a policy: the state is the text so far, an action is the next token, and an episode is one response. <a class="term" data-t="rlhf">Reinforcement learning from human feedback</a> fine-tunes it in three stages:</p>
+      <ol>
+        <li><b>Supervised fine-tuning</b> on good example responses.</li>
+        <li><b>Reward model</b>: people compare two responses; a network \(r_\phi(x,y)\) is trained so that \(\Pr(y_w\succ y_l)=\sigma\big(r_\phi(x,y_w)-r_\phi(x,y_l)\big)\) (the Bradley–Terry model).</li>
+        <li><b>RL</b>: PPO maximises the reward minus a KL penalty that keeps the model close to the supervised one, \(\max_\theta\ \mathbb E[r_\phi(x,y)]-\beta\,\mathrm{KL}(\pi_\theta\,\|\,\pi_{\text{ref}})\). Without the penalty the model learns to exploit the reward model.</li>
+      </ol>
+    </div>
+    <div>
+      <p><b>DPO</b> (direct preference optimisation, 2023) shows that the optimum of that KL-regularised objective can be written in closed form, so the reward model and the RL loop can be skipped: train directly on preference pairs with \(-\log\sigma\big(\beta\log\frac{\pi_\theta(y_w\mid x)}{\pi_{\text{ref}}(y_w\mid x)}-\beta\log\frac{\pi_\theta(y_l\mid x)}{\pi_{\text{ref}}(y_l\mid x)}\big)\).</p>
+      <p>For maths and code, rewards can be checked automatically (did the answer match, did the tests pass?). Reinforcement learning with verifiable rewards, often with <b>GRPO</b> (which replaces the critic by the average reward of a group of sampled answers to the same prompt), is how recent reasoning models learn to write long chains of thought.</p>
+      <p>More on adapting LLMs: <a href="../../nlp/llm-adaptation/">the LLM adaptation map</a> and <a href="../../nlp/prompt-engineering/">prompt engineering</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">7</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> gymnasium <span class="k">as</span> gym, numpy <span class="k">as</span> np
+
+<span class="c"># tabular Q-learning on CliffWalking</span>
+env = gym.make(<span class="s">"CliffWalking-v0"</span>)
+Q = np.zeros((env.observation_space.n, env.action_space.n)); alpha, gamma, eps = <span class="s">0.5</span>, <span class="s">1.0</span>, <span class="s">0.1</span>
+<span class="k">for</span> episode <span class="k">in</span> range(<span class="s">500</span>):
+    s, _ = env.reset(); done = False
+    <span class="k">while</span> <span class="k">not</span> done:
+        a = env.action_space.sample() <span class="k">if</span> np.random.rand() &lt; eps <span class="k">else</span> int(Q[s].argmax())
+        s2, r, term, trunc, _ = env.step(a); done = term <span class="k">or</span> trunc
+        Q[s, a] += alpha * (r + gamma * Q[s2].max() * (<span class="k">not</span> term) - Q[s, a]); s = s2
+
+<span class="c"># deep RL with a maintained library: PPO and DQN in a few lines</span>
+<span class="k">from</span> stable_baselines3 <span class="k">import</span> PPO, DQN
+ppo = PPO(<span class="s">"MlpPolicy"</span>, <span class="s">"CartPole-v1"</span>, clip_range=<span class="s">0.2</span>, gae_lambda=<span class="s">0.95</span>, verbose=<span class="s">0</span>).learn(<span class="s">100_000</span>)
+dqn = DQN(<span class="s">"MlpPolicy"</span>, <span class="s">"CartPole-v1"</span>, buffer_size=<span class="s">50_000</span>, target_update_interval=<span class="s">500</span>).learn(<span class="s">100_000</span>)
+
+<span class="c"># REINFORCE with a baseline in PyTorch (one update from one episode)</span>
+<span class="k">import</span> torch
+<span class="k">def</span> reinforce_step(policy, opt, log_probs, rewards, gamma=<span class="s">0.99</span>):
+    G, returns = <span class="s">0.0</span>, []
+    <span class="k">for</span> r <span class="k">in</span> reversed(rewards): G = r + gamma * G; returns.insert(<span class="s">0</span>, G)
+    returns = torch.tensor(returns); adv = returns - returns.mean()      <span class="c"># mean return as the baseline</span>
+    loss = -(torch.stack(log_probs) * adv).sum()
+    opt.zero_grad(); loss.backward(); opt.step()</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">8</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page was written for this site with its own labs and code. It follows Sutton and Barto, <a href="http://incompleteideas.net/book/the-book-2nd.html" target="_blank" rel="noopener"><i>Reinforcement Learning: An Introduction</i></a> (2nd edition, 2018; cliff walking is their example 6.6) and OpenAI's <a href="https://spinningup.openai.com/" target="_blank" rel="noopener"><i>Spinning Up in Deep RL</i></a> for the policy-gradient and PPO notation. Original papers: Watkins 1989 (Q-learning); Rummery and Niranjan 1994 (SARSA); Williams 1992 (REINFORCE); Mnih et al. 2015 (DQN); van Hasselt, Guez and Silver 2016 (Double DQN); Hessel et al. 2018 (Rainbow); Mnih et al. 2016 (A3C); Schulman et al. 2016 (GAE) and 2017 (PPO); Haarnoja et al. 2018 (SAC); Ouyang et al. 2022 (RLHF for instruction following); Rafailov et al. 2023 (DPO); Shao et al. 2024 (GRPO).</p>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"Q-learning and SARSA differ in one term of their update. Which?","o":["The learning rate","Q-learning's target uses \\(\\max_{a'}Q(s',a')\\); SARSA uses \\(Q(s',a')\\) for the action it actually takes next","SARSA ignores the reward","Q-learning does not use a discount"],"a":1,"e":"The max makes Q-learning learn the greedy policy's values whatever it does (off-policy). SARSA learns the values of the exploring policy it follows (on-policy), which is why it walks the safe route on the cliff."},
+{"q":"What is the job of DQN's target network?","o":["To pick exploratory actions","To provide fixed targets for a while, so the network is not chasing a target that moves with every gradient step","To store past transitions","To compress the network"],"a":1,"e":"Targets computed with a frozen copy \\(\\bar\\theta\\) stay still between refreshes, which stabilises the regression. Storing transitions is the replay buffer's job."},
+{"q":"Why does the plain max in the DQN target overestimate values?","o":["Rewards are noisy","The maximum of several noisy estimates is biased upwards even when each estimate is unbiased","The discount is too high","Neural networks always overfit"],"a":1,"e":"\\(\\mathbb E[\\max_a \\hat Q(a)]\\ge \\max_a \\mathbb E[\\hat Q(a)]\\). Double DQN removes the bias by selecting the action with one network and evaluating it with another."},
+{"q":"Subtracting a baseline \\(b(s)\\) from the return in REINFORCE…","o":["…biases the gradient but speeds it up","…leaves the expected gradient unchanged and can greatly reduce its variance","…is only allowed if \\(b=0\\)","…turns REINFORCE into Q-learning"],"a":1,"e":"Because \\(\\mathbb E_{a\\sim\\pi}[\\nabla\\log\\pi(a\\mid s)]=0\\), any baseline that depends only on the state has zero expected effect, while a good one (close to \\(V(s)\\)) cancels much of the noise."},
+{"q":"In PPO with advantage \\(\\hat A>0\\) and ratio \\(r>1+\\varepsilon\\), what is the gradient of that sample's clipped objective?","o":["Very large","Zero: the clip has flattened the objective, so the update stops making the action even more likely","Negative","The same as without clipping"],"a":1,"e":"The min picks the clipped term \\((1+\\varepsilon)\\hat A\\), which does not depend on \\(\\theta\\), so the sample contributes no gradient. This keeps each update close to the old policy."}
+]</script>
+<p class="foot">Part of the <a href="../">Reinforcement learning</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/evo.js"></script>
+<script>
+(function(){
+const {$}=ML; const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+if(window.EVO) EVO.render('#evoSlot','rl');
+
+/* ---------- 1 cliff walking ---------- */
+const CR=4, CC=12, ST=[3,0], GL=[3,11], MV=[[-1,0],[0,1],[1,0],[0,-1]];
+let cA=.5, cE=.1, agents, ep=0;
+const cliff=(r,c)=>r===3&&c>0&&c<11;
+function stepC(r,c,a){ let nr=Math.max(0,Math.min(CR-1,r+MV[a][0])), nc=Math.max(0,Math.min(CC-1,c+MV[a][1])); if(cliff(nr,nc)) return [ST[0],ST[1],-100,false]; return [nr,nc,-1,nr===GL[0]&&nc===GL[1]]; }
+const mkQ=()=>[...Array(CR)].map(()=>[...Array(CC)].map(()=>[0,0,0,0]));
+const argmax=q=>{ let b=0; for(let i=1;i<4;i++) if(q[i]>q[b]) b=i; return b; };
+const egreedy=q=>Math.random()<cE?Math.floor(Math.random()*4):argmax(q);
+function resetC(){ agents={q:{Q:mkQ(),ret:[],name:'Q-learning'},s:{Q:mkQ(),ret:[],name:'SARSA'}}; ep=0; drawC(); }
+function episode(ag,sarsa){ let [r,c]=ST, a=egreedy(ag.Q[r][c]), G=0;
+  for(let t=0;t<1000;t++){ const [nr,nc,rw,done]=stepC(r,c,a); G+=rw; const a2=egreedy(ag.Q[nr][nc]);
+    const tgt=done?rw:rw+(sarsa?ag.Q[nr][nc][a2]:Math.max(...ag.Q[nr][nc])); ag.Q[r][c][a]+=cA*(tgt-ag.Q[r][c][a]); r=nr; c=nc; a=a2; if(done) break; }
+  ag.ret.push(G); }
+function train(n){ for(let i=0;i<n;i++){ episode(agents.q,false); episode(agents.s,true); ep++; } drawC(); }
+function route(ag){ let [r,c]=ST; const path=[[r,c]]; for(let t=0;t<40;t++){ const a=argmax(ag.Q[r][c]); const [nr,nc,rw,done]=stepC(r,c,a); if(rw===-100){ path.push([3,Math.max(1,Math.min(10,c+MV[a][1]))]); break; } r=nr; c=nc; path.push([r,c]); if(done) break; } return path; }
+const pC=new ML.Plot('#pC',{equal:false}), pCr=new ML.Plot('#pCr',{equal:false});
+function drawC(){ const P=ML.palette(), c=pC.ctx; pC.clear(); const s=Math.min((pC.w-12)/CC,(pC.h-12)/CR), ox=(pC.w-s*CC)/2, oy=(pC.h-s*CR)/2;
+  for(let r=0;r<CR;r++) for(let k=0;k<CC;k++){ const x=ox+k*s, y=oy+r*s; c.fillStyle=cliff(r,k)?P.c2:(r===GL[0]&&k===GL[1])?P.c5:P.card; c.globalAlpha=cliff(r,k)?.75:1; c.fillRect(x+1,y+1,s-2,s-2); c.globalAlpha=1; c.strokeStyle=P.line; c.strokeRect(x+.5,y+.5,s-1,s-1); }
+  c.fillStyle='#fff'; c.font=`600 ${Math.round(s*.3)}px Inter,system-ui`; c.textAlign='center'; c.textBaseline='middle'; c.fillText('the cliff  −100',ox+s*6,oy+s*3.5); c.fillText('G',ox+s*11.5,oy+s*3.5); c.fillStyle=P.ink; c.fillText('S',ox+s*.5,oy+s*3.5);
+  if(ep>0) [['q',P.c1,-.12],['s',P.c3,.12]].forEach(([k,col,off])=>{ const pth=route(agents[k]); c.save(); c.strokeStyle=col; c.lineWidth=4; c.lineCap='round'; c.lineJoin='round'; c.beginPath(); pth.forEach(([r,kk],i)=>{ const X=ox+kk*s+s/2+off*s, Y=oy+r*s+s/2+off*s; i?c.lineTo(X,Y):c.moveTo(X,Y); }); c.stroke(); c.restore(); });
+  const sm=a=>{ const o=[]; for(let i=0;i<a.length;i++){ let su=0,n=0; for(let j=Math.max(0,i-19);j<=i;j++){ su+=a[j]; n++; } o.push([i+1,su/n]); } return o; };
+  if(ep>0){ ML.chart(pCr,[{pts:sm(agents.q.ret),color:P.c1},{pts:sm(agents.s.ret),color:P.c3}],{x0:0,x1:Math.max(50,ep),y0:-150,y1:0,xl:'episode (return, 20-episode average)'}); const cc=pCr.ctx; cc.font='600 11px Inter,system-ui'; cc.fillStyle=P.c1; cc.fillText('Q-learning',54,24); cc.fillStyle=P.c3; cc.fillText('SARSA',134,24); }
+  else { pCr.clear(); const cc=pCr.ctx; cc.fillStyle=P.muted; cc.font='12px Inter,system-ui'; cc.textAlign='center'; cc.fillText('Returns per episode appear here once you train',pCr.w/2,pCr.h/2); }
+  const avg=a=>a.length?(a.slice(-50).reduce((x,y)=>x+y,0)/Math.min(50,a.length)).toFixed(1):'–', len=k=>ep?route(agents[k]).length-1:'–';
+  $('#cStats').innerHTML=stat('c6',ep,'episodes')+stat('c1',avg(agents.q.ret),'Q-learning: mean return, last 50')+stat('c3',avg(agents.s.ret),'SARSA: mean return, last 50')+stat('c5',len('q')+' / '+len('s'),'greedy route length (Q / SARSA)'); }
+ML.bindRange('cA',v=>{cA=v;},v=>v.toFixed(2)); ML.bindRange('cE',v=>{cE=v;},v=>v.toFixed(2));
+$('#c50').addEventListener('click',()=>train(50)); $('#c500').addEventListener('click',()=>train(500)); $('#cR').addEventListener('click',resetC); pC.onResize=drawC; pCr.onResize=drawC;
+resetC();
+
+/* ---------- 2 overestimation ---------- */
+const pO=new ML.Plot('#pO',{equal:false}); let oK=6, oS=1;
+function drawO(){ const P=ML.palette(), r=ML.rng(5), N=4000, single=[], dbl=[];
+  for(let t=0;t<N;t++){ let m=-1e9, am=0; const B=[]; for(let a=0;a<oK;a++){ const e=oS*r.gauss(); B.push(oS*r.gauss()); if(e>m){ m=e; am=a; } } single.push(m); dbl.push(B[am]); }
+  const lo=-4*oS-.5, hi=4*oS+.5, nb=50, bw=(hi-lo)/nb, hist=a=>{ const h=new Array(nb).fill(0); a.forEach(v=>{ const b=Math.floor((v-lo)/bw); if(b>=0&&b<nb) h[b]++; }); return h; }, h1=hist(single), h2=hist(dbl), ym=Math.max(...h1,...h2)*1.12;
+  const fr=ML.chart(pO,[{pts:[[lo,0],[hi,ym]],color:'transparent',noline:true}],{x0:lo,x1:hi,y0:0,y1:ym,xl:'target value (truth = 0 for every action)',vline:0}), c=pO.ctx;
+  [[h2,P.c3],[h1,P.c4]].forEach(([h,col])=>{ c.save(); c.fillStyle=col; c.globalAlpha=.45; h.forEach((k,b)=>{ const x0=fr.fx(lo+b*bw), x1=fr.fx(lo+(b+1)*bw); c.fillRect(x0+.5,fr.fy(k),x1-x0-1,fr.fy(0)-fr.fy(k)); }); c.restore(); });
+  const mean=a=>a.reduce((x,y)=>x+y,0)/a.length; c.save(); c.font='600 12px Inter,system-ui'; c.fillStyle=P.c4; c.fillText('max of estimates',54,24); c.fillStyle=P.c3; c.fillText('Double-DQN estimate',54,42); c.restore();
+  $('#oStats').innerHTML=stat('c4','+'+mean(single).toFixed(2),'average bias of max')+stat('c3',(mean(dbl)>=0?'+':'')+mean(dbl).toFixed(2),'average bias of double estimate')+stat('c1',oK,'actions'); }
+ML.bindRange('oK',v=>{oK=v;drawO();}); ML.bindRange('oS',v=>{oS=v;drawO();},v=>v.toFixed(1)); pO.onResize=drawO; drawO();
+
+/* ---------- 3 REINFORCE ---------- */
+const pPG=new ML.Plot('#pPG',{equal:false}); let gB=1, gLr=.1, gOff=5; const MU=[1,1.2,.8], STEPS=400, SEEDS=40;
+function runPG(){ const runs=[]; for(let sd=0;sd<SEEDS;sd++){ const r=ML.rng(1000+sd), h=[0,0,0]; let b=0; const tr=[]; for(let t=0;t<STEPS;t++){ const m=Math.max(...h), e=h.map(x=>Math.exp(x-m)), z=e.reduce((x,y)=>x+y,0), p=e.map(x=>x/z);
+    let u=r(), a=0; while(a<2&&u>p[a]){ u-=p[a]; a++; } const rw=MU[a]+r.gauss()+gOff, adv=rw-(gB?b:0);
+    for(let i=0;i<3;i++) h[i]+=gLr*adv*((i===a?1:0)-p[i]); b+=.05*(rw-b); if(t===0) b=rw; tr.push(p[1]); } runs.push(tr); } return runs; }
+function drawPG(){ const P=ML.palette(), runs=runPG(), avg=[...Array(STEPS)].map((_,t)=>[t+1,runs.reduce((s,r)=>s+r[t],0)/SEEDS]);
+  const ser=runs.slice(0,14).map(r=>({pts:r.map((v,t)=>[t+1,v]),color:P.muted,width:1})); ser.push({pts:avg,color:gB?P.c5:P.c4,width:3.5});
+  ML.chart(pPG,ser,{x0:0,x1:STEPS,y0:0,y1:1,xl:'update (one pull each)'}); const c=pPG.ctx; c.save(); c.setLineDash([5,4]); c.strokeStyle=P.ink; c.globalAlpha=.4; c.restore();
+  const fin=runs.map(r=>r[STEPS-1]), mF=fin.reduce((x,y)=>x+y,0)/SEEDS, sd=Math.sqrt(fin.reduce((s,v)=>s+(v-mF)**2,0)/SEEDS);
+  $('#gStats').innerHTML=stat(gB?'c5':'c4',(100*mF).toFixed(0)+'%','P(best action) after 400, averaged')+stat('c1',(100*sd).toFixed(0)+' pts','spread between seeds')+stat('c3',fin.filter(v=>v>.8).length+' / '+SEEDS,'seeds above 80%'); }
+ML.bindSeg('gSeg',v=>{gB=+v;drawPG();}); ML.bindRange('gLr',v=>{gLr=v;drawPG();},v=>v.toFixed(2)); ML.bindRange('gOff',v=>{gOff=v;drawPG();}); pPG.onResize=drawPG; drawPG();
+
+/* ---------- 4 GAE weights ---------- */
+const pL=new ML.Plot('#pL',{equal:false}); let lL=.95, lG=.99;
+function drawL(){ const P=ML.palette(), K=60, w=[...Array(K)].map((_,k)=>Math.pow(lG*lL,k)), fr=ML.chart(pL,[{pts:[[0,0],[K,1]],color:'transparent',noline:true}],{x0:-.5,x1:K,y0:0,y1:1.05,xl:'k = steps ahead'}), c=pL.ctx, bw=Math.max(1,(fr.fx(1)-fr.fx(0))*.7);
+  w.forEach((v,k)=>{ c.fillStyle=P.c1; c.globalAlpha=.8; c.fillRect(fr.fx(k)-bw/2,fr.fy(v),bw,fr.fy(0)-fr.fy(v)); }); c.globalAlpha=1;
+  const eff=1/(1-lG*lL+1e-12); $('#lStats').innerHTML=stat('c1',lL>=.999&&lG>=.999?'∞':eff.toFixed(1)+' steps','effective look-ahead 1/(1−γλ)')+stat('c3',lL<.05?'TD(0): low variance, biased':lL>.98?'≈ Monte Carlo: unbiased, noisy':'a blend','character'); }
+ML.bindRange('lL',v=>{lL=v;drawL();},v=>v.toFixed(2)); ML.bindRange('lG',v=>{lG=v;drawL();},v=>v.toFixed(3)); pL.onResize=drawL; drawL();
+
+/* ---------- 5 PPO clip ---------- */
+const pP=new ML.Plot('#pP',{equal:false}); let pS=1, pE=.2, pR=1.35;
+function drawP(){ const P=ML.palette(), A_=pS, f=r=>Math.min(r*A_,Math.max(1-pE,Math.min(1+pE,r))*A_), raw=r=>r*A_, xs=[...Array(181)].map((_,i)=>.2+i*.01);
+  const fr=ML.chart(pP,[{pts:xs.map(r=>[r,raw(r)]),color:P.muted,width:1.5,dash:[5,4]},{pts:xs.map(r=>[r,f(r)]),color:P.c1,width:3.5}],{x0:.2,x1:2,y0:A_>0?0:-2,y1:A_>0?2:0,xl:'ratio r = π_θ / π_old',vline:1}), c=pP.ctx;
+  c.save(); c.fillStyle=P.c4; c.globalAlpha=.13; if(A_>0) c.fillRect(fr.fx(1+pE),12,fr.fx(2)-fr.fx(1+pE),pP.h-40); else c.fillRect(fr.fx(.2),12,fr.fx(1-pE)-fr.fx(.2),pP.h-40); c.restore();
+  const y=f(pR), clipped=(A_>0&&pR>1+pE)||(A_<0&&pR<1-pE); c.fillStyle=clipped?P.c4:P.c5; c.beginPath(); c.arc(fr.fx(pR),fr.fy(y),7,0,7); c.fill(); c.strokeStyle='#fff'; c.lineWidth=2; c.stroke();
+  c.save(); c.font='600 12px Inter,system-ui'; c.fillStyle=P.c1; c.fillText('L_CLIP',54,24); c.fillStyle=P.muted; c.fillText('unclipped r·A',54,42); c.restore();
+  $('#pStats').innerHTML=stat('c1',y.toFixed(3),'objective at this r')+stat(clipped?'c4':'c5',clipped?'0':A_.toFixed(0),'gradient dL/dr')+stat('c3',(1-pE).toFixed(2)+' – '+(1+pE).toFixed(2),'trust region for r'); }
+ML.bindSeg('pSeg',v=>{pS=+v;drawP();}); ML.bindRange('pE',v=>{pE=v;drawP();},v=>v.toFixed(2)); ML.bindRange('pR',v=>{pR=v;drawP();},v=>v.toFixed(2)); pP.onResize=drawP; drawP();
+ML.onTheme&&ML.onTheme(()=>{ drawC(); drawO(); drawPG(); drawL(); drawP(); });
+})();
+</script>
+<script>NLP.nav('rl','deep-rl'); ML.renderMath(document.body);</script>
+</body>
+</html>

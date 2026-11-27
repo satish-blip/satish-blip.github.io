@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLIP</title>
+<meta name="description" content="CLIP learns one embedding space for images and text by contrastive training on image–caption pairs. Train a tiny CLIP live in your browser, watch the similarity matrix light up along its diagonal, then use it for zero-shot classification and text-to-image search.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP &middot; Multimodal (part 4 of 5)</p>
+  <h1>CLIP: <span class="grad">one space for pictures and words</span></h1>
+  <p class="lede">VisualBERT and ViLBERT fuse an image and a caption inside one network to answer questions about them. CLIP (Radford et al., OpenAI, 2021) does something simpler and, it turned out, far more widely useful: it trains an image encoder and a text encoder separately, so that a picture and a sentence describing it land on the same point of a shared space. On this page you train a small CLIP yourself, then use it to classify images it was never trained to classify.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#space">1 · Two encoders, one space</a><a href="#train">2 · Contrastive training, live</a><a href="#maths">3 · The loss, step by step</a><a href="#zero">4 · Zero-shot classification</a><a href="#search">5 · Search by text</a><a href="#real">6 · The real CLIP</a><a href="#py">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is CLIP, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>An image classifier trained on ImageNet knows exactly 1,000 labels. To teach it "golden retriever puppy on a beach", someone must collect and label thousands of new photos. Meanwhile the web holds hundreds of millions of images that already come with free, rich descriptions: their captions and alt-text. They are too noisy and varied to use as class labels. Can we learn from them anyway, and end up with a model that understands any description we write, not just a fixed list?</p>
+      <h3>The idea</h3><p><a class="term" data-t="clip">CLIP</a> (Contrastive Language–Image Pre-training) has two encoders: one turns an image into a vector, the other turns a piece of text into a vector of the same size. Training uses a <a class="term" data-t="infonce">contrastive</a> loss on a batch of image–caption pairs: make each image's vector most similar to its own caption's vector and less similar to every other caption in the batch, and the same the other way round. The result is a <a class="term" data-t="multimodal">multimodal embedding</a> space where meaning, not modality, decides where things land.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Encode a batch of B images and their B captions into unit vectors.</li><li>Compute all \(B\times B\) cosine similarities.</li><li>Cross-entropy pushes the diagonal (true pairs) up and everything else down.</li><li>Afterwards, classify or search by comparing an image vector with text vectors you write, with no further training (<a class="term" data-t="zero-shot">zero-shot</a>).</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A party game with a pile of photos and a pile of captions, all shuffled. Your job is to deal them out in matching pairs. You get good at it by learning what words go with what looks, and once you are good, you can match a photo to a caption you have never seen before.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Learns from free, noisy web captions: no labels to annotate</li><li>Zero-shot classification with any class names</li><li>Fast search: embed a million images once, query with text</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Weak at counting, spatial relations ("left of") and fine details</li><li>Inherits the biases of web data</li><li>Needs very large batches and datasets to work well</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="clip">CLIP</a><a class="term" data-t="multimodal">Multimodal embedding</a><a class="term" data-t="infonce">Contrastive loss</a><a class="term" data-t="cosine">Cosine similarity</a><a class="term" data-t="temperature">Temperature</a><a class="term" data-t="zero-shot">Zero-shot</a><a class="term" data-t="vit">Vision transformer</a><a class="term" data-t="bi-encoder">Bi-encoder</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="space" class="card hl">
+  <h2><span class="num">1</span>Two encoders, one space</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>An image \(x\) goes through an image encoder \(f\) (a ResNet or a <a class="term" data-t="vit">ViT</a>); a caption \(y\) goes through a text encoder \(g\) (a transformer). Each output is multiplied by a projection matrix to a common width \(d\) and scaled to length 1:</p>
+      <div class="mathbox c1">$$u=\frac{W_If(x)}{\lVert W_If(x)\rVert},\qquad t=\frac{W_Tg(y)}{\lVert W_Tg(y)\rVert}$$</div>
+      <p>Because both have length 1, their dot product is the <a class="term" data-t="cosine">cosine similarity</a> \(u^\top t=\cos\theta\in[-1,1]\): 1 when they point the same way, 0 when unrelated.</p>
+      <p>Unlike VisualBERT and ViLBERT, the two encoders never look at each other. That makes CLIP a <a class="term" data-t="bi-encoder">bi-encoder</a>, like the dense retrievers on the <a href="../rag/">RAG page</a>: every image can be encoded once and stored, and any text query is compared with all of them by a single matrix product.</p>
+    </div>
+    <div>
+      <div class="plot sq" id="mapPlot" style="max-width:420px"></div>
+      <p class="hint">The shared space of the tiny CLIP trained on this page, flattened to 2-D. Squares are images, circles are captions "a {size} {colour} {shape}", same colour and outline for the same object; a line joins each image to its caption. Before training they are scattered. Train in section 2 and watch each image move next to its own description.</p>
+    </div>
+  </div>
+</section>
+
+<section id="train" class="card">
+  <h2><span class="num">2</span>Contrastive training, live</h2>
+  <p class="sub">A toy world of coloured shapes: 4 colours × 3 shapes × 2 sizes. Each training example is a tiny 10 × 10 image and a caption written from a few templates ("a big red circle", "a photo of a blue square", "the triangle is green"). Two combinations, <b>yellow triangle</b> and <b>blue circle</b>, are never shown during training, so we can test zero-shot later. Press Train.</p>
+  <div class="grid2">
+    <div>
+      <div class="player"><button class="btn primary" id="tRun">Train</button><button class="btn" id="tReset">Reset</button><span class="pos" id="tIt">0 steps</span></div>
+      <div class="plot short" id="tLoss" style="margin-top:10px"></div>
+      <p class="hint">Contrastive loss on the training batch (purple) and the best possible value 0. With random weights the loss is about \(\ln 12\approx2.5\): picking the right caption out of 12 by chance.</p>
+      <div class="stats" id="tStats"></div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Similarity matrix for one batch</h3>
+      <div id="tBatch"></div>
+      <div id="tHeat" style="overflow-x:auto"></div>
+      <p class="hint">Rows: the batch's images. Columns: their captions, in the same order. Cell = cosine similarity. Training wants a bright diagonal and dark everywhere else.</p>
+    </div>
+  </div>
+  <div class="prose" style="margin-top:8px">
+    <p><b>The model</b> (about 1,900 numbers): the image encoder looks at which of the 100 pixels are not background (the shape) and at their average colour, a stand-in for the edge and colour detectors in the first layers of a real vision network, and maps those 103 numbers linearly to 16; the text encoder averages a 16-number vector per word (a bag of words). Both are normalised to length 1, and the loss uses temperature \(\tau=0.1\). Real CLIP uses a 300-million-parameter ViT and a 12-layer transformer, but the training signal is exactly this one.</p>
+  </div>
+</section>
+
+<section id="maths" class="card hl">
+  <h2><span class="num">3</span>The loss, step by step</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>Take a batch of \(B\) pairs \((x_i,y_i)\). Encode them to unit vectors \(u_i\) and \(t_i\), and form the \(B\times B\) matrix of scaled similarities</p>
+      <div class="mathbox c1">$$S_{ij}=\frac{u_i^\top t_j}{\tau}.$$</div>
+      <p><b>Image to text.</b> Treat row \(i\) as the scores of a \(B\)-way classifier whose right answer is caption \(i\). The usual softmax cross-entropy is</p>
+      <div class="mathbox c3">$$\mathcal L_{I\to T}=-\frac1B\sum_{i=1}^B\log\frac{e^{S_{ii}}}{\sum_{j=1}^Be^{S_{ij}}}$$</div>
+      <p><b>Text to image.</b> The same for columns: caption \(j\) must pick out image \(j\) among the \(B\) images, \(\mathcal L_{T\to I}=-\frac1B\sum_j\log\frac{e^{S_{jj}}}{\sum_ie^{S_{ij}}}\).</p>
+      <p><b>Total.</b> \(\mathcal L=\tfrac12(\mathcal L_{I\to T}+\mathcal L_{T\to I})\). The gradient of each cross-entropy with respect to a score is "softmax probability minus 1 if correct": the true pair is pulled together with force \(1-p_{ii}\), and each wrong pair is pushed apart with force \(p_{ij}\), so the most confusing negatives get pushed hardest.</p>
+    </div>
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: CLIP training step</h5><ol>
+        <li><span class="kw">input</span> a batch of \(B\) (image, caption) pairs, encoders \(f,g\), projections \(W_I,W_T\), temperature \(\tau\)</li>
+        <li>\(U\leftarrow\operatorname{normalise}(f(\text{images})W_I)\) <span class="cm">B × d, one row per image</span></li>
+        <li>\(T\leftarrow\operatorname{normalise}(g(\text{captions})W_T)\) <span class="cm">B × d, one row per caption</span></li>
+        <li>\(S\leftarrow UT^\top/\tau\) <span class="cm">B × B, true pairs on the diagonal</span></li>
+        <li>\(\mathcal L_{I\to T}\leftarrow\operatorname{CE}(\text{rows of }S,\;\text{labels }1..B)\) <span class="cm">each image finds its caption</span></li>
+        <li>\(\mathcal L_{T\to I}\leftarrow\operatorname{CE}(\text{columns of }S,\;\text{labels }1..B)\) <span class="cm">each caption finds its image</span></li>
+        <li>\(\mathcal L\leftarrow\tfrac12(\mathcal L_{I\to T}+\mathcal L_{T\to I})\); update \(f,g,W_I,W_T,\tau\)</li>
+      </ol></div>
+      <details class="deeper" style="margin-top:12px"><summary>Going deeper: temperature, batch size, and what the loss estimates</summary><div>
+        <p><b>Temperature.</b> Cosines live in \([-1,1]\), so without scaling the softmax over a batch would be almost flat. Dividing by \(\tau\) (CLIP learns \(\log(1/\tau)\), starting at \(\tau=0.07\) and capping \(1/\tau\) at 100) sharpens it. Too large a \(\tau\) and the loss barely separates pairs; too small and training becomes unstable, with gradients only from the single hardest negative.</p>
+        <p><b>Batch size.</b> Each row is a \(B\)-way classification, so the batch is the set of negatives. More negatives make the task harder and the embedding sharper; CLIP used \(B=32{,}768\), spread across hundreds of GPUs. SigLIP (2023) replaces the softmax with an independent sigmoid "match or not" for every cell of \(S\), which removes the need to normalise across the whole batch and works well with smaller batches.</p>
+        <p><b>What it estimates.</b> This loss is the InfoNCE objective. Its minimum value bounds the mutual information between images and captions: \(I(X;Y)\ge\log B-\mathcal L_{I\to T}\). Minimising it therefore makes the embeddings keep as much information as possible about which caption goes with which image, which is exactly what a good shared space needs. The same loss trains dense retrievers (DPR), SimCLR (with two views of one image instead of image and text), and sentence embedders.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="zero" class="card">
+  <h2><span class="num">4</span>Zero-shot classification</h2>
+  <p class="sub">To classify with CLIP you don't train a classifier. You write the class names into a sentence ("a photo of a {class}"), encode every sentence once, and pick the one whose vector is closest to the image's. Here the classes are the 12 colour–shape pairs, including the two the model never saw.</p>
+  <div class="grid2">
+    <div>
+      <div class="row" style="gap:10px;align-items:flex-start"><div class="plot sq" id="zImg" style="width:120px;flex:none"></div>
+        <div style="flex:1"><div class="row" style="flex-wrap:wrap;gap:6px"><button class="btn" id="zNew">Random image</button><button class="btn" id="zHeld">An unseen combination</button><button class="btn" id="zTrain2">Train 300 steps</button></div><div id="zTrue" class="mono" style="margin-top:8px;font-size:13px"></div></div></div>
+      <div id="zBars" style="margin-top:10px"></div>
+    </div>
+    <div>
+      <div class="stats" id="zStats"></div>
+      <div class="note" id="zNote" style="margin-top:8px"></div>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: zero-shot classification with CLIP</h5><ol>
+        <li><span class="kw">input</span> an image \(x\), class names \(c_1..c_K\), a template such as "a photo of a {}"</li>
+        <li><span class="kw">for</span> each class \(k\): \(t_k\leftarrow\operatorname{normalise}(g(\text{template}(c_k))W_T)\) <span class="cm">once, then reuse</span></li>
+        <li>\(u\leftarrow\operatorname{normalise}(f(x)W_I)\)</li>
+        <li><span class="kw">for</span> each class \(k\): \(s_k\leftarrow u^\top t_k/\tau\)</li>
+        <li>\(p\leftarrow\operatorname{softmax}(s)\) <span class="cm">probabilities over the K classes</span></li>
+        <li><span class="kw">return</span> \(\arg\max_kp_k\) <span class="cm">no training on these classes</span></li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: why it generalises to unseen combinations, and prompt engineering</summary><div>
+        <p>"Yellow" and "triangle" each appeared many times in training, just never together. Because the text encoder builds a caption's vector from its words, and the image encoder sees shape and colour as separate features, the model learns a direction for "yellow" and a direction for "triangle" separately, and adds them. A yellow triangle then lands near "a yellow triangle" even though that pair was never in a batch. Real CLIP relies on the same compositionality at a far larger scale, which is why it can recognise "a corgi wearing sunglasses".</p>
+        <p><b>Prompts matter.</b> A bare class name ("crane") is ambiguous; "a photo of a crane, a type of bird" is not. The CLIP paper gained several points of ImageNet accuracy by using the template "a photo of a {}." and more by averaging the text vectors of 80 templates per class (prompt ensembling). The classifier is literally a matrix whose rows are text embeddings, so changing the prompts is changing the classifier's weights without any training.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="search" class="card hl">
+  <h2><span class="num">5</span>Search by text</h2>
+  <p class="sub">The same trick in reverse: embed a gallery of images once, then rank them by similarity to any query. Type a query using the words the toy model knows: red, green, blue, yellow, circle, square, triangle, small, big.</p>
+  <div class="row" style="gap:8px;flex-wrap:wrap"><input class="txt" id="sQ" value="a big blue square" style="flex:1;min-width:200px"><button class="btn" id="sGo">Search</button></div>
+  <div id="sRes" style="margin-top:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px"></div>
+  <p class="hint" id="sHint"></p>
+</section>
+
+<section id="real" class="card">
+  <h2><span class="num">6</span>The real CLIP, and where it is used</h2>
+  <div class="grid2 prose">
+    <div>
+      <ul>
+        <li><b>Data:</b> 400 million (image, text) pairs collected from the web (the WIT dataset).</li>
+        <li><b>Encoders:</b> image side a ResNet-50 up to a ViT-L/14; text side a 12-layer, 512-wide transformer reading up to 76 tokens; the [EOS] token's output is the text vector.</li>
+        <li><b>Training:</b> batch 32,768, 32 epochs. The largest ViT model took 12 days on 256 GPUs.</li>
+        <li><b>Result:</b> zero-shot ImageNet accuracy of 76.2%, matching a ResNet-50 trained on the 1.28 million labelled ImageNet images, without using any of them; and much more robust when the images change style (sketches, renditions).</li>
+      </ul>
+      <p><b>Limits.</b> It struggles with counting ("three apples"), spatial relations, reading small text, and fine-grained classes, and it can be fooled by a written label stuck on an object (a "typographic attack": an apple with a paper saying "iPod").</p>
+    </div>
+    <div>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Where CLIP is used</th><th>Which part</th></tr>
+        <tr><td>Stable Diffusion and other image generators</td><td>the text encoder turns the prompt into the vectors that cross-attention reads</td></tr>
+        <tr><td>LLaVA and many vision–language assistants</td><td>the ViT image encoder supplies the visual tokens</td></tr>
+        <tr><td>Image search and photo apps</td><td>both encoders, as a bi-encoder index</td></tr>
+        <tr><td>Data filtering (LAION)</td><td>keep only image–caption pairs whose CLIP similarity is high</td></tr>
+        <tr><td>Open re-implementations: OpenCLIP, SigLIP</td><td>the same recipe on open data, or with a sigmoid loss</td></tr>
+      </table></div>
+      <p class="hint">Fusion models (<a href="../visualbert/">VisualBERT</a>, <a href="../vilbert/">ViLBERT</a>) are better at reasoning about one image and one question; CLIP is better at matching and searching at scale. Modern assistants combine them: a CLIP-style image encoder feeding a language model.</p>
+    </div>
+  </div>
+  <p class="hint">Next: <a href="../layoutlmv2/">part 5, LayoutLMv2</a>, reads scanned documents using the words, where they sit on the page, and the page image.</p>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">7</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> torch, torch.nn.functional <span class="k">as</span> F
+<span class="c"># the loss, given image features I_f (B x di) and text features T_f (B x dt)</span>
+<span class="k">def</span> clip_loss(I_f, T_f, W_i, W_t, log_scale):
+    U = F.normalize(I_f @ W_i, dim=-<span class="s">1</span>)            <span class="c"># B x d</span>
+    T = F.normalize(T_f @ W_t, dim=-<span class="s">1</span>)            <span class="c"># B x d</span>
+    S = log_scale.exp() * U @ T.t()                   <span class="c"># B x B, scale = 1 / tau</span>
+    labels = torch.arange(S.shape[<span class="s">0</span>])
+    <span class="k">return</span> (F.cross_entropy(S, labels) + F.cross_entropy(S.t(), labels)) / <span class="s">2</span>
+
+<span class="c"># zero-shot classification with the released model</span>
+<span class="k">from</span> transformers <span class="k">import</span> CLIPModel, CLIPProcessor
+model = CLIPModel.from_pretrained(<span class="s">"openai/clip-vit-base-patch32"</span>)
+proc  = CLIPProcessor.from_pretrained(<span class="s">"openai/clip-vit-base-patch32"</span>)
+labels = [<span class="s">"a photo of a dog"</span>, <span class="s">"a photo of a cat"</span>, <span class="s">"a photo of a car"</span>]
+<span class="c"># x = proc(text=labels, images=pil_image, return_tensors="pt", padding=True)</span>
+<span class="c"># probs = model(**x).logits_per_image.softmax(dim=-1)   # one probability per label</span>
+
+<span class="c"># search: embed images once, then compare with any query</span>
+<span class="c"># img_emb = model.get_image_features(**proc(images=gallery, return_tensors="pt"))</span>
+<span class="c"># txt_emb = model.get_text_features(**proc(text=["a red bicycle"], return_tensors="pt", padding=True))</span>
+<span class="c"># scores  = F.normalize(txt_emb, dim=-1) @ F.normalize(img_emb, dim=-1).t()</span></pre>
+</section>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette();
+const COLS={red:[.9,.2,.2],green:[.2,.7,.3],blue:[.2,.4,.9],yellow:[.95,.8,.15]}, SHAPES=['circle','square','triangle'], SIZES=['small','big'];
+const COLN=Object.keys(COLS), VOC=['a','photo','of','the','is',...COLN,...SHAPES,...SIZES], VI={}; VOC.forEach((w,i)=>VI[w]=i);
+const HELD=new Set(['yellow triangle','blue circle']); const R=10, D=16, TAU=.1, B=12;
+const COMBOS=[]; COLN.forEach(c=>SHAPES.forEach(s=>SIZES.forEach(z=>COMBOS.push({c,s,z}))));
+const TRAIN=COMBOS.filter(o=>!HELD.has(o.c+' '+o.s));
+/* render a 10x10 image */
+function render(o,rng,jit=true){ const px=new Float64Array(R*R*3), rad=o.z==='big'?3.6:2.4, cx=4.5+(jit?(rng()-.5)*2:0), cy=4.5+(jit?(rng()-.5)*2:0), col=COLS[o.c];
+  for(let y=0;y<R;y++) for(let x=0;x<R;x++){ const dx=x-cx, dy=y-cy; let inside=false;
+    if(o.s==='circle') inside=dx*dx+dy*dy<=rad*rad; else if(o.s==='square') inside=Math.abs(dx)<=rad*.85&&Math.abs(dy)<=rad*.85; else inside=dy<=rad*.8&&dy>=-rad&&Math.abs(dx)<=(dy+rad)*.62;
+    const i=(y*R+x)*3, n=jit?(rng()-.5)*.12:0; for(let k=0;k<3;k++) px[i+k]=(inside?col[k]:.92)+n; }
+  return px; }
+function caption(o,rng){ const T=[()=>`a ${o.z} ${o.c} ${o.s}`,()=>`a photo of a ${o.c} ${o.s}`,()=>`${o.c} ${o.s}`,()=>`the ${o.s} is ${o.c}`,()=>`a photo of a ${o.z} ${o.c} ${o.s}`]; return T[Math.floor(rng()*T.length)](); }
+/* model */
+let M, rng=ML.rng(7);
+const mat=(r,c,s)=>Array.from({length:r},()=>Float64Array.from({length:c},()=>rng.gauss()*s));
+function init(){ rng=ML.rng(7); M={Wi:mat(D,R*R+4,.05),E:mat(VOC.length,D,.5)}; M.m={Wi:M.Wi.map(r=>new Float64Array(r.length)),E:M.E.map(r=>new Float64Array(r.length))}; M.v={Wi:M.Wi.map(r=>new Float64Array(r.length)),E:M.E.map(r=>new Float64Array(r.length))}; M.it=0; M.hist=[]; }
+const norm=a=>{ const n=Math.sqrt(a.reduce((s,v)=>s+v*v,0))||1; return {u:a.map(v=>v/n),n}; };
+function feat(px){ const m=new Array(R*R).fill(0), c=[0,0,0]; let n=0; for(let q=0;q<R*R;q++){ const on=Math.abs(px[q*3]-.92)+Math.abs(px[q*3+1]-.92)+Math.abs(px[q*3+2]-.92)>.3; if(on){ m[q]=1; n++; for(let k=0;k<3;k++) c[k]+=px[q*3+k]; } } return [...m,...c.map(v=>v/(n||1)),1]; }
+function encI(px){ const x=feat(px), a=M.Wi.map(r=>{ let s=0; for(let k=0;k<x.length;k++) s+=r[k]*x[k]; return s; }); return {x,a,...norm(a)}; }
+function encT(text){ const ids=text.toLowerCase().split(/\s+/).filter(w=>w in VI).map(w=>VI[w]); const a=new Array(D).fill(0); ids.forEach(i=>{ for(let k=0;k<D;k++) a[k]+=M.E[i][k]/ids.length; }); return {ids,a,...norm(a)}; }
+function batch(r){ const pool=[...TRAIN].sort(()=>r()-.5).slice(0,B); return pool.map(o=>({o,px:render(o,r),cap:caption(o,r)})); }
+function step(){ const bt=batch(rng), I=bt.map(b=>encI(b.px)), Tt=bt.map(b=>encT(b.cap));
+  const S=I.map(a=>Tt.map(b=>NLP.dot(a.u,b.u)/TAU)); const Pr=S.map(r=>NLP.softmax(r)), Pc=S[0].map((_,j)=>NLP.softmax(S.map(r=>r[j])));
+  let L=0; for(let i=0;i<B;i++) L-=(Math.log(Pr[i][i])+Math.log(Pc[i][i]))/(2*B);
+  const G=S.map((r,i)=>r.map((_,j)=>((Pr[i][j]-(i===j?1:0))+(Pc[j][i]-(i===j?1:0)))/(2*B)/TAU));
+  const gW=M.Wi.map(r=>new Float64Array(r.length)), gE=M.E.map(r=>new Float64Array(r.length));
+  for(let i=0;i<B;i++){ const du=new Array(D).fill(0); for(let j=0;j<B;j++) for(let k=0;k<D;k++) du[k]+=G[i][j]*Tt[j].u[k];
+    const dot=NLP.dot(du,I[i].u), da=du.map((v,k)=>(v-I[i].u[k]*dot)/I[i].n); for(let k=0;k<D;k++){ const row=gW[k], x=I[i].x; for(let q=0;q<x.length;q++) row[q]+=da[k]*x[q]; } }
+  for(let j=0;j<B;j++){ const dt=new Array(D).fill(0); for(let i=0;i<B;i++) for(let k=0;k<D;k++) dt[k]+=G[i][j]*I[i].u[k];
+    const dot=NLP.dot(dt,Tt[j].u), da=dt.map((v,k)=>(v-Tt[j].u[k]*dot)/Tt[j].n); Tt[j].ids.forEach(id=>{ for(let k=0;k<D;k++) gE[id][k]+=da[k]/Tt[j].ids.length; }); }
+  M.it++; const lr=.01,b1=.9,b2=.999,c1=1-b1**M.it,c2=1-b2**M.it;
+  [['Wi',gW],['E',gE]].forEach(([n,G2])=>M[n].forEach((row,i)=>{ const g=G2[i],m=M.m[n][i],v=M.v[n][i]; for(let k=0;k<row.length;k++){ m[k]=b1*m[k]+(1-b1)*g[k]; v[k]=b2*v[k]+(1-b2)*g[k]*g[k]; row[k]-=lr*(m[k]/c1)/(Math.sqrt(v[k]/c2)+1e-8); } }));
+  return {L,bt,S}; }
+let last=null;
+/* zero-shot */
+const CLASSES=[]; COLN.forEach(c=>SHAPES.forEach(s=>CLASSES.push(c+' '+s)));
+function zs(px){ const u=encI(px).u, Tt=CLASSES.map(c=>encT('a photo of a '+c).u); const s=Tt.map(t=>NLP.dot(u,t)/TAU); return NLP.softmax(s); }
+function evalZS(){ const r=ML.rng(99); let seen=0,ns=0,held=0,nh=0; for(let n=0;n<120;n++){ const o=COMBOS[Math.floor(r()*COMBOS.length)], p=zs(render(o,r)), k=p.indexOf(Math.max(...p)), ok=CLASSES[k]===o.c+' '+o.s; if(HELD.has(o.c+' '+o.s)){ nh++; held+=ok; } else { ns++; seen+=ok; } }
+  for(let n=0;n<40;n++){ const hs=[...HELD][n%2].split(' '), o={c:hs[0],s:hs[1],z:SIZES[n%2]}, p=zs(render(o,r)), k=p.indexOf(Math.max(...p)); nh++; held+=CLASSES[k]===o.c+' '+o.s; }
+  return [seen/ns, held/nh]; }
+/* drawing helpers */
+function drawPx(host,px){ host=typeof host==='string'?$(host):host; let c=host.querySelector('canvas'); if(!c){ c=document.createElement('canvas'); c.width=R; c.height=R; c.style.width='100%'; c.style.height='100%'; c.style.imageRendering='pixelated'; c.style.display='block'; host.appendChild(c); }
+  const x=c.getContext('2d'), im=x.createImageData(R,R); for(let i=0;i<R*R;i++){ for(let k=0;k<3;k++) im.data[4*i+k]=Math.round(Math.max(0,Math.min(1,px[3*i+k]))*255); im.data[4*i+3]=255; } x.putImageData(im,0,0); }
+const mini=px=>{ const c=document.createElement('canvas'); c.width=R; c.height=R; c.style.cssText='width:100%;aspect-ratio:1;image-rendering:pixelated;border-radius:6px;display:block'; const x=c.getContext('2d'), im=x.createImageData(R,R); for(let i=0;i<R*R;i++){ for(let k=0;k<3;k++) im.data[4*i+k]=Math.round(Math.max(0,Math.min(1,px[3*i+k]))*255); im.data[4*i+3]=255; } x.putImageData(im,0,0); return c; };
+const lossP=new ML.Plot('#tLoss',{equal:false}), mapP=new ML.Plot('#mapPlot',{equal:true});
+function drawMap(){ const pts=[]; COMBOS.forEach(o=>{ pts.push(encI(render(o,null,false)).u); pts.push(encT(`a ${o.z} ${o.c} ${o.s}`).u); });
+  const mean=new Array(D).fill(0); pts.forEach(p=>p.forEach((v,k)=>mean[k]+=v/pts.length)); const X=pts.map(p=>p.map((v,k)=>v-mean[k]));
+  const pc=(excl)=>{ let v=Array.from({length:D},(_,k)=>Math.sin(k*1.7+excl.length)); for(let it=0;it<60;it++){ let w=new Array(D).fill(0); X.forEach(x=>{ const s=NLP.dot(x,v); for(let k=0;k<D;k++) w[k]+=s*x[k]; }); excl.forEach(e=>{ const s=NLP.dot(w,e); w=w.map((a,k)=>a-s*e[k]); }); const n=Math.sqrt(NLP.dot(w,w))||1; v=w.map(a=>a/n); } return v; };
+  const v1=pc([]), v2=pc([v1]); const Y=X.map(x=>[NLP.dot(x,v1),NLP.dot(x,v2)]); const m=Math.max(.3,...Y.flat().map(Math.abs))*1.15;
+  mapP.setBounds({x0:-m,x1:m,y0:-m,y1:m}); mapP.clear(); const P=P0(), c=mapP.ctx;
+  COMBOS.forEach((o,i)=>{ const a=Y[2*i], b=Y[2*i+1]; mapP.line(a[0],a[1],b[0],b[1],{color:P.line,width:1}); });
+  COMBOS.forEach((o,i)=>{ const col='rgb('+COLS[o.c].map(v=>Math.round(v*255)).join(',')+')', a=Y[2*i], b=Y[2*i+1], held=HELD.has(o.c+' '+o.s); const r=o.z==='big'?6:4.5;
+    c.fillStyle=col; c.strokeStyle=held?P.ink:'#fff'; c.lineWidth=held?2:1; c.fillRect(mapP.X(a[0])-r,mapP.Y(a[1])-r,2*r,2*r); c.strokeRect(mapP.X(a[0])-r,mapP.Y(a[1])-r,2*r,2*r);
+    c.beginPath(); c.arc(mapP.X(b[0]),mapP.Y(b[1]),r,0,7); c.fill(); c.stroke();
+    c.font='10px Inter'; c.fillStyle=P.muted; c.fillText(o.s[0]+(o.z==='big'?'+':''),mapP.X(b[0])+r+1,mapP.Y(b[1])+3); });
+  c.font='600 12px Inter'; c.fillStyle=P.muted; c.fillText(M.it?`after ${M.it} steps`:'untrained (random weights)',8,16); c.fillText('black outline = never seen in training',8,mapP.h-8); }
+function drawTrain(){ const P=P0(); $('#tIt').textContent=M.it+' steps';
+  if(M.hist.length>1) ML.chart(lossP,[{pts:M.hist.map(h=>[h[0],h[1]]),color:P.c1,width:2.4}],{y0:0,y1:Math.max(2.6,...M.hist.map(h=>h[1])),xl:'training steps'});
+  else { lossP.clear(); const c=lossP.ctx; c.save(); c.fillStyle=P.muted; c.font='14px Inter,system-ui,sans-serif'; c.textAlign='center'; c.fillText('Press Train',lossP.w/2,lossP.h/2); c.restore(); }
+  const r=ML.rng(5), bt=last?last.bt:batch(r), I=bt.map(b=>encI(b.px).u), Tt=bt.map(b=>encT(b.cap).u), Sm=I.map(a=>Tt.map(b=>NLP.dot(a,b)));
+  const host=$('#tBatch'); host.innerHTML=''; const strip=document.createElement('div'); strip.style.cssText=`display:grid;grid-template-columns:repeat(${B},1fr);gap:3px;margin-bottom:4px`; bt.forEach(b=>strip.appendChild(mini(b.px))); host.appendChild(strip);
+  NLP.heat('#tHeat',Sm,bt.map((b,i)=>'img '+(i+1)),bt.map(b=>b.cap),{diverging:true,max:1,fmt:v=>v>=.5&&innerWidth>700?Math.round(v*100)/100:'',rowW:'48px',cellW:'minmax(22px,1fr)'});
+  const diag=Sm.reduce((s,r,i)=>s+r[i],0)/B, off=Sm.reduce((s,r,i)=>s+r.reduce((a,v,j)=>a+(i===j?0:v),0),0)/(B*(B-1)), top1=Sm.filter((r,i)=>r.indexOf(Math.max(...r))===i).length;
+  $('#tStats').innerHTML=[['c1',diag.toFixed(2),'average similarity, true pairs'],['c4',off.toFixed(2),'average similarity, wrong pairs'],['c5',top1+' / '+B,'images whose best caption is their own']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+let timer=null;
+function stop(){ clearInterval(timer); timer=null; $('#tRun').textContent='Train'; }
+function trainN(n,after){ for(let k=0;k<n;k++){ last=step(); if(M.it%5===0) M.hist.push([M.it,last.L]); } after&&after(); }
+$('#tRun').addEventListener('click',()=>{ if(timer) return stop(); $('#tRun').textContent='Pause'; timer=setInterval(()=>{ trainN(4); drawTrain(); if(M.it%20===0){ drawMap(); drawZ(); drawSearch(); } if(M.it>=800) { stop(); drawAll(); } },30); });
+$('#tReset').addEventListener('click',()=>{ stop(); init(); last=null; drawAll(); });
+$('#zTrain2').addEventListener('click',()=>{ trainN(300); drawAll(); });
+/* zero-shot UI */
+let zO={c:'red',s:'square',z:'big'}, zPx=null, zr=ML.rng(3);
+function newZ(held){ const pool=held?COMBOS.filter(o=>HELD.has(o.c+' '+o.s)):COMBOS; zO=pool[Math.floor(zr()*pool.length)]; zPx=render(zO,zr); drawZ(); }
+function drawZ(){ if(!zPx) zPx=render(zO,zr); drawPx('#zImg',zPx); const p=zs(zPx), P=P0(), truth=zO.c+' '+zO.s, items=CLASSES.map((c,i)=>({label:c,value:p[i]})).sort((a,b)=>b.value-a.value).slice(0,6);
+  $('#zTrue').innerHTML=`true object: <b>${zO.z} ${truth}</b>${HELD.has(truth)?' <span style="color:var(--c2)">(never seen in training)</span>':''}`;
+  $('#zBars').innerHTML=NLP.bars(items.map(x=>({label:'a photo of a '+x.label,value:x.value,color:x.label===truth?P.c5:P.c3})),{lw:'170px',max:1,fmt:v=>Math.round(v*100)+'%'});
+  const [a,b]=evalZS(); $('#zStats').innerHTML=[['c5',ML.pct(a),'zero-shot accuracy, combinations seen in training'],['c2',ML.pct(b),'zero-shot accuracy, the 2 unseen combinations'],['c3','8.3%','chance (1 in 12)']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  $('#zNote').innerHTML=M.it<50?'The model is untrained, so these guesses are close to chance. Train it in section 2, or press "Train 300 steps".':`After ${M.it} steps. Top guess: <b>${items[0].label}</b> (${Math.round(items[0].value*100)}%). No classifier was trained for these 12 classes: the 12 sentences are encoded and compared with the image, that is all.`; }
+$('#zNew').addEventListener('click',()=>newZ(false)); $('#zHeld').addEventListener('click',()=>newZ(true));
+/* search UI */
+const GAL=(()=>{ const r=ML.rng(11); return COMBOS.map(o=>({o,px:render(o,r)})); })();
+function drawSearch(){ const q=$('#sQ').value, e=encT(q); const known=e.ids.map(i=>VOC[i]).filter(w=>!['a','photo','of','the','is'].includes(w));
+  const res=GAL.map(g=>({g,s:NLP.dot(encI(g.px).u,e.u)})).sort((a,b)=>b.s-a.s).slice(0,12); const host=$('#sRes'); host.innerHTML='';
+  res.forEach((r,i)=>{ const d=document.createElement('div'); d.style.cssText='text-align:center;font-size:11px'; d.appendChild(mini(r.g.px)); const t=document.createElement('div'); t.className='mono'; t.textContent=`#${i+1} · ${r.s.toFixed(2)}`; d.appendChild(t); host.appendChild(d); });
+  $('#sHint').textContent=(known.length?`Words used: ${known.join(', ')}. `:'No known words in the query, so the ranking is arbitrary. ')+(M.it<50?'The model is untrained: train it in section 2 first.':`Ranked by cosine similarity after ${M.it} training steps. Unknown words are ignored.`); }
+$('#sGo').addEventListener('click',drawSearch); $('#sQ').addEventListener('keydown',e=>{ if(e.key==='Enter') drawSearch(); });
+function drawAll(){ drawMap(); drawTrain(); drawZ(); drawSearch(); }
+init(); drawAll(); let rw=0; window.addEventListener('resize',()=>{ if(Math.abs(innerWidth-rw)>4){ rw=innerWidth; drawAll(); } }); ML.onTheme(drawAll);
+})();
+</script>
+<script>NLP.nav('nlp','clip'); ML.renderMath(document.body);</script>
+</body>
+</html>

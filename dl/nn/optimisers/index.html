@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Optimisers from GD to Adam</title>
+<meta name="description" content="Race gradient descent, momentum, Nesterov, AdaGrad, RMSProp and Adam on loss surfaces in your browser: ill-conditioned bowls, the Rosenbrock banana, saddle points and noisy gradients, with the update rules, a real network and learning-rate schedules.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nn">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Optimisation</p>
+  <h1>Optimisers: from <span class="grad">GD to Adam</span></h1>
+  <p class="lede">Every network is trained by following the gradient downhill. The question is how: plain steps, a rolling ball with momentum, or steps rescaled per parameter like RMSProp and Adam. Race them on tricky surfaces, then on a real network.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#race">1 · The race</a><a href="#rules">2 · The update rules</a><a href="#net">3 · On a real network</a><a href="#sched">4 · Learning-rate schedules</a><a href="#code">5 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is an optimiser, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>Backpropagation tells us the slope of the loss at the current weights. It does not tell us how far to step. Step too little and training takes forever; too much and it bounces out of the valley. Worse, real loss surfaces are long, narrow ravines: steep across, almost flat along. A single step size cannot suit both directions at once. The optimisers on this page are different answers to "given the slope, where do I go next?".</p>
+      <h3>The idea</h3><p>Training a model means finding the <a class="term" data-t="parameter">weights</a> where the <a class="term" data-t="loss">loss</a> is lowest. The loss is a landscape of hills and valleys, and the <a class="term" data-t="gradient">gradient</a> tells you which way is downhill from where you stand. An optimiser is the rule for how to step.</p><p><a class="term" data-t="gradient-descent">Gradient descent</a> steps straight downhill by a fixed amount, the <a class="term" data-t="learning-rate">learning rate</a>. <a class="term" data-t="momentum">Momentum</a> adds inertia like a rolling ball. <a class="term" data-t="adagrad">AdaGrad</a>, <a class="term" data-t="rmsprop">RMSProp</a> and <a class="term" data-t="adam">Adam</a> give each weight its own step size based on how big its recent gradients were, which helps on long, narrow valleys (<a class="term" data-t="condition-number">ill-conditioned</a> problems) and at <a class="term" data-t="saddle-point">saddle points</a>.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Compute the gradient of the loss (on the whole data or a mini-batch).</li><li>Update any running averages (velocity, squared gradients).</li><li>Step the weights: \(\theta \leftarrow \theta - \eta \times\) (direction from the rule).</li><li>Repeat for many <a class="term" data-t="iteration">iterations</a>, often lowering the rate on a <a class="term" data-t="lr-schedule">schedule</a>.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Walking down a foggy mountain. Plain GD checks the slope at your feet and takes a fixed step. Momentum is a sledge that builds speed. Adam is a hiker who takes shorter steps on steep, rocky ground and longer strides on gentle slopes.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Adam: robust default for deep learning</li><li>SGD + momentum: often generalises best for vision</li><li>Newton-type methods: few steps on small convex problems</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Learning rate too high: divergence; too low: crawling</li><li>Adaptive methods can settle in sharper minima</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="loss">Loss</a><a class="term" data-t="gradient">Gradient</a><a class="term" data-t="gradient-descent">Gradient descent</a><a class="term" data-t="sgd">SGD</a><a class="term" data-t="mini-batch">Mini-batch</a><a class="term" data-t="learning-rate">Learning rate</a><a class="term" data-t="momentum">Momentum</a><a class="term" data-t="nesterov">Nesterov</a><a class="term" data-t="adagrad">AdaGrad</a><a class="term" data-t="rmsprop">RMSProp</a><a class="term" data-t="adam">Adam</a><a class="term" data-t="weight-decay">AdamW / weight decay</a><a class="term" data-t="condition-number">Condition number</a><a class="term" data-t="saddle-point">Saddle point</a><a class="term" data-t="local-minimum">Local minimum</a><a class="term" data-t="lr-schedule">Schedule / warm-up</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="race" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>The race</h2>
+    <p class="sub">Click anywhere on the surface to start every optimiser from that point. Darker = lower loss. The star is the minimum.</p>
+    <div class="plot sq" id="surf"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="go">Run</button><button class="btn" id="stepB">Step</button><button class="btn" id="resetB">Reset</button><span class="pos" id="it"></span></div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="controls">
+        <div class="ctl"><span class="lbl">Surface</span><select id="fn"></select><span class="hint" id="fnDesc"></span></div>
+        <div class="ctl"><span class="lbl">Optimisers (click to toggle)</span><div id="optChips" style="display:flex;flex-wrap:wrap;gap:6px"></div></div>
+        <div class="ctl"><label for="lrm"><span>Learning-rate multiplier (all optimisers)</span><output id="lrmOut"></output></label><input type="range" id="lrm" min="-1.5" max="1" step="0.05" value="0"></div>
+        <div class="ctl"><label for="noise"><span>Gradient noise (stochastic / mini-batch)</span><output id="noiseOut"></output></label><input type="range" id="noise" min="0" max="2" step="0.05" value="0"></div>
+      </div>
+    </div>
+    <div class="card"><div class="plot short" id="lossC"></div><p class="hint">\(\log_{10}(f-f^\star)\) per iteration.</p><div id="board"></div></div>
+  </div>
+</section>
+
+<section id="rules" class="card">
+  <h2><span class="num">2</span>The update rules</h2>
+  <p class="sub">\(g_t=\nabla f(\theta_t)\) (or a noisy mini-batch estimate), \(\eta\) is the learning rate, and all operations on vectors are element-wise.</p>
+  <div class="grid3 prose">
+    <div><h3>Gradient descent</h3><div class="mathbox c1">$$\theta_{t+1}=\theta_t-\eta\,g_t$$</div><p>Step straight downhill. On an elongated valley the steepest direction points across the valley, not along it, so GD zig-zags. Its speed is set by the condition number \(\kappa=\lambda_{\max}/\lambda_{\min}\) (see the <a href="../../../ml/linear-regression/#gd">linear regression page</a>).</p></div>
+    <div><h3>Momentum</h3><div class="mathbox c3">$$v_{t+1}=\mu v_t+g_t,\quad \theta_{t+1}=\theta_t-\eta\,v_{t+1}$$</div><p>A heavy ball: velocity accumulates gradients that agree (along the valley) and cancels those that flip sign (across it). With \(\mu=0.9\) the effective step along a consistent direction is about 10× larger.</p></div>
+    <div><h3>Nesterov</h3><div class="mathbox c5">$$v_{t+1}=\mu v_t+g_t,\quad \theta_{t+1}=\theta_t-\eta\,(g_t+\mu v_{t+1})$$</div><p>"Look ahead" momentum: correct using where the momentum is about to carry you. Less overshoot, and provably faster on convex problems.</p></div>
+    <div><h3>AdaGrad</h3><div class="mathbox c4">$$s_{t+1}=s_t+g_t^2,\quad \theta_{t+1}=\theta_t-\frac{\eta}{\sqrt{s_{t+1}}+\epsilon}\,g_t$$</div><p>Each parameter gets its own step: rarely-updated ones take big steps, frequent ones small. Great for sparse features, but \(s\) only grows, so learning eventually stalls.</p></div>
+    <div><h3>RMSProp</h3><div class="mathbox c2">$$s_{t+1}=\rho s_t+(1-\rho)g_t^2,\quad \theta_{t+1}=\theta_t-\frac{\eta}{\sqrt{s_{t+1}}+\epsilon}\,g_t$$</div><p>AdaGrad with a forgetting factor \(\rho=0.9\): divide by a <i>recent</i> RMS of the gradient, so steps stay alive.</p></div>
+    <div><h3>Adam</h3><div class="mathbox c1">$$\begin{aligned}m_{t+1}&=\beta_1m_t+(1-\beta_1)g_t\\ v_{t+1}&=\beta_2v_t+(1-\beta_2)g_t^2\\ \theta_{t+1}&=\theta_t-\eta\frac{\hat m_{t+1}}{\sqrt{\hat v_{t+1}}+\epsilon}\end{aligned}$$</div><p>Momentum + RMSProp, with bias correction \(\hat m=m/(1-\beta_1^t)\), \(\hat v=v/(1-\beta_2^t)\) because both start at zero. Defaults \(\beta_1=0.9,\beta_2=0.999\). AdamW applies weight decay separately from this rescaling.</p></div>
+  </div>
+  <div class="grid2 prose" style="margin-top:12px">
+    <div>
+      <h3>Putting the pieces together: Adam, line by line</h3>
+      <p>Adam is the default optimiser in deep learning, so it is worth reading slowly. It keeps two running averages per weight: the average gradient \(m\) (which direction have we been going?) and the average squared gradient \(v\) (how big are the gradients here, typically?). The step is their ratio, so a weight whose gradient is consistently in one direction moves at about \(\eta\) per step however steep or flat its own slope is.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: Adam</h5><ol>
+        <li><span class="kw">input</span> learning rate \(\eta\), \(\beta_1=0.9\), \(\beta_2=0.999\), \(\epsilon=10^{-8}\), initial \(\theta\)</li>
+        <li>\(m\leftarrow0\); \(v\leftarrow0\); \(t\leftarrow0\)</li>
+        <li><span class="kw">repeat</span> for each mini-batch</li>
+        <li class="i1">\(t\leftarrow t+1\); \(g\leftarrow\nabla_\theta\mathcal L\) <span class="cm">backprop</span></li>
+        <li class="i1">\(m\leftarrow\beta_1m+(1-\beta_1)g\) <span class="cm">momentum: smoothed direction</span></li>
+        <li class="i1">\(v\leftarrow\beta_2v+(1-\beta_2)g^2\) <span class="cm">smoothed size, per weight</span></li>
+        <li class="i1">\(\hat m\leftarrow m/(1-\beta_1^t)\); \(\hat v\leftarrow v/(1-\beta_2^t)\) <span class="cm">undo the bias from starting at 0</span></li>
+        <li class="i1">\(\theta\leftarrow\theta-\eta\,\hat m/(\sqrt{\hat v}+\epsilon)\)</li>
+        <li><span class="kw">until</span> converged</li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: why bias correction, and what momentum averages</summary><div>
+        <p><b>Momentum is an average.</b> Unrolling \(m_t=\beta m_{t-1}+(1-\beta)g_t\) gives \(m_t=(1-\beta)\sum_{k\le t}\beta^{t-k}g_k\): an exponentially weighted average of past gradients, with effective memory \(1/(1-\beta)\) steps (10 for \(\beta=0.9\), 1000 for \(0.999\)). Components that flip sign from step to step (across a ravine) cancel; components that agree (along it) add up.</p>
+        <p><b>Bias correction.</b> Because \(m_0=0\), the weights in that sum add up to \(1-\beta^t\), not 1, so early on \(m_t\) underestimates the gradient: after one step \(m_1=0.1\,g_1\). Dividing by \(1-\beta^t\) fixes the total weight to 1. For \(v\) with \(\beta_2=0.999\) the effect lasts for thousands of steps; without correction \(\sqrt{v}\) would be tiny early on and the first steps would be dangerously large.</p>
+        <p><b>Why the step is scale-free.</b> If every gradient of one weight were multiplied by 100, both \(\hat m\) and \(\sqrt{\hat v}\) would be multiplied by 100, and the step would not change. That is the sense in which Adam "partly undoes ill-conditioning": it acts like a diagonal preconditioner, which helps when the ravine is aligned with the axes but not when it is diagonal (where only a full curvature method like Newton's helps).</p>
+      </div></details>
+    </div>
+  </div>
+  <div class="note"><b>Why adaptive methods help on the banana and the bowl:</b> dividing by \(\sqrt{v}\) makes every coordinate move at roughly the same speed regardless of how steep it is, which partly undoes ill-conditioning. <b>Why GD escapes saddles slowly:</b> near a saddle the gradient is tiny in the escape direction; momentum and noise both help push off.</div>
+</section>
+
+<section id="net" class="card">
+  <h2><span class="num">3</span>On a real network</h2>
+  <p class="sub">The same six optimisers train identical networks (2 → 16 → 16 → 1, tanh, same initial weights) on the spirals data with mini-batches. Each uses its own sensible default learning rate.</p>
+  <div class="grid2">
+    <div><div class="plot wide" id="netLoss"></div><div class="legend" id="netLeg"></div></div>
+    <div><div class="controls"><div class="ctl"><label for="bs"><span>Mini-batch size</span><output id="bsOut"></output></label><input type="range" id="bs" min="4" max="200" step="4" value="32"></div>
+      <div class="player"><button class="btn primary" id="netGo">Train</button><button class="btn" id="netReset">Reset</button><span class="pos" id="netEp"></span></div></div>
+      <div id="netBoard" style="margin-top:10px"></div>
+      <p class="hint">Smaller batches give noisier but cheaper steps. The noise is not all bad: it helps escape sharp minima and saddles.</p></div>
+  </div>
+</section>
+
+<section id="sched" class="card">
+  <h2><span class="num">4</span>Learning-rate schedules</h2>
+  <div class="grid2">
+    <div><div class="plot wide" id="schedP"></div><div class="legend"><span><i class="sw" style="background:#64748b"></i>constant</span><span><i class="sw" style="background:#0891b2"></i>step decay</span><span><i class="sw" style="background:#7c3aed"></i>cosine</span><span><i class="sw" style="background:#db2777"></i>linear warm-up + cosine (transformers)</span></div></div>
+    <div class="prose"><p>A large rate early covers ground fast; a small rate late settles into the minimum instead of bouncing around it. Transformers also <b>warm up</b> from a tiny rate, because Adam's variance estimate \(\hat v\) is unreliable in the first steps.</p>
+      <div class="mathbox c1">$$\eta_t=\eta_{\min}+\tfrac12(\eta_{\max}-\eta_{\min})\Big(1+\cos\frac{\pi t}{T}\Big)$$</div></div>
+  </div>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">5</span>The same thing in Python (PyTorch)</h2>
+<pre class="code">opt = torch.optim.SGD(model.parameters(), lr=<span class="s">0.05</span>)                          <span class="c"># gradient descent</span>
+opt = torch.optim.SGD(model.parameters(), lr=<span class="s">0.02</span>, momentum=<span class="s">0.9</span>, nesterov=<span class="k">True</span>)
+opt = torch.optim.Adagrad(model.parameters(), lr=<span class="s">0.3</span>)
+opt = torch.optim.RMSprop(model.parameters(), lr=<span class="s">0.03</span>, alpha=<span class="s">0.9</span>)
+opt = torch.optim.AdamW(model.parameters(), lr=<span class="s">3e-4</span>, betas=(<span class="s">0.9</span>, <span class="s">0.999</span>), weight_decay=<span class="s">0.01</span>)
+sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=<span class="s">1000</span>)
+<span class="k">for</span> xb, yb <span class="k">in</span> loader:          <span class="c"># mini-batches</span>
+    opt.zero_grad(); loss_fn(model(xb), yb).<span class="f">backward</span>(); opt.<span class="f">step</span>(); sched.<span class="f">step</span>()</pre>
+</section>
+<p class="foot">Part of the <a href="../">neural network foundations</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/nn.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML;
+const FNS=[
+ {id:'bowl',name:'Elongated bowl (ill-conditioned)',desc:'f = 0.5x² + 10y²: condition number 20. GD zig-zags across the valley.',f:(x,y)=>0.5*x*x+10*y*y,g:(x,y)=>[x,20*y],b:{x0:-6,x1:6,y0:-3,y1:3},min:[0,0],start:[-5,1.6],lr:1},
+ {id:'rosen',name:'Rosenbrock banana',desc:'f = (1 − x)² + 100(y − x²)²: a curved, flat-bottomed valley. Minimum at (1, 1).',f:(x,y)=>(1-x)**2+100*(y-x*x)**2,g:(x,y)=>[-2*(1-x)-400*x*(y-x*x),200*(y-x*x)],b:{x0:-2,x1:2,y0:-1,y1:3},min:[1,1],start:[-1.5,2.5],lr:0.04},
+ {id:'saddle',name:'Saddle point',desc:'f = x² − y² + y⁴/4 + 0.25: a saddle at the origin with minima at y = ±√2. Start near the saddle line and see who escapes.',f:(x,y)=>x*x-y*y+y**4/4+1,g:(x,y)=>[2*x,-2*y+y**3],b:{x0:-2.5,x1:2.5,y0:-2.5,y1:2.5},min:[0,Math.SQRT2],start:[-2,0.01],lr:0.6},
+ {id:'wells',name:'Two valleys',desc:'A shallow local minimum next to a deeper global one. Momentum can roll through the shallow one.',f:(x,y)=>1.6-1.0*Math.exp(-((x+1.2)**2+(y-0.8)**2)/0.5)-1.6*Math.exp(-((x-1.3)**2+(y+0.6)**2)/0.9)+0.04*(x*x+y*y),
+   g:(x,y)=>{ const a=Math.exp(-((x+1.2)**2+(y-0.8)**2)/0.5), b=Math.exp(-((x-1.3)**2+(y+0.6)**2)/0.9); return [1.0*a*2*(x+1.2)/0.5+1.6*b*2*(x-1.3)/0.9+0.08*x, 1.0*a*2*(y-0.8)/0.5+1.6*b*2*(y+0.6)/0.9+0.08*y]; },b:{x0:-3,x1:3,y0:-3,y1:3},min:[1.3,-0.6],start:[-2.6,2],lr:4},
+];
+const OP=NN.OPTS.map(o=>Object.assign({},o)); const onOpt=new Set(OP.map(o=>o.name));
+let F=FNS[0], R={paths:{},state:{},start:null,timer:null,it:0}, rng=ML.rng(3);
+const sel=$('#fn'); FNS.forEach(f=>{ const o=document.createElement('option'); o.value=f.id; o.textContent=f.name; sel.appendChild(o); });
+const surf=new ML.Plot('#surf'), lossC=new ML.Plot('#lossC',{equal:false});
+let fmin=0;
+function chips(){ $('#optChips').innerHTML=OP.map(o=>`<button class="wordbtn${onOpt.has(o.name)?' on':''}" data-n="${o.name}" style="${onOpt.has(o.name)?`background:${o.color};border-color:${o.color};color:#fff`:''}">${o.label}</button>`).join('');
+  $('#optChips').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const n=b.dataset.n; onOpt.has(n)?onOpt.delete(n):onOpt.add(n); chips(); draw(); }); }
+function reset(start){ stop(); R.start=start||F.start.slice(); R.it=0; rng=ML.rng(3); OP.forEach(o=>{ R.paths[o.name]=[R.start.slice()]; R.state[o.name]={m:new Float64Array(2),v:new Float64Array(2)}; }); fmin=F.f(...F.min); draw(); }
+function step(){ R.it++; const lrm=Math.pow(10,+$('#lrm').value), nz=+$('#noise').value; const e=[rng.gauss(),rng.gauss()];
+  OP.forEach(o=>{ const p=R.paths[o.name], cur=p[p.length-1]; if(!isFinite(cur[0])||Math.abs(cur[0])>1e6) { p.push(cur); return; } const w=Float64Array.from(cur), g0=F.g(...cur), sc=Math.max(1,Math.hypot(...g0)*0.3);
+    const g=Float64Array.from([g0[0]+nz*sc*e[0], g0[1]+nz*sc*e[1]]); NN.applyOpt({name:o.name,lr:o.lr*F.lr*lrm*(o.name==='sgd'||o.name==='momentum'||o.name==='nesterov'?(F.id==='rosen'?0.05:F.id==='bowl'?1.4:F.id==='wells'?0.3:0.5):1)},w,g,R.state[o.name],R.it); p.push([w[0],w[1]]); }); }
+let bg=null, bgKey='';
+function draw(){ const P=ML.palette(), c=surf.ctx; surf.setBounds(F.b); surf.clear();
+  const key=F.id+surf.w+P.dark; if(bgKey!==key){ const res=4, gw=Math.ceil(surf.w/res)+1, gh=Math.ceil(surf.h/res)+1, off=document.createElement('canvas'); off.width=gw; off.height=gh; const oc=off.getContext('2d'), img=oc.createImageData(gw,gh), V=[]; let lo=Infinity,hi=-Infinity;
+    for(let j=0;j<gh;j++) for(let i=0;i<gw;i++){ const v=Math.log(F.f(surf.ix(i*res),surf.iy(j*res))-fmin+0.01); V.push(v); lo=Math.min(lo,v); hi=Math.max(hi,v); }
+    const k1=ML.rgb(P.c1), b0=ML.rgb(P.bg); V.forEach((v,t)=>{ const a=0.55*(1-(v-lo)/(hi-lo)); for(let ch=0;ch<3;ch++) img.data[4*t+ch]=b0[ch]*(1-a)+k1[ch]*a; img.data[4*t+3]=255; }); oc.putImageData(img,0,0); bg={off,gw,gh,res,lo,hi}; bgKey=key; }
+  c.save(); c.imageSmoothingEnabled=true; c.drawImage(bg.off,0,0,bg.gw,bg.gh,0,0,bg.gw*bg.res,bg.gh*bg.res); c.restore();
+  for(let L=0;L<12;L++) surf.contour((x,y)=>Math.log(F.f(x,y)-fmin+0.01),bg.lo+(bg.hi-bg.lo)*(L+0.5)/12,{color:P.c1,width:1,alpha:.4,res:5});
+  const ox=surf.X(F.min[0]), oy=surf.Y(F.min[1]); c.save(); c.fillStyle=P.star; c.strokeStyle=P.ink; c.beginPath(); for(let k=0;k<10;k++){ const r=k%2?4:9, a=-Math.PI/2+k*Math.PI/5; c.lineTo(ox+r*Math.cos(a),oy+r*Math.sin(a)); } c.closePath(); c.fill(); c.stroke(); c.restore();
+  OP.forEach(o=>{ if(!onOpt.has(o.name)) return; const p=R.paths[o.name]; c.save(); c.strokeStyle=o.color; c.lineWidth=2.4; c.beginPath(); p.forEach((q,i)=>{ const X=surf.X(q[0]),Y=surf.Y(q[1]); i?c.lineTo(X,Y):c.moveTo(X,Y); }); c.stroke(); const l=p[p.length-1]; c.fillStyle=o.color; c.beginPath(); c.arc(surf.X(l[0]),surf.Y(l[1]),6,0,7); c.fill(); c.strokeStyle=P.bg; c.lineWidth=2; c.stroke(); c.restore(); });
+  const S=OP.filter(o=>onOpt.has(o.name)).map(o=>({pts:R.paths[o.name].map((q,i)=>[i,Math.log10(Math.max(1e-12,F.f(...q)-fmin))]),color:o.color,width:2.2}));
+  ML.chart(lossC,S,{xl:'iteration',yfmt:v=>'1e'+v.toFixed(0),y0:-12});
+  $('#it').textContent='iteration '+R.it; $('#fnDesc').textContent=F.desc;
+  const rows=OP.filter(o=>onOpt.has(o.name)).map(o=>{ const p=R.paths[o.name], hit=p.findIndex(q=>F.f(...q)-fmin<1e-3); return {o, v:F.f(...p[p.length-1])-fmin, hit}; }).sort((a,b)=>(a.hit<0?1e9:a.hit)-(b.hit<0?1e9:b.hit)||a.v-b.v);
+  $('#board').innerHTML='<table class="tbl"><tr><th>Optimiser</th><th>f − f* now</th><th>reached 1e-3 at</th></tr>'+rows.map(r=>`<tr><td><i class="sw" style="background:${r.o.color}"></i> ${r.o.label}</td><td>${isFinite(r.v)?fmt(r.v,4):'diverged'}</td><td>${r.hit>=0?'step '+r.hit:'–'}</td></tr>`).join('')+'</table>'; }
+function stop(){ if(R.timer){ clearInterval(R.timer); R.timer=null; $('#go').textContent='Run'; } }
+$('#go').onclick=()=>{ if(R.timer){ stop(); return; } $('#go').textContent='Pause'; R.timer=setInterval(()=>{ step(); step(); draw(); if(R.it>=600) stop(); },30); };
+$('#stepB').onclick=()=>{ stop(); step(); draw(); }; $('#resetB').onclick=()=>reset(R.start);
+surf.pointer({down(x,y){ reset([x,y]); }});
+sel.onchange=()=>{ F=FNS.find(f=>f.id===sel.value); bgKey=''; reset(); };
+ML.bindRange('lrm',()=>reset(R.start),v=>'×'+Math.pow(10,v).toPrecision(2)); ML.bindRange('noise',()=>reset(R.start),v=>v.toFixed(2));
+chips();
+
+/* ---- real network ---- */
+const NL={nets:[],hist:{},timer:null,ep:0,data:ML.dataset('spirals',240,0.2,7)}; const nlP=new ML.Plot('#netLoss',{equal:false}); const LR={sgd:0.3,momentum:0.05,nesterov:0.05,adagrad:0.1,rmsprop:0.005,adam:0.01};
+function nlReset(){ nlStop(); NL.ep=0; NL.nets=OP.map(o=>({o,net:NN.MLP([2,16,16,1],{act:'tanh',seed:21})})); NL.hist={}; OP.forEach(o=>NL.hist[o.name]=[]); NL.rng=ML.rng(9); nlDraw(); }
+function nlEpoch(){ const bs=+$('#bs').value, n=NL.data.X.length, idx=NL.rng.shuffle([...Array(n).keys()]);
+  for(let s=0;s<n;s+=bs){ const b=idx.slice(s,s+bs), X=b.map(i=>NL.data.X[i]), y=b.map(i=>NL.data.y[i]); NL.nets.forEach(({o,net})=>{ net.backward(X,y); net.update({name:o.name,lr:LR[o.name]}); }); }
+  NL.ep++; NL.nets.forEach(({o,net})=>{ net.backward(NL.data.X,NL.data.y); NL.hist[o.name].push([NL.ep,net.lastLoss]); }); }
+function nlDraw(){ ML.chart(nlP,OP.map(o=>({pts:NL.hist[o.name],color:o.color,width:2.2})),{y0:0,xl:'epoch'}); $('#netLeg').innerHTML=OP.map(o=>`<span><i class="sw" style="background:${o.color}"></i>${o.label} (η=${LR[o.name]})</span>`).join(''); $('#netEp').textContent='epoch '+NL.ep;
+  if(NL.ep) $('#netBoard').innerHTML=NLP.bars(NL.nets.map(({o,net})=>({label:o.label,value:ML.accuracy({proba:x=>net.predict(x)},NL.data.X,NL.data.y),color:o.color})),{lw:'120px',max:1,fmt:v=>ML.pct(v)}); }
+function nlStop(){ if(NL.timer){ clearInterval(NL.timer); NL.timer=null; $('#netGo').textContent='Train'; } }
+$('#netGo').onclick=()=>{ if(NL.timer){ nlStop(); return; } $('#netGo').textContent='Pause'; NL.timer=setInterval(()=>{ nlEpoch(); nlDraw(); if(NL.ep>=300) nlStop(); },50); };
+$('#netReset').onclick=nlReset; ML.bindRange('bs',()=>{});
+
+/* ---- schedules ---- */
+const sP=new ML.Plot('#schedP',{equal:false});
+function drawSched(){ const T=100, cst=[],st=[],cos=[],wc=[]; for(let t=0;t<=T;t++){ cst.push([t,1]); st.push([t,Math.pow(0.5,Math.floor(t/30))]); cos.push([t,0.02+0.49*(1+Math.cos(Math.PI*t/T))]); wc.push([t,t<10?t/10:0.02+0.49*(1+Math.cos(Math.PI*(t-10)/(T-10)))]); }
+  ML.chart(sP,[{pts:cst,color:'#64748b',width:2},{pts:st,color:'#0891b2',width:2.4},{pts:cos,color:'#7c3aed',width:2.4},{pts:wc,color:'#db2777',width:2.4}],{y0:0,y1:1.05,xl:'training progress (%)',yfmt:v=>v.toFixed(1)+'η'}); }
+surf.onResize=()=>{ bgKey=''; draw(); }; lossC.onResize=draw; nlP.onResize=nlDraw; sP.onResize=drawSched;
+ML.onTheme(()=>{ bgKey=''; draw(); nlDraw(); drawSched(); });
+reset(); for(let i=0;i<150;i++) step(); draw(); nlReset(); for(let i=0;i<3;i++) nlEpoch(); nlDraw(); drawSched();
+})();
+</script>
+<script>NLP.nav('nn','optimisers'); ML.renderMath(document.body);</script>
+</body>
+</html>

@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cross-attention</title>
+<meta name="description" content="Queries from one sequence, keys and values from another: a tiny cross-attention translator trained live in your browser that learns to reorder adjectives and pick le or la, and text-to-image attention maps.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP</p>
+  <h1>Cross-attention: <span class="grad">one sequence reads another</span></h1>
+  <p class="lede">In cross-attention the questions and the answers come from different places. The <b>queries</b> come from the sequence being produced (a translation, an image being drawn); the <b>keys and values</b> come from the input it should consult (the source sentence, the text prompt). It is the bridge between an encoder and a decoder.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#pic">1 · Self versus cross</a><a href="#train">2 · A translator, trained live</a><a href="#img">3 · Text guiding an image</a><a href="#maths">4 · The maths and shapes</a><a href="#where">5 · Where it is used</a><a href="#py">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is cross-attention, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>When a model writes a French translation, generates speech from text, or paints an image from a prompt, it is producing one sequence while consulting another. Self-attention only lets a sequence look at itself. We need a way for each piece of the output being written to ask the input a question, "which part of the source should I use right now?", and get back the relevant information.</p>
+      <h3>The idea</h3><p><a class="term" data-t="cross-attention">Cross-attention</a> is attention between two different sequences. The queries come from the one being produced (a translation, a transcript, an image); the keys and values come from the input it should consult. It is how an <a class="term" data-t="decoder">decoder</a> reads an <a class="term" data-t="encoder">encoder</a>, and how a text prompt steers an image model.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Encode the input once into vectors (keys and values).</li><li>At each output position, form a query from the output so far.</li><li>Attend over the input: score, softmax, weighted average.</li><li>Combine the result with the rest of the decoder layer.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>An interpreter with the speech transcript in front of them: for each word they say, their eyes jump to the part of the transcript that matters, which is not always the next word in order.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Inputs and outputs can differ in length and kind (audio to text, text to image)</li><li>Input keys and values are computed once and reused</li><li>Learns alignments without labels</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Needs a separate encoder</li><li>Decoder-only models do not use it</li><li>Weights over a long input can be diffuse</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="cross-attention">Cross-attention</a><a class="term" data-t="encoder">Encoder</a><a class="term" data-t="decoder">Decoder</a><a class="term" data-t="qkv">Query, key, value</a><a class="term" data-t="seq2seq">Sequence to sequence</a><a class="term" data-t="attention">Attention</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="pic" class="card hl">
+  <h2><span class="num">1</span>Self-attention versus cross-attention</h2>
+  <div class="grid2">
+    <svg class="diagram" viewBox="0 0 560 300" id="xSvg"></svg>
+    <div class="prose">
+      <p><a class="term" data-t="self-attention">Self-attention</a>: one sequence \(X\) provides queries, keys and values, so every token looks at the others in the same sequence.</p>
+      <p><b>Cross-attention</b>: two sequences. The <a class="term" data-t="decoder">decoder</a> states \(Y\) provide the queries; the <a class="term" data-t="encoder">encoder</a> outputs \(X\) provide the keys and values:</p>
+      <div class="mathbox c2">$$Q=YW_Q,\qquad K=XW_K,\qquad V=XW_V$$</div>
+      <p>The weight matrix has one row per output position and one column per input position, so the two sequences can have different lengths (8 English words, 11 French words). In the original transformer every decoder layer has a self-attention block, then a cross-attention block, then an MLP.</p>
+    </div>
+  </div>
+</section>
+
+<section id="train" class="card">
+  <h2><span class="num">2</span>A translator with one cross-attention layer, trained live</h2>
+  <p class="sub">A toy English → French task. Sentences follow one pattern (the red cat sees a young girl). French puts the adjective after the noun, and "the" becomes <i>le</i> or <i>la</i> depending on the noun's gender, so a good translation needs to look in the right place. Press Train and watch the attention pattern appear.</p>
+  <div class="grid2">
+    <div>
+      <div class="player"><button class="btn primary" id="tRun">Train</button><button class="btn" id="tReset">Reset</button><span class="pos" id="tIt">0 steps</span></div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px" id="tPick"></div>
+      <div class="row" style="margin-top:6px"><button class="btn" id="tRand">Random sentence</button></div>
+      <div id="tOut" style="margin-top:10px"></div>
+      <div class="plot short" id="tPlot" style="margin-top:10px"></div>
+      <p class="hint">Accuracy on 300 fresh random sentences: share of French words right (purple) and share of whole sentences right (pink).</p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Cross-attention weights</h3><div id="tHeat"></div>
+      <p class="hint">Rows: French word being produced (query). Columns: English words (keys and values). Each row sums to 100%.</p>
+      <div class="note" id="tNote"></div>
+    </div>
+  </div>
+  <div class="prose" style="margin-top:8px">
+    <p><b>The model</b> (about 1,500 numbers): each English word gets an <a class="term" data-t="embedding">embedding</a> plus a learned position vector, \(x_j=E[w_j]+p_j\). Keys and values are \(k_j=W_Kx_j\), \(v_j=W_Vx_j\). Output position \(t\) has a learned query \(q_t\). Then \(a_t=\operatorname{softmax}(q_t^\top k_j/\sqrt{16})\), \(c_t=\sum_j a_{tj}v_j\), and a linear layer plus softmax picks the French word. Trained with <a class="term" data-t="cross-entropy">cross-entropy</a> and <a class="term" data-t="adam">Adam</a>, gradients written out by hand.</p>
+    <p><b>What to look for.</b> At first every row is flat (about 14% everywhere). Within about a hundred steps the anti-diagonal swaps appear (<i>rouge</i> looks at "red" one place to the left), and the article rows split their weight between the article and the noun: to write <i>la</i> it needs "the" and the gender of "car". Nobody labelled any of these links.</p>
+    <p class="hint">Simplification: real decoders also run self-attention over the French words written so far; here the queries depend only on position, which is enough because every sentence has the same shape.</p>
+  </div>
+</section>
+
+<section id="img" class="card">
+  <h2><span class="num">3</span>Text guiding an image: cross-attention maps</h2>
+  <p class="sub">In text-to-image diffusion models (Stable Diffusion and its relatives) the image patches are the queries and the prompt's words are the keys and values. Each patch asks "which words describe me?". Plotting one word's column of the attention matrix over the image shows where that word acts.</p>
+  <div class="grid2">
+    <div><div class="plot" id="iPlot"></div><p class="hint">A 6 × 6 grid of patches. Each patch is described by colour and shape features; prompt words have matching key vectors. Weights are hand-set to show the mechanism, not learned.</p></div>
+    <div>
+      <input class="txt" id="iPrompt" value="a red circle next to a blue square">
+      <p class="hint" style="margin-top:4px">Edit the prompt (words it knows: red, blue, green, circle, square, triangle). Click a word to see its map.</p>
+      <div id="iChips" style="margin:8px 0"></div>
+      <div class="stats" id="iStats"></div>
+      <div class="note">Patches that match nothing put their weight on filler words like "a" and "to". Real models do the same with the start token, which soaks up attention that has nowhere better to go. Editing these maps (strengthening one word's column) is how prompt-editing methods change one object without redrawing the scene.</div>
+    </div>
+  </div>
+</section>
+
+<section id="maths" class="card hl">
+  <h2><span class="num">4</span>The maths and the shapes</h2>
+  <div class="grid2">
+    <div class="prose">
+      <div class="mathbox c1">$$\operatorname{CrossAttn}(Y,X)=\operatorname{softmax}\!\Big(\frac{(YW_Q)(XW_K)^\top}{\sqrt{d_k}}\Big)\,XW_V$$</div>
+      <ul>
+        <li>\(Y\): \(m\times d\) (decoder side, \(m\) positions); \(X\): \(n\times d\) (encoder side).</li>
+        <li>Weights: \(m\times n\). Output: \(m\times d_v\), one vector per decoder position.</li>
+        <li>No <a class="term" data-t="causal-mask">causal mask</a>: the whole input is known, so every query may look at every key.</li>
+        <li>\(K\) and \(V\) depend only on the input, so during generation they are computed <b>once</b> and reused for every new output token.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="ctl"><label for="mM"><span>Output length \(m\)</span><output id="mMOut"></output></label><input type="range" id="mM" min="1" max="200" value="30"></div>
+      <div class="ctl"><label for="mN"><span>Input length \(n\)</span><output id="mNOut"></output></label><input type="range" id="mN" min="1" max="4000" value="1500"></div>
+      <div class="ctl"><label for="mD"><span>Width \(d\)</span><output id="mDOut"></output></label><input type="range" id="mD" min="64" max="1280" step="64" value="512"></div>
+      <div class="stats" id="mStats"></div>
+      <p class="hint">Default: Whisper-sized audio input (1,500 encoder frames for 30 s) and a 30-token transcript. Cost of one layer's scores grows with \(m\times n\), not \(n^2\).</p>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: cross-attention in an encoder–decoder</h5><ol>
+        <li><span class="kw">input</span> source tokens \(x_1..x_m\), target tokens so far \(y_1..y_n\)</li>
+        <li>\(E\leftarrow\operatorname{Encoder}(x)\) <span class="cm">m × d, computed once</span></li>
+        <li>\(D\leftarrow\) masked self-attention over \(y\) <span class="cm">the decoder reads its own past</span></li>
+        <li>\(Q\leftarrow DW_Q\) <span class="cm">questions come from the target</span></li>
+        <li>\(K\leftarrow EW_K\); \(V\leftarrow EW_V\) <span class="cm">answers come from the source</span></li>
+        <li>\(A\leftarrow\operatorname{softmax}(QK^\top/\sqrt d)\) <span class="cm">n × m: target word × source word</span></li>
+        <li>\(D\leftarrow D+AV\) <span class="cm">residual: add what was found</span></li>
+        <li><span class="kw">return</span> \(D\) to the MLP and the next decoder layer</li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: shapes, and why the source is encoded only once</summary><div>
+        <p>The only difference from self-attention is where \(Q\) and \(K,V\) come from, and so the attention matrix is \(n\times m\) instead of \(n\times n\): one row per target position, one column per source position. No causal mask is needed here, because the whole source is known before decoding starts. Row \(i\) is an alignment: it shows which source words were consulted while writing target word \(i\).</p>
+        <p>When generating word by word, \(K=EW_K\) and \(V=EW_V\) do not change from step to step, so a real implementation computes them once and reuses them, and each new step only costs one query row. In text-to-image diffusion models, the image patches are the queries and the prompt's token embeddings are the keys and values, which is why attention maps for a word like "dog" light up the region where the dog is painted.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="where" class="card">
+  <h2><span class="num">5</span>Where cross-attention is used</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Model</th><th>Queries from</th><th>Keys and values from</th></tr>
+    <tr><td>RNN translators with attention (2014 to 2016)</td><td>decoder RNN state</td><td>encoder RNN states</td></tr>
+    <tr><td>Original <a class="term" data-t="transformer">transformer</a>, T5, BART, Marian</td><td>decoder tokens</td><td>encoder output (source text)</td></tr>
+    <tr><td>Whisper (speech recognition)</td><td>text tokens being written</td><td>audio encoder frames</td></tr>
+    <tr><td>Stable Diffusion and similar</td><td>image latent patches</td><td>text encoder outputs for the prompt</td></tr>
+    <tr><td>Flamingo, some vision-language models</td><td>language model tokens</td><td>image features</td></tr>
+    <tr><td>Perceiver</td><td>a small fixed set of latent vectors</td><td>a huge input (pixels, audio)</td></tr>
+  </table></div>
+  <p class="hint">Decoder-only models such as <a class="term" data-t="gpt">GPT</a> have no cross-attention: the prompt and the answer sit in one sequence and causal self-attention does both jobs.</p>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> torch, torch.nn <span class="k">as</span> nn
+
+enc = torch.randn(<span class="s">1</span>, <span class="s">8</span>, <span class="s">64</span>)    <span class="c"># 8 source tokens (keys / values)</span>
+dec = torch.randn(<span class="s">1</span>, <span class="s">11</span>, <span class="s">64</span>)   <span class="c"># 11 target tokens (queries)</span>
+xattn = nn.MultiheadAttention(embed_dim=<span class="s">64</span>, num_heads=<span class="s">4</span>, batch_first=<span class="k">True</span>)
+out, w = xattn(query=dec, key=enc, value=enc)
+print(out.shape, w.shape)   <span class="c"># (1, 11, 64)  (1, 11, 8): one row per target token</span>
+
+<span class="c"># a full encoder-decoder layer stack: self-attn, cross-attn, MLP in each decoder layer</span>
+model = nn.Transformer(d_model=<span class="s">64</span>, nhead=<span class="s">4</span>, batch_first=<span class="k">True</span>)</pre>
+</section>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette();
+
+/* ---------- 1. diagram ---------- */
+function drawSvg(){ const P=P0(); const box=(x,y,t,c)=>`<rect x="${x}" y="${y}" width="52" height="30" rx="7" fill="${c}" opacity=".18" stroke="${c}"/><text x="${x+26}" y="${y+20}" text-anchor="middle" font-size="13" fill="${P.ink}">${t}</text>`;
+  const en=['the','red','car'], fr=['la','voiture','rouge']; let s='';
+  s+=`<text x="10" y="22" font-size="13" font-weight="700" fill="${P.c3}">Encoder: source words give K and V</text>`;
+  en.forEach((w,i)=>s+=box(40+i*170,34,w,P.c3));
+  s+=`<text x="10" y="292" font-size="13" font-weight="700" fill="${P.c1}">Decoder: words being written give Q</text>`;
+  fr.forEach((w,i)=>s+=box(40+i*170,240,w,P.c1));
+  const W=[[.45,.05,.5],[.05,.05,.9],[.05,.9,.05]];
+  W.forEach((r,i)=>r.forEach((a,j)=>{ s+=`<line x1="${66+i*170}" y1="240" x2="${66+j*170}" y2="64" stroke="${P.c2}" stroke-width="${1+9*a}" opacity="${.15+.8*a}"/>`; }));
+  s+=`<text x="550" y="292" text-anchor="end" font-size="12" fill="${P.muted}">line width = attention weight</text>`;
+  $('#xSvg').innerHTML=s; }
+
+/* ---------- 2. trained toy translator ---------- */
+const SRC={det:['the','a'],adj:['red','yellow','fast','calm','sad','young'],noun:['cat','dog','book','boy','car','house','girl','table'],verb:['sees','likes','follows','finds']};
+const FRA={red:'rouge',yellow:'jaune',fast:'rapide',calm:'calme',sad:'triste',young:'jeune',cat:'chat',dog:'chien',book:'livre',boy:'garçon',car:'voiture',house:'maison',girl:'fille',table:'table',sees:'voit',likes:'aime',follows:'suit',finds:'trouve'};
+const FEM=new Set(['car','house','girl','table']);
+const SLOTS=['det','adj','noun','verb','det','adj','noun'], L=7, D=16;
+const SV=[...SRC.det,...SRC.adj,...SRC.noun,...SRC.verb], SI={}; SV.forEach((w,i)=>SI[w]=i);
+const TV=['le','la','un','une',...Object.values(FRA)], TI={}; TV.forEach((w,i)=>TI[w]=i);
+const detFR=(d,n)=>d==='the'?(FEM.has(n)?'la':'le'):(FEM.has(n)?'une':'un');
+const toFR=s=>[detFR(s[0],s[2]),FRA[s[2]],FRA[s[1]],FRA[s[3]],detFR(s[4],s[6]),FRA[s[6]],FRA[s[5]]];
+const sample=r=>SLOTS.map(k=>SRC[k][Math.floor(r()*SRC[k].length)]);
+const rows=(n,m,r,sc)=>Array.from({length:n},()=>Float64Array.from({length:m},()=>r.gauss()*sc));
+const zl=A=>A.map(x=>new Float64Array(x.length));
+let T={}, tTimer=null, tSent=['the','red','car','sees','a','young','boy'];
+function tInit(){ const r=ML.rng(4); T={E:rows(SV.length,D,r,0.5),P:rows(L,D,r,0.5),Wk:rows(D,D,r,0.25),Wv:rows(D,D,r,0.25),Q:rows(L,D,r,0.05),Wo:rows(TV.length,D,r,0.25),bo:[new Float64Array(TV.length)]};
+  T.names=Object.keys(T); T.m={}; T.v={}; T.names.forEach(n=>{ T.m[n]=zl(T[n]); T.v[n]=zl(T[n]); }); T.it=0; T.hist=[]; T.r=ML.rng(9); }
+const mv=(M,x)=>{ const y=new Float64Array(M.length); for(let i=0;i<M.length;i++){ let s=0; const r=M[i]; for(let k=0;k<x.length;k++) s+=r[k]*x[k]; y[i]=s; } return y; };
+const mtv=(M,d,y)=>{ for(let i=0;i<M.length;i++){ const g=d[i]; if(!g) continue; const r=M[i]; for(let k=0;k<y.length;k++) y[k]+=r[k]*g; } return y; };
+const outer=(G,d,x)=>{ for(let i=0;i<G.length;i++){ const g=d[i]; if(!g) continue; const r=G[i]; for(let k=0;k<x.length;k++) r[k]+=g*x[k]; } };
+function fwd(s){ const X=s.map((w,j)=>T.E[SI[w]].map((v,k)=>v+T.P[j][k])), K=X.map(x=>mv(T.Wk,x)), V=X.map(x=>mv(T.Wv,x)), sq=Math.sqrt(D);
+  const st=[]; for(let t=0;t<L;t++){ const a=NLP.softmax(K.map(k=>NLP.dot(T.Q[t],k)/sq)), c=new Float64Array(D); a.forEach((w,j)=>{ for(let k=0;k<D;k++) c[k]+=w*V[j][k]; });
+    const z=mv(T.Wo,c).map((v,i)=>v+T.bo[0][i]), p=NLP.softmax(Array.from(z)); st.push({a,c,p}); }
+  return {X,K,V,st}; }
+function back(s,f,y,G,scale){ const sq=Math.sqrt(D), dK=f.K.map(()=>new Float64Array(D)), dV=f.V.map(()=>new Float64Array(D)); let L0=0;
+  f.st.forEach(({a,c,p},t)=>{ L0-=Math.log(p[y[t]]+1e-12); const dz=Float64Array.from(p,v=>v*scale); dz[y[t]]-=scale;
+    outer(G.Wo,dz,c); for(let i=0;i<dz.length;i++) G.bo[0][i]+=dz[i]; const dc=mtv(T.Wo,dz,new Float64Array(D));
+    const da=f.V.map(v=>NLP.dot(dc,v)), m=a.reduce((s,w,j)=>s+w*da[j],0);
+    a.forEach((w,j)=>{ const ds=w*(da[j]-m)/sq; for(let k=0;k<D;k++){ dV[j][k]+=w*dc[k]; G.Q[t][k]+=ds*f.K[j][k]; dK[j][k]+=ds*T.Q[t][k]; } }); });
+  f.X.forEach((x,j)=>{ outer(G.Wk,dK[j],x); outer(G.Wv,dV[j],x); const dx=mtv(T.Wk,dK[j],new Float64Array(D)); mtv(T.Wv,dV[j],dx);
+    const e=G.E[SI[s[j]]], pp=G.P[j]; for(let k=0;k<D;k++){ e[k]+=dx[k]; pp[k]+=dx[k]; } });
+  return L0; }
+function step(B){ const G={}; T.names.forEach(n=>G[n]=zl(T[n])); for(let b=0;b<B;b++){ const s=sample(T.r), y=toFR(s).map(w=>TI[w]); back(s,fwd(s),y,G,1/(B*L)); }
+  T.it++; const lr=0.01, b1=0.9, b2=0.999, c1=1-Math.pow(b1,T.it), c2=1-Math.pow(b2,T.it);
+  T.names.forEach(n=>T[n].forEach((row,i)=>{ const g=G[n][i], m=T.m[n][i], v=T.v[n][i]; for(let k=0;k<row.length;k++){ m[k]=b1*m[k]+(1-b1)*g[k]; v[k]=b2*v[k]+(1-b2)*g[k]*g[k]; row[k]-=lr*(m[k]/c1)/(Math.sqrt(v[k]/c2)+1e-8); } })); }
+const pred=s=>fwd(s).st.map(o=>TV[o.p.indexOf(Math.max(...o.p))]);
+function evalAcc(){ const r=ML.rng(77); let w=0,sOk=0; for(let i=0;i<300;i++){ const s=sample(r), y=toFR(s), p=pred(s); let all=true; p.forEach((v,t)=>{ if(v===y[t]) w++; else all=false; }); if(all) sOk++; } return [w/(300*L),sOk/300]; }
+const tP=new ML.Plot('#tPlot',{equal:false});
+function tDraw(){ const P=P0(), f=fwd(tSent), y=toFR(tSent), p=f.st.map(o=>TV[o.p.indexOf(Math.max(...o.p))]);
+  $('#tIt').textContent=T.it+' steps';
+  NLP.heat('#tHeat',f.st.map(o=>o.a),y,tSent,{max:1,fmt:v=>v>=0.1?Math.round(v*100):'',rowW:'70px'});
+  $('#tOut').innerHTML=`<div class="mono" style="font-size:14px;line-height:1.9"><b>English</b>&nbsp; ${tSent.join(' ')}<br><b>Model</b>&nbsp;&nbsp;&nbsp; ${p.map((w,t)=>`<span style="padding:1px 4px;border-radius:4px;background:${w===y[t]?'color-mix(in srgb,var(--c5) 22%,transparent)':'color-mix(in srgb,var(--c4) 28%,transparent)'}">${NLP.esc(w)}</span>`).join(' ')}<br><b>Correct</b>&nbsp; ${y.join(' ')}</div>`;
+  if(T.hist.length>1) ML.chart(tP,[{pts:T.hist.map(h=>[h[0],h[1]]),color:P.c1,width:2.4},{pts:T.hist.map(h=>[h[0],h[2]]),color:P.c2,width:2.4}],{y0:0,y1:1,xl:'training steps'}); else { tP.clear(); const c=tP.ctx; c.save(); c.fillStyle=P.muted; c.font='14px Inter,system-ui,sans-serif'; c.textAlign='center'; c.fillText('Press Train',tP.w/2,tP.h/2); c.restore(); }
+  const art=f.st[0].a, ad=f.st[2].a;
+  $('#tNote').innerHTML=`<b>Now:</b> writing <i>${NLP.esc(y[0])}</i>, the model puts ${(art[0]*100).toFixed(0)}% on "${tSent[0]}" and ${(art[2]*100).toFixed(0)}% on "${tSent[2]}" (the noun that sets the gender). Writing <i>${NLP.esc(y[2])}</i>, it puts ${(ad[1]*100).toFixed(0)}% on "${tSent[1]}".`; }
+function tStop(){ clearInterval(tTimer); tTimer=null; $('#tRun').textContent='Train'; }
+$('#tRun').addEventListener('click',()=>{ if(tTimer) return tStop(); $('#tRun').textContent='Pause';
+  tTimer=setInterval(()=>{ step(16); if(T.it%10===0){ const [a,b]=evalAcc(); T.hist.push([T.it,a,b]); } tDraw(); if(T.it>=1500) tStop(); },30); });
+$('#tReset').addEventListener('click',()=>{ tStop(); tInit(); tDraw(); });
+function tPick(){ $('#tPick').innerHTML=SLOTS.map((k,j)=>`<select data-j="${j}" aria-label="word ${j+1}">${SRC[k].map(w=>`<option${w===tSent[j]?' selected':''}>${w}</option>`).join('')}</select>`).join('');
+  $('#tPick').querySelectorAll('select').forEach(sel=>sel.addEventListener('change',()=>{ tSent[+sel.dataset.j]=sel.value; tDraw(); })); }
+$('#tRand').addEventListener('click',()=>{ tSent=sample(Math.random); tPick(); tDraw(); });
+tP.onResize=tDraw;
+
+/* ---------- 3. text over image patches ---------- */
+const COLS={red:'#e11d48',blue:'#2563eb',green:'#16a34a'}, FEAT=['red','blue','green','circle','square','triangle','bg'];
+const OBJ=[{c:'red',s:'circle',x:0,y:0},{c:'blue',s:'square',x:3,y:3},{c:'green',s:'triangle',x:4,y:0}];
+const PATCH=[]; for(let y=0;y<6;y++) for(let x=0;x<6;x++){ const o=OBJ.find(o=>x>=o.x&&x<o.x+2&&y>=o.y&&y<o.y+2); const r=ML.rng(1+x*7+y*13); const f=FEAT.map(()=>0.08*r.gauss());
+  if(o){ f[FEAT.indexOf(o.c)]+=1; f[FEAT.indexOf(o.s)]+=1; } else f[6]+=1; PATCH.push({x,y,o,f}); }
+const iP=new ML.Plot('#iPlot',{bounds:{x0:0,x1:6,y0:0,y1:6}}); let iSel=1;
+function keyOf(w){ const k=FEAT.map(()=>0); const i=FEAT.indexOf(w); if(i>=0&&i<6) k[i]=1; else k[6]=0.6; return k; }
+function iDraw(){ const P=P0(), words=($('#iPrompt').value.toLowerCase().match(/[a-z]+/g)||['a']).slice(0,12); if(iSel>=words.length) iSel=0;
+  const K=words.map(keyOf), A=PATCH.map(p=>NLP.softmax(K.map(k=>4*NLP.dot(p.f,k))));
+  $('#iChips').innerHTML=`<div class="chips2">`+words.map((w,i)=>`<button class="tok" data-i="${i}" style="cursor:pointer;border:2px solid ${i===iSel?'var(--c1)':'transparent'};background:${NLP.tokColor(i)}">${NLP.esc(w)}</button>`).join('')+'</div>';
+  $('#iChips').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ iSel=+b.dataset.i; iDraw(); }));
+  iP.clear(); const c=iP.ctx, s=iP.X(1)-iP.X(0);
+  PATCH.forEach((p,n)=>{ const X=iP.X(p.x), Y=iP.Y(6-p.y); c.save(); c.fillStyle=P.dark?'#1f2937':'#f8fafc'; c.fillRect(X,Y,s,s); c.restore(); });
+  OBJ.forEach(o=>{ const X=iP.X(o.x), Y=iP.Y(6-o.y), w=2*s; c.save(); c.fillStyle=COLS[o.c]; c.beginPath();
+    if(o.s==='circle') c.arc(X+w/2,Y+w/2,w*0.38,0,7); else if(o.s==='square') c.rect(X+w*0.14,Y+w*0.14,w*0.72,w*0.72); else { c.moveTo(X+w/2,Y+w*0.1); c.lineTo(X+w*0.9,Y+w*0.88); c.lineTo(X+w*0.1,Y+w*0.88); c.closePath(); }
+    c.fill(); c.restore(); });
+  PATCH.forEach((p,n)=>{ const a=A[n][iSel], X=iP.X(p.x), Y=iP.Y(6-p.y); c.save(); c.globalAlpha=0.72*a; c.fillStyle=P.c1; c.fillRect(X,Y,s,s); c.restore();
+    c.save(); c.strokeStyle=P.line; c.strokeRect(X+.5,Y+.5,s,s); c.restore(); if(a>0.05){ c.save(); c.fillStyle=a>0.5?'#fff':P.ink; c.font='600 11px Inter,system-ui'; c.fillText(Math.round(a*100)+'%',X+4,Y+14); c.restore(); } });
+  const col=A.map(r=>r[iSel]), top=Math.max(...col), tot=col.reduce((x,y)=>x+y,0);
+  $('#iStats').innerHTML=`<div class="stat c1"><b>"${NLP.esc(words[iSel])}"</b><span>word shown</span></div><div class="stat c2"><b>${(top*100).toFixed(0)}%</b><span>largest weight any patch gives it</span></div><div class="stat c3"><b>${tot.toFixed(1)}</b><span>total weight it receives from the 36 patches</span></div>`; }
+$('#iPrompt').addEventListener('input',iDraw); iP.onResize=iDraw;
+
+/* ---------- 4. shapes calculator ---------- */
+function mDraw(){ const m=+$('#mM').value, n=+$('#mN').value, d=+$('#mD').value; $('#mMOut').textContent=m; $('#mNOut').textContent=n; $('#mDOut').textContent=d;
+  const f=x=>x>=1e9?(x/1e9).toFixed(2)+' B':x>=1e6?(x/1e6).toFixed(2)+' M':x>=1e3?(x/1e3).toFixed(1)+' k':String(x);
+  $('#mStats').innerHTML=[['c1',f(m*n),'attention weights (m × n)'],['c2',f(2*m*n*d),'multiply-adds for scores and mixing'],['c3',f(2*n*d),'cached K and V numbers (reused every step)'],['c4',f(4*d*d),'parameters: W_Q, W_K, W_V, W_O']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+['#mM','#mN','#mD'].forEach(id=>$(id).addEventListener('input',mDraw));
+
+drawSvg(); tInit(); tPick(); tDraw(); iDraw(); mDraw();
+})();
+</script>
+<script>NLP.nav('nlp','cross-attention'); ML.renderMath(document.body);</script>
+</body>
+</html>

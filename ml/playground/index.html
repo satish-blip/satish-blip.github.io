@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ML Playground</title>
+<meta name="description" content="A complete, no-code machine learning playground in your browser: import data, run data-quality checks and visualisations, build a pipeline (split, imputation, encoding, scaling, feature selection, PCA, class balancing), train 24 classic models, read every statistic, test predictions and export the scikit-learn code.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/ml.css">
+<link rel="stylesheet" href="pg.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+<script defer src="../assets/core.js"></script>
+<script defer src="sheet.js"></script>
+<script defer src="data.js"></script>
+<script defer src="engine.js"></script>
+<script defer src="pipeline.js"></script>
+<script defer src="codegen.js"></script>
+<script defer src="app.js"></script>
+<script defer src="carousel.js"></script>
+<script defer src="app2.js"></script>
+<script defer src="app3.js"></script>
+<script defer src="wf.js"></script>
+<script defer src="stat.js"></script>
+<script defer src="wfdock.js"></script>
+<script defer src="explain.js"></script>
+<script defer src="shell.js"></script>
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../">&larr; Home</a><span class="sect">Play</span><nav class="algnav playnav" aria-label="Play"><a class="on" href="./" aria-current="page">ML Playground</a><a href="../glm-studio/">GLM pricing</a><a href="../reserving/">Reserving</a><a href="../../word2vec/">Word2vec</a><a href="../../dl/lab/">DL lab</a><a href="../../learn/">Learn ML &rarr;</a></nav></div></header>
+
+<main class="wrap">
+<section class="pg-hero">
+  <div class="hero-l"><h1><span class="grad">ML Playground</span></h1><div class="viewseg" role="group" aria-label="View"><button type="button" data-view="tabs" class="on">Tabs</button><button type="button" data-view="flow">Workflow</button><button type="button" data-view="stat">Statistical</button></div></div>
+  <div class="status" id="status"></div>
+</section>
+
+<div class="tabbar"><nav class="tabs wrap" id="tabs" role="tablist">
+  <button class="tab on" data-tab="import" role="tab"><span class="n">1</span><span>Import data<span class="sub" data-sub="import">pick or upload</span></span></button>
+  <button class="tab" data-tab="checks" role="tab"><span class="n">2</span><span>Data checks &amp; visuals<span class="sub" data-sub="checks">quality, plots</span></span></button>
+  <button class="tab" data-tab="pipeline" role="tab"><span class="n">3</span><span>Modelling pipeline<span class="sub" data-sub="pipeline">split → model</span></span></button>
+  <button class="tab" data-tab="output" role="tab"><span class="n">4</span><span>Output<span class="sub" data-sub="output">statistics</span></span></button>
+  <button class="tab" data-tab="test" role="tab"><span class="n">5</span><span>Test<span class="sub" data-sub="test">predict new rows</span></span></button>
+  <button class="tab" data-tab="more" role="tab"><span class="n">6</span><span>More options<span class="sub" data-sub="more">export, history</span></span></button>
+</nav></div>
+
+<section class="pane on" id="pane-import"></section>
+<section class="pane" id="pane-checks"></section>
+<section class="pane" id="pane-pipeline"></section>
+<section class="pane" id="pane-output"></section>
+<section class="pane" id="pane-test"></section>
+<section class="pane" id="pane-more"></section>
+<section class="wf" id="wf" aria-label="Workflow"></section>
+<section class="stv" id="stv" aria-label="Statistical view"></section>
+
+<p class="footnote">Models are written from scratch in JavaScript and checked against scikit-learn. Random splits use a different generator from NumPy, so exact numbers can differ slightly from the exported Python.</p>
+</main>
+
+<div class="drawer-bg" id="drawerBg"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="Code">
+  <div class="drawer-h"><div style="flex:1;min-width:0"><h3 id="drawerTitle">Code</h3><p id="drawerSub"></p></div>
+    <button class="btn sm" id="drawerCopy">Copy</button><button class="btn sm" id="drawerDl">Download</button><button class="drawer-close" id="drawerX" aria-label="Close the code panel" title="Close (Esc)"><span aria-hidden="true">&times;</span> Close</button></div>
+  <div class="seg" id="drawerSeg"><button data-v="py" class="on">Python · scikit-learn</button><button data-v="js">JavaScript · runs on this page</button></div>
+  <pre><code id="drawerCode"></code></pre>
+</aside>
+<div class="toast" id="toast"></div>
+<dialog class="help" id="help" aria-labelledby="helpT">
+  <div class="help-h"><h2 id="helpT">How to build a model here</h2><button class="x" id="helpX" aria-label="Close">&times;</button></div>
+  <div class="help-b">
+    <p class="help-lede">Work left to right through the six tabs. Nothing leaves your browser, and every tool has a <b>&lt;/&gt; Code</b> button with the matching scikit-learn code.</p>
+    <ol class="help-steps">
+      <li><b>Import data.</b> Pick a sample or load a CSV, then choose the <b>target</b> (the column to predict). Mark ID columns and anything that gives the answer away as <i>ignore</i>. <button class="btn sm" data-help-go="import">Open</button></li>
+      <li><b>Check the data.</b> Fix what the health checks flag (missing values, duplicates, skew, outliers). Use <i>Transforms</i> and <i>Feature scales</i> to see whether columns need a log transform or scaling, <i>Correlation</i> + VIF for features that repeat each other, and <i>t-SNE</i> / <i>PCA</i> for whether the classes separate at all. <button class="btn sm" data-help-go="checks">Open</button></li>
+      <li><b>Build the pipeline.</b> Keep a test set aside (20% is typical) and turn on cross-validation. Add only the steps the checks asked for: imputation, transforms, encoding, scaling (needed for KNN, SVM, PCA and penalised linear models; not for trees), feature selection, class balancing. Then pick a model and press <b>Train &amp; evaluate</b>. <button class="btn sm" data-help-go="pipeline">Open</button></li>
+      <li><b>Read the output.</b> Compare train and test scores: a big gap means over-fitting (simplify the model, add regularisation). The <i>Pipeline graph</i> shows what each stage did; <i>Diagnostics</i> and <i>Statistics</i> explain the errors and coefficients; <i>Compare models</i> ranks every model on the same pipeline. <button class="btn sm" data-help-go="output">Open</button></li>
+      <li><b>Test it.</b> Type in a new row and watch the prediction change, browse the test-set mistakes, or score a whole CSV. <button class="btn sm" data-help-go="test">Open</button></li>
+      <li><b>Take it with you.</b> Export the Python script or notebook, save the settings, or run the exported code in real Python on this page. <button class="btn sm" data-help-go="more">Open</button></li>
+    </ol>
+    <h3>Rules of thumb</h3>
+    <ul class="help-tips">
+      <li><b>Start simple.</b> Logistic or linear regression is the baseline; only keep a complex model if it beats the baseline on cross-validation.</li>
+      <li><b>Never tune on the test set.</b> Use cross-validation and grid search for choices; look at the test score once, at the end.</li>
+      <li><b>Leakage beats everything.</b> A near-perfect score usually means a column gives the answer away. Every step here is fitted on training rows only.</li>
+      <li><b>Imbalanced classes:</b> judge with balanced accuracy, F1 or ROC AUC, not accuracy, and try class weights.</li>
+      <li><b>Minimise what you don't need.</b> The ⌃ button on each panel folds it away; tiles slide sideways.</li>
+    </ul>
+    <p class="help-more">New to a method? Every panel's <b>Learn</b> link opens the matching lesson.</p>
+  </div>
+</dialog>
+
+</body>
+</html>

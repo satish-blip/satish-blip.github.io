@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PCA Lab</title>
+<meta name="description" content="Interactive principal component analysis in the browser: rotate a direction to maximise variance, see reconstruction error, rotate a 3D cloud, read the scree plot, rebuild images from eigen-images and compare PCA with LDA.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Algorithms"></nav></div></header>
+
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Unsupervised &middot; Dimensionality reduction</p>
+  <h1>Principal Component <span class="grad">Analysis</span></h1>
+  <p class="lede">Real data often has many features that move together: a person's height and arm span, a house's floor area and number of rooms. That means the data really lives near a lower-dimensional shape, and we can describe each point with fewer numbers. PCA finds the directions along which the data varies most, and lets you keep only the top few. Rotate a direction by hand until the projected variance peaks (that is PC1), see why that same direction minimises reconstruction error, spin a 3D cloud, and rebuild images from a handful of eigen-images.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#lab">1 · Find PC1 by hand</a><a href="#maths">2 · The maths</a><a href="#d3">3 · 3D and the scree plot</a><a href="#img">4 · Eigen-images</a><a href="#lda">5 · PCA vs LDA</a><a href="#code">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is PCA, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>Suppose each student in a class is described by marks in 10 subjects. Plotting 10 dimensions is impossible, and many of those marks are strongly related (good at physics usually means good at maths). Is there a way to summarise each student with, say, two numbers that keep most of the differences between students?</p>
+      <h3>The idea</h3><p><a class="term" data-t="pca">Principal component analysis</a> finds the directions in which your data varies the most. The first <a class="term" data-t="principal-component">principal component</a> is the single line that captures the biggest spread of the data (for the students, something like "overall ability"); the second is the next biggest, at right angles to the first (perhaps "science versus humanities"), and so on.</p><p>Keeping only the first few components gives a smaller description of each point that loses as little as possible: <a class="term" data-t="dimensionality-reduction">dimensionality reduction</a>. It is used to compress images, remove noise and plot high-dimensional data in 2-D. PCA does not use labels: it is <a class="term" data-t="unsupervised">unsupervised</a>.</p>
+      <h3>How it works</h3><ol class="steps2"><li><a class="term" data-t="standardise">Centre</a> the data (and usually scale each feature).</li><li>Compute the <a class="term" data-t="covariance">covariance matrix</a>.</li><li>Find its <a class="term" data-t="eigenvector">eigenvectors</a> (directions) and eigenvalues (variance along each).</li><li>Keep the top \(k\) directions and <a class="term" data-t="projection">project</a> the data onto them; the <a class="term" data-t="explained-variance">explained variance</a> tells you how much you kept.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Photographing a teapot: some camera angles show its shape clearly (spout, handle, lid), others hide it. A photo is a projection from 3-D to 2-D, and PCA picks the angle whose photo shows the most spread, so that points that were far apart stay far apart.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Fast, exact and simple</li><li>Removes correlated, redundant features</li><li>Great for visualisation and compression</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Only finds straight-line structure</li><li>Directions of high variance are not always the ones that separate classes (compare LDA)</li><li>Sensitive to feature scaling</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="pca">PCA</a><a class="term" data-t="principal-component">Principal component</a><a class="term" data-t="variance">Variance</a><a class="term" data-t="covariance">Covariance matrix</a><a class="term" data-t="eigenvector">Eigenvector / eigenvalue</a><a class="term" data-t="projection">Projection</a><a class="term" data-t="explained-variance">Explained variance</a><a class="term" data-t="scree">Scree plot</a><a class="term" data-t="reconstruction">Reconstruction</a><a class="term" data-t="dimensionality-reduction">Dimensionality reduction</a><a class="term" data-t="standardise">Standardise</a><a class="term" data-t="unsupervised">Unsupervised</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. Background maths: <a href="../../math/projections/#line">projection onto a line</a>, <a href="../../math/decompositions/#eigen">eigenvectors</a>, <a href="../../math/svd/">the SVD</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="lab" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Find the first principal component by hand</h2>
+    <p class="sub">Drag on the plot (or use the slider) to rotate the purple direction \(u\). Each point is projected onto it: the purple dots are the projections (what we keep if we describe each point by one number), red segments are what is lost. Try to find the angle where the purple dots are most spread out, then press <b>Snap to PC1</b> to check.</p>
+    <div class="plot sq" id="mainPlot"></div>
+    <div class="legend"><span><i class="sw" style="background:var(--c1)"></i>direction \(u\) and projections</span><span><i class="sw" style="background:var(--c2)"></i>reconstruction error</span><span><i class="sw" style="background:var(--star)"></i>true PC1 / PC2 (dashed)</span></div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="controls">
+        <div class="ctl"><label for="ang"><span>Direction angle θ</span><output id="angOut"></output></label><input type="range" id="ang" min="0" max="180" step="0.5" value="100"></div>
+        <div class="row"><button class="btn primary" id="snap">Snap to PC1</button><button class="btn" id="spin">Sweep</button></div>
+        <div class="ctl"><span class="lbl">Data</span><div class="seg" id="srcSeg"><button data-v="gauss" class="on">Correlated Gaussian</button><button data-v="ds">A classification dataset</button></div></div>
+        <div id="gaussCtl" class="controls">
+          <div class="grid2" style="gap:12px">
+            <div class="ctl"><label for="s1">Spread σ₁ <output id="s1Out"></output></label><input type="range" id="s1" min="0.2" max="2" step="0.05" value="1.4"></div>
+            <div class="ctl"><label for="s2">Spread σ₂ <output id="s2Out"></output></label><input type="range" id="s2" min="0.05" max="2" step="0.05" value="0.45"></div>
+          </div>
+          <div class="ctl"><label for="rot">Cloud rotation <output id="rotOut"></output></label><input type="range" id="rot" min="0" max="180" value="35"></div>
+        </div>
+        <div id="dsCtl" hidden><div class="dsrow" id="dsPick"></div></div>
+        <label class="toggle"><input type="checkbox" id="stdz">Standardise each feature first</label>
+      </div>
+    </div>
+    <div class="card">
+      <div id="bar"></div>
+      <div class="plot short" id="angPlot" style="margin-top:10px"></div>
+      <p class="hint">Projected variance (purple) and mean squared reconstruction error (red) as functions of θ. They always add up to the total variance, so maximising one minimises the other. Set σ₁ = σ₂ and the purple curve goes flat: a round cloud has no preferred direction.</p>
+    </div>
+  </div>
+</section>
+
+<section id="maths" class="card">
+  <h2><span class="num">2</span>The maths</h2>
+  <p class="sub">You just found PC1 by eye. Now we find it exactly, in three steps: write the spread along a direction as a formula, maximise it, and check that the same direction loses the least information.</p>
+  <div class="grid2 prose">
+    <div>
+      <h3>Step 1: the spread along a direction</h3>
+      <p>First centre the data so the cloud sits at the origin: \(\tilde x_i=x_i-\bar x\). For a unit vector \(u\), the coordinate of point \(i\) along \(u\) is the <a href="../../math/vectors/#dot">dot product</a> \(u^\top\tilde x_i\). These coordinates have mean zero, so their variance is the average of their squares. Collecting terms gives a compact formula with the sample covariance \(S=\tfrac1{n-1}\sum_i\tilde x_i\tilde x_i^\top\):</p>
+      <div class="mathbox c4">$$\frac1{n-1}\sum_i(u^\top\tilde x_i)^2=\frac1{n-1}\sum_iu^\top\tilde x_i\tilde x_i^\top u=u^\top Su$$</div>
+      <p>So the <a href="../../math/probability/#covariance-matrix">covariance matrix</a> \(S\) contains everything we need: give it any direction, and \(u^\top Su\) tells you the spread along it.</p>
+      <h3>Step 2: make that spread as large as possible</h3>
+      <p>We need the constraint \(\lVert u\rVert=1\), otherwise making \(u\) longer would make the "variance" as large as we like. Maximise with a Lagrange multiplier:</p>
+      <div class="mathbox c1">$$\max_{u}\ u^\top Su\quad\text{s.t.}\quad u^\top u=1\qquad\mathcal L=u^\top Su-\lambda(u^\top u-1)$$</div>
+      <div class="mathbox c3">$$\nabla_u\mathcal L=2Su-2\lambda u=0\ \Longrightarrow\ Su=\lambda u,\qquad u^\top Su=\lambda$$</div>
+      <p>So \(u\) must be an <b>eigenvector</b> of \(S\): a direction that \(S\) only stretches, without turning. And the variance along it is the eigenvalue. The best is the eigenvector with the largest eigenvalue: PC1. PC2 is the best direction orthogonal to PC1, which is the next eigenvector, and so on. Because \(S\) is symmetric, its eigenvectors are automatically at right angles.</p>
+      <div id="liveEig"></div>
+      <div class="algo"><h5 class="algo-h">Algorithm: PCA</h5><ol>
+        <li><span class="kw">input</span> data matrix \(X\) (\(n\) rows, \(d\) features), number of components \(k\)</li>
+        <li>\(\bar x\leftarrow\) column means; \(\tilde X\leftarrow X-\mathbf 1\bar x^\top\) <span class="cm">centre</span></li>
+        <li><span class="kw">optionally</span> divide each column by its standard deviation <span class="cm">when units differ</span></li>
+        <li>\(\tilde X=U\Sigma V^\top\) <span class="cm">thin SVD; or eigen-decompose S = X̃ᵀX̃/(n−1)</span></li>
+        <li>\(W_k\leftarrow\) first \(k\) columns of \(V\) <span class="cm">principal directions</span></li>
+        <li>\(\lambda_j\leftarrow\sigma_j^2/(n-1)\) <span class="cm">variance along each</span></li>
+        <li>\(Z\leftarrow\tilde XW_k\) <span class="cm">n × k scores: the compressed data</span></li>
+        <li>\(\hat X\leftarrow\mathbf 1\bar x^\top+ZW_k^\top\) <span class="cm">reconstruction</span></li>
+        <li><span class="kw">return</span> \(W_k\), \(Z\), explained ratio \(\sum_{j\le k}\lambda_j/\sum_j\lambda_j\)</li>
+      </ol></div>
+    </div>
+    <div>
+      <h3>Step 3: equivalently, minimise reconstruction error</h3>
+      <p>A different goal leads to the same answer. If we keep only the coordinate along \(u\), our best guess for the point is its projection \(uu^\top\tilde x_i\), and the red segment is what we lose:</p>
+      <div class="mathbox c2">$$\frac1n\sum_i\big\lVert\tilde x_i-uu^\top\tilde x_i\big\rVert^2=\frac1n\sum_i\lVert\tilde x_i\rVert^2-\frac1n\sum_i(u^\top\tilde x_i)^2$$</div>
+      <p>By Pythagoras, total = captured + lost: the projection and the red segment are at right angles. The total is fixed by the data, so the direction that captures most also loses least. That is the bar above.</p>
+      <h3>Keeping k components</h3>
+      <div class="mathbox c5">$$z_i=W_k^\top\tilde x_i\in\mathbb R^k,\qquad \hat x_i=\bar x+W_kz_i,\qquad \text{explained variance}=\frac{\lambda_1+\dots+\lambda_k}{\lambda_1+\dots+\lambda_d}$$</div>
+      <p>\(W_k\) holds the top \(k\) eigenvectors as columns. \(z_i\) is the short description of point \(i\) (its \(k\) "scores"), and \(\hat x_i\) is the best rebuild from it. The explained-variance ratio tells you what fraction of the spread you kept; a common rule is to keep enough components for 90–95%.</p>
+      <h3>In practice: SVD</h3>
+      <p>With the centred data matrix \(\tilde X=U\Sigma V^\top\), the columns of \(V\) are the principal directions and \(\lambda_j=\sigma_j^2/(n-1)\). SVD is more stable than forming \(S\), because forming \(\tilde X^\top\tilde X\) squares the condition number. This page uses the Jacobi eigenvalue method on \(S\), which is fine for small \(d\).</p>
+      <details class="deeper"><summary>Going deeper: why the top-k eigenvectors are optimal together (Eckart–Young)</summary><div>
+        <p>For \(k\) components, maximise \(\operatorname{tr}(W^\top SW)\) over \(d\times k\) matrices with orthonormal columns. Write \(S=Q\Lambda Q^\top\) and \(P=Q^\top W\) (still orthonormal columns). Then \(\operatorname{tr}(W^\top SW)=\sum_j\lambda_j\,c_j\) with \(c_j=\sum_l P_{jl}^2\). Each \(c_j\in[0,1]\) (a row of a matrix with orthonormal columns has norm at most 1) and \(\sum_jc_j=k\). A weighted sum of the \(\lambda_j\) with weights in \([0,1]\) summing to \(k\) is largest when the weights are 1 on the \(k\) largest eigenvalues, which happens when \(W\) spans the top \(k\) eigenvectors. The maximum is \(\lambda_1+\dots+\lambda_k\).</p>
+        <p>The same fact in matrix form is the Eckart–Young theorem: the best rank-\(k\) approximation of \(\tilde X\) in Frobenius norm is \(U_k\Sigma_kV_k^\top\), with error \(\sqrt{\sigma_{k+1}^2+\dots+\sigma_r^2}\). PCA and the truncated SVD are the same thing seen from two sides. See the <a href="../../math/svd/#lowrank">SVD page</a>.</p>
+      </div></details>
+      <div class="note warn"><b>Scale matters.</b> PCA chases variance, so a feature measured in large units dominates. A salary in rupees will swamp an age in years. Standardise first when features have different units (tick the box above with a stretched cloud to see PC1 jump).</div>
+    </div>
+  </div>
+</section>
+
+<section id="d3" class="card">
+  <h2><span class="num">3</span>Three dimensions and the scree plot</h2>
+  <p class="sub">How many components should we keep? The eigenvalues answer that. Pick a shape and compare the 3-D cloud with its best 2-D photograph.</p>
+  <div class="grid3">
+    <div><div class="plot sq" id="p3"></div><p class="hint">Drag to rotate. Arrows: PC1 (purple), PC2 (cyan), PC3 (orange), lengths ∝ standard deviation. The shaded plane is spanned by PC1 and PC2.</p></div>
+    <div><div class="plot sq" id="p3proj"></div><p class="hint">The same points projected onto the PC1–PC2 plane: the best 2D photograph of the cloud.</p></div>
+    <div>
+      <div class="ctl"><span class="lbl">Shape</span><div class="seg" id="shape3"><button data-v="pancake" class="on">Pancake</button><button data-v="cigar">Cigar</button><button data-v="ball">Ball</button><button data-v="clusters">3 clusters</button></div></div>
+      <div class="plot short" id="scree" style="margin-top:12px"></div>
+      <p class="hint">Bars: share of variance per component. Line: cumulative share. A pancake needs 2 components, a cigar 1, a ball all 3 (no direction is special, so PCA cannot compress it). Look for the "elbow" where the bars drop off: components after it are mostly noise.</p>
+      <div class="row"><button class="btn" id="spin3">Auto-rotate</button></div>
+    </div>
+  </div>
+</section>
+
+<section id="img" class="card">
+  <h2><span class="num">4</span>Eigen-images: compress pictures with PCA</h2>
+  <p class="sub">The same idea in many dimensions. 400 random 12 × 12 pictures of simple shapes (each one a point in 144 dimensions). PCA finds 144 "eigen-images"; any picture is the mean picture plus a weighted sum of them. Keep only the first \(k\).</p>
+  <div class="grid2">
+    <div>
+      <div class="ctl"><label for="kImg"><span>Components kept k</span><output id="kImgOut"></output></label><input type="range" id="kImg" min="0" max="60" value="8"></div>
+      <div id="recon" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-top:10px"></div>
+      <p class="hint">Top row: originals. Bottom row: reconstructions from \(k\) numbers each instead of 144. <span id="imgStat"></span></p>
+      <div class="plot short" id="screeImg"></div>
+    </div>
+    <div><h3 style="margin-top:0">The first 16 eigen-images</h3><div id="eig" style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:5px"></div>
+      <p class="hint">Purple = positive weight, orange = negative. Early components capture broad structure (position, size, filled vs hollow); later ones capture fine detail and noise. This is the same idea as eigenfaces for face recognition.</p>
+      <h3>Every picture as a point in PC1–PC2</h3><div class="plot sq" id="imgScatter" style="max-width:380px"></div><div class="legend" id="imgLegend"></div></div>
+  </div>
+</section>
+
+<section id="lda" class="card">
+  <h2><span class="num">5</span>PCA vs LDA: unsupervised vs supervised directions</h2>
+  <div class="grid2">
+    <div><div class="plot sq" id="lp"></div></div>
+    <div><div class="plot wide" id="lh"></div>
+      <div class="legend"><span><i class="sw" style="background:var(--star)"></i>PCA direction (ignores labels)</span><span><i class="sw" style="background:var(--c1)"></i>LDA direction (uses labels)</span></div>
+      <p class="prose">PCA never looks at the labels. It picks the direction of largest spread, which can be the worst one for classification when the classes are separated along a thin direction. LDA picks the direction that separates the class means relative to the spread (see the <a href="../lda-gda/#fisher">LDA page</a>). Top histogram: projections onto PC1. Bottom: onto the LDA direction. Lesson: if you plan to classify, don't blindly throw away low-variance components; they may hold the signal.</p>
+      <div class="stats" id="ldaStats"></div></div>
+  </div>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.decomposition <span class="k">import</span> PCA
+<span class="k">from</span> sklearn.preprocessing <span class="k">import</span> StandardScaler
+
+pca = PCA(n_components=<span class="s">2</span>).<span class="f">fit</span>(StandardScaler().<span class="f">fit_transform</span>(X))
+pca.components_                   <span class="c"># rows = principal directions (eigenvectors of S)</span>
+pca.explained_variance_           <span class="c"># eigenvalues lambda_j</span>
+pca.explained_variance_ratio_     <span class="c"># scree plot</span>
+Z = pca.<span class="f">transform</span>(X); X_hat = pca.<span class="f">inverse_transform</span>(Z)
+
+<span class="c"># by hand</span>
+Xc = X - X.mean(<span class="s">0</span>)
+U, s, Vt = np.linalg.svd(Xc, full_matrices=<span class="k">False</span>)
+eigvals = s**<span class="s">2</span> / (len(X) - <span class="s">1</span>); W = Vt[:k].T; Z = Xc @ W</pre>
+</section>
+
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything is computed in your browser in plain JavaScript.</p>
+</main>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/gloss.js"></script>
+<script src="../assets/models.js"></script>
+<script>
+(function(){
+const {$, fmt, LA} = ML, Mo=ML.models;
+ML.nav('pca'); ML.renderMath(document.body);
+const S={src:'gauss', ds:'linear', theta:100, X:[], y:null, pca:null};
+const main=new ML.Plot('#mainPlot'), angP=new ML.Plot('#angPlot',{equal:false});
+function gen(){ if(S.src==='gauss'){ const r=ML.rng(5), s1=+$('#s1').value, s2=+$('#s2').value, a=(+$('#rot').value)*Math.PI/180; S.X=[]; for(let i=0;i<150;i++){ const u=s1*r.gauss(), v=s2*r.gauss(); S.X.push([0.3+u*Math.cos(a)-v*Math.sin(a), -0.2+u*Math.sin(a)+v*Math.cos(a)]); } S.y=null; }
+  else { const d=ML.dataset(S.ds,200,0.3,7); S.X=d.X; S.y=d.y; }
+  if($('#stdz').checked){ const p=Mo.PCA(S.X,{standardize:true}); S.X=p.Z; } S.pca=Mo.PCA(S.X); }
+function stats(th){ const p=S.pca, u=[Math.cos(th),Math.sin(th)], n=S.X.length; let cap=0, lost=0; S.X.forEach(x=>{ const c=[x[0]-p.mu[0],x[1]-p.mu[1]], t=c[0]*u[0]+c[1]*u[1]; cap+=t*t; lost+=(c[0]-t*u[0])**2+(c[1]-t*u[1])**2; }); return {cap:cap/(n-1), lost:lost/(n-1)}; }
+function draw(){ const P=ML.palette(), p=S.pca, th=S.theta*Math.PI/180, u=[Math.cos(th),Math.sin(th)], mu=p.mu; main.clear(); main.grid(1);
+  // true PCs
+  p.vectors.forEach((v,j)=>{ const L=4; main.line(mu[0]-L*v[0],mu[1]-L*v[1],mu[0]+L*v[0],mu[1]+L*v[1],{color:P.star,width:1.6,dash:[6,5],alpha:.9}); });
+  main.line(mu[0]-5*u[0],mu[1]-5*u[1],mu[0]+5*u[0],mu[1]+5*u[1],{color:P.c1,width:2.6});
+  const c=main.ctx; S.X.forEach(x=>{ const d=[x[0]-mu[0],x[1]-mu[1]], t=d[0]*u[0]+d[1]*u[1], q=[mu[0]+t*u[0],mu[1]+t*u[1]]; main.line(x[0],x[1],q[0],q[1],{color:P.c2,width:1.2,alpha:.55}); });
+  main.points(S.X, S.y||S.X.map(()=>0), {r:4, color: S.y?null:()=>P.c3});
+  S.X.forEach(x=>{ const d=[x[0]-mu[0],x[1]-mu[1]], t=d[0]*u[0]+d[1]*u[1]; c.beginPath(); c.arc(main.X(mu[0]+t*u[0]),main.Y(mu[1]+t*u[1]),2.6,0,7); c.fillStyle=P.c1; c.fill(); });
+  // ellipse of covariance
+  main.ellipse(mu,p.S,2,{color:P.star,width:1.2,dash:[3,4]});
+  const s=stats(th), tot=p.total;
+  $('#bar').innerHTML=`<div class="lbl" style="font-size:13px;font-weight:600;margin-bottom:6px">Total variance ${fmt(tot,3)} = captured <span style="color:var(--c1)">${fmt(s.cap,3)}</span> + lost <span style="color:var(--c2)">${fmt(s.lost,3)}</span></div>
+    <div style="display:flex;height:22px;border-radius:8px;overflow:hidden"><span style="width:${100*s.cap/tot}%;background:var(--c1)"></span><span style="width:${100*s.lost/tot}%;background:var(--c2)"></span></div>
+    <div class="stats" style="margin-top:10px"><div class="stat c1"><b>${ML.pct(s.cap/tot)}</b><span>variance captured by u</span></div><div class="stat c5"><b>${ML.pct(p.ratio[0])}</b><span>best possible (PC1)</span></div></div>`;
+  const pts=[], pl=[]; for(let a=0;a<=180;a+=1){ const q=stats(a*Math.PI/180); pts.push([a,q.cap]); pl.push([a,q.lost]); }
+  const r=ML.chart(angP,[{pts,color:P.c1,width:2.6},{pts:pl,color:P.c2,width:2.6}],{x0:0,x1:180,y0:0,vline:S.theta,xl:'θ (degrees)'});
+  let a1=Math.atan2(p.vectors[0][1],p.vectors[0][0])*180/Math.PI; if(a1<0)a1+=180; if(a1>=180)a1-=180; const ac=angP.ctx; ac.save(); ac.fillStyle=P.star; ac.beginPath(); ac.arc(r.fx(a1),r.fy(p.values[0]),6,0,7); ac.fill(); ac.restore();
+  S.a1=a1;
+  const V=v=>`\\begin{bmatrix}${fmt(v[0],3)}\\\\${fmt(v[1],3)}\\end{bmatrix}`;
+  $('#liveEig').innerHTML='<div class="mathbox c5">'+ML.tex(`S=\\begin{bmatrix}${fmt(p.S[0][0],3)}&${fmt(p.S[0][1],3)}\\\\${fmt(p.S[1][0],3)}&${fmt(p.S[1][1],3)}\\end{bmatrix},\\quad \\lambda_1=${fmt(p.values[0],3)},\\ u_1=${V(p.vectors[0])},\\quad \\lambda_2=${fmt(p.values[1],3)},\\ u_2=${V(p.vectors[1])}`,true)+'</div>'; }
+const setTheta=v=>{ S.theta=((v%180)+180)%180; $('#ang').value=S.theta; $('#angOut').textContent=S.theta.toFixed(1)+'°'; draw(); };
+main.pointer({ down(x,y){ setTheta(Math.atan2(y-S.pca.mu[1],x-S.pca.mu[0])*180/Math.PI); }, move(x,y){ setTheta(Math.atan2(y-S.pca.mu[1],x-S.pca.mu[0])*180/Math.PI); } });
+ML.bindRange('ang',v=>setTheta(v),v=>v.toFixed(1)+'°');
+$('#snap').onclick=()=>{ let from=S.theta, to=S.a1; if(Math.abs(to-from)>90) to+= to<from?180:-180; let k=0; const iv=setInterval(()=>{ k++; setTheta(from+(to-from)*(1-Math.pow(1-k/20,3))); if(k>=20) clearInterval(iv); },25); };
+let sw=null; $('#spin').onclick=()=>{ if(sw){ clearInterval(sw); sw=null; $('#spin').textContent='Sweep'; return; } $('#spin').textContent='Stop'; sw=setInterval(()=>setTheta(S.theta+1.5),30); };
+['s1','s2','rot'].forEach(id=>ML.bindRange(id,()=>{ gen(); draw(); }, v=>id==='rot'?v+'°':v.toFixed(2)));
+ML.bindSeg('srcSeg',v=>{ S.src=v; $('#gaussCtl').hidden=v!=='gauss'; $('#dsCtl').hidden=v==='gauss'; gen(); draw(); });
+ML.datasetPicker('dsPick',S.ds,id=>{ S.ds=id; gen(); draw(); });
+$('#stdz').onchange=()=>{ gen(); draw(); };
+
+/* ---------- 3D ---------- */
+const p3=new ML.Plot('#p3',{bounds:{x0:-1,x1:1,y0:-1,y1:1}}), p3p=new ML.Plot('#p3proj'), scree=new ML.Plot('#scree',{equal:false});
+const T={shape:'pancake', yaw:0.3, pitch:1.05, X:[], lab:[], pca:null, spin:null};
+function gen3(){ const r=ML.rng(9); T.X=[]; T.lab=[]; const R=(v)=>{ const a=0.6,b=0.4; let [x,y,z]=v; [x,y]=[x*Math.cos(a)-y*Math.sin(a), x*Math.sin(a)+y*Math.cos(a)]; [y,z]=[y*Math.cos(b)-z*Math.sin(b), y*Math.sin(b)+z*Math.cos(b)]; return [x,y,z]; };
+  for(let i=0;i<300;i++){ let v; if(T.shape==='pancake') v=[1.6*r.gauss(),0.9*r.gauss(),0.12*r.gauss()]; else if(T.shape==='cigar') v=[1.8*r.gauss(),0.25*r.gauss(),0.2*r.gauss()]; else if(T.shape==='ball') v=[r.gauss(),r.gauss(),r.gauss()].map(q=>q*0.9);
+    else { const k=i%3, C=[[-1.6,0,0],[1.4,0.8,0],[0.2,-1.3,0.3]][k]; v=[C[0]+0.35*r.gauss(),C[1]+0.35*r.gauss(),C[2]+0.35*r.gauss()]; T.lab.push(k); }
+    T.X.push(R(v)); } T.pca=Mo.PCA(T.X); }
+function proj3(x,y,z,pl){ const cy=Math.cos(T.yaw), sy=Math.sin(T.yaw), cp=Math.cos(T.pitch), sp=Math.sin(T.pitch); const X=cy*x-sy*y, Y=sy*x+cy*y; const Y2=cp*z-sp*Y, D=sp*z+cp*Y, s=pl.w/7.5; return [pl.w/2+X*s, pl.h/2-Y2*s, D]; }
+function draw3(){ const P=ML.palette(), c=p3.ctx, p=T.pca, mu=p.mu; p3.clear(); const cols=[P.c1,P.c3,P.c4];
+  const v1=p.vectors[0], v2=p.vectors[1], s1=2*Math.sqrt(p.values[0]), s2=2*Math.sqrt(p.values[1]);
+  const corner=(a,b)=>proj3(mu[0]+a*s1*v1[0]+b*s2*v2[0], mu[1]+a*s1*v1[1]+b*s2*v2[1], mu[2]+a*s1*v1[2]+b*s2*v2[2], p3);
+  c.save(); c.fillStyle=P.c1; c.globalAlpha=.1; c.beginPath(); [[-1,-1],[1,-1],[1,1],[-1,1]].forEach((q,i)=>{ const pt=corner(...q); i?c.lineTo(pt[0],pt[1]):c.moveTo(pt[0],pt[1]); }); c.closePath(); c.fill(); c.globalAlpha=.4; c.strokeStyle=P.c1; c.stroke(); c.restore();
+  const pts=T.X.map((x,i)=>({p:proj3(...x,p3),i})).sort((a,b)=>b.p[2]-a.p[2]);
+  pts.forEach(o=>{ c.beginPath(); c.arc(o.p[0],o.p[1],3,0,7); c.fillStyle=T.lab.length?[P.c1,P.c3,P.c4][T.lab[o.i]]:P.c3; c.globalAlpha=.8; c.fill(); }); c.globalAlpha=1;
+  p.vectors.forEach((v,j)=>{ const L=2*Math.sqrt(Math.max(0,p.values[j])), a=proj3(...mu,p3), b=proj3(mu[0]+L*v[0],mu[1]+L*v[1],mu[2]+L*v[2],p3); c.save(); c.strokeStyle=cols[j]; c.lineWidth=3.5; c.lineCap='round'; c.beginPath(); c.moveTo(a[0],a[1]); c.lineTo(b[0],b[1]); c.stroke(); c.fillStyle=cols[j]; c.font='700 12px Inter,system-ui,sans-serif'; c.fillText('PC'+(j+1),b[0]+5,b[1]); c.restore(); });
+  // projection
+  p3p.clear(); p3p.grid(1); const Z=T.X.map(x=>p.project(x,2)); p3p.points(Z,Z.map(()=>0),{r:3.2,color:i=>T.lab.length?[P.c1,P.c3,P.c4][T.lab[i]]:P.c3});
+  p3p.text('PC1 →',3,-3.1,{align:'right',color:P.muted,dy:-4}); p3p.text('PC2 ↑',-3.1,3,{color:P.muted,dx:4,dy:12});
+  // scree
+  let cum=0; const cs=p.ratio.map((r2,j)=>{ cum+=r2; return [j+1,cum]; }); const r=ML.chart(scree,[{pts:cs,color:P.c4,width:2.5,dots:true}],{x0:0.5,x1:3.5,y0:0,y1:1,xl:'component',yfmt:v=>(100*v).toFixed(0)+'%'});
+  const sc=scree.ctx; sc.save(); p.ratio.forEach((r2,j)=>{ sc.fillStyle=cols[j]; sc.globalAlpha=.75; const x=r.fx(j+1), w=36; sc.fillRect(x-w/2,r.fy(r2),w,r.fy(0)-r.fy(r2)); sc.globalAlpha=1; sc.fillStyle=P.ink; sc.font='600 11px Inter,system-ui,sans-serif'; sc.textAlign='center'; sc.fillText(ML.pct(r2),x,r.fy(r2)-4); }); sc.restore(); }
+let d3=null; p3.host.style.touchAction='none'; p3.cv.addEventListener('pointerdown',e=>{ d3=[e.clientX,e.clientY,T.yaw,T.pitch]; p3.cv.setPointerCapture(e.pointerId); }); p3.cv.addEventListener('pointermove',e=>{ if(!d3) return; T.yaw=d3[2]+(e.clientX-d3[0])*0.01; T.pitch=Math.max(-1.4,Math.min(1.4,d3[3]+(e.clientY-d3[1])*0.01)); draw3(); }); p3.cv.addEventListener('pointerup',()=>d3=null); p3.cv.style.cursor='grab';
+ML.bindSeg('shape3',v=>{ T.shape=v; gen3(); draw3(); });
+$('#spin3').onclick=()=>{ if(T.spin){ clearInterval(T.spin); T.spin=null; $('#spin3').textContent='Auto-rotate'; } else { T.spin=setInterval(()=>{ T.yaw+=0.02; draw3(); },30); $('#spin3').textContent='Stop'; } };
+
+/* ---------- eigen-images ---------- */
+const IM={X:[], lab:[], pca:null}; const SZ=12, D=SZ*SZ, NAMES=['disc','ring','cross','bar'];
+function genImgs(){ const r=ML.rng(17); IM.X=[]; IM.lab=[];
+  for(let i=0;i<400;i++){ const k=i%4, cx=5.5+(r()-0.5)*3, cy=5.5+(r()-0.5)*3, rad=2.4+r()*1.6, img=new Array(D).fill(0), ang=r()*Math.PI;
+    for(let y=0;y<SZ;y++) for(let x=0;x<SZ;x++){ const dx=x-cx, dy=y-cy, d=Math.hypot(dx,dy); let v=0;
+      if(k===0) v=d<rad?1:0; else if(k===1) v=Math.abs(d-rad)<0.9?1:0; else if(k===2) v=(Math.abs(dx)<0.9&&Math.abs(dy)<rad+0.8)||(Math.abs(dy)<0.9&&Math.abs(dx)<rad+0.8)?1:0;
+      else { const u=dx*Math.cos(ang)+dy*Math.sin(ang), w=-dx*Math.sin(ang)+dy*Math.cos(ang); v=Math.abs(w)<1&&Math.abs(u)<rad+1.2?1:0; }
+      img[y*SZ+x]=v+0.12*r.gauss(); }
+    IM.X.push(img); IM.lab.push(k); }
+  IM.pca=Mo.PCA(IM.X); }
+function imgCanvas(vals, signed){ const cv=document.createElement('canvas'); cv.width=SZ; cv.height=SZ; cv.style.cssText='width:100%;aspect-ratio:1/1;image-rendering:pixelated;border-radius:6px;border:1px solid var(--line);display:block';
+  const c=cv.getContext('2d'), im=c.createImageData(SZ,SZ), P=ML.palette(), bg=ML.rgb(P.bg), pos=ML.rgb(P.c1), neg=ML.rgb(P.c4), ink=ML.rgb(P.ink); const mx=Math.max(1e-9,...vals.map(Math.abs));
+  vals.forEach((v,i)=>{ let col, a; if(signed){ a=Math.min(1,Math.abs(v)/mx); col=v>=0?pos:neg; } else { a=Math.max(0,Math.min(1,v)); col=ink; } for(let ch=0;ch<3;ch++) im.data[4*i+ch]=bg[ch]*(1-a)+col[ch]*a; im.data[4*i+3]=255; }); c.putImageData(im,0,0); return cv; }
+const screeImg=new ML.Plot('#screeImg',{equal:false}), imgSc=new ML.Plot('#imgScatter');
+function drawImgs(){ const P=ML.palette(), p=IM.pca, k=+$('#kImg').value, picks=[0,1,2,3,6,9];
+  const rec=$('#recon'); rec.innerHTML=''; picks.forEach(i=>rec.appendChild(imgCanvas(IM.X[i])));
+  let err=0; picks.forEach(i=>{ const z=p.project(IM.X[i],k), xh=p.mu.map((m,j)=>m+z.reduce((s,zz,t)=>s+zz*p.vectors[t][j],0)); err+=xh.reduce((s,v,j)=>s+(v-IM.X[i][j])**2,0); rec.appendChild(imgCanvas(xh)); });
+  const cum=p.ratio.slice(0,k).reduce((a,b)=>a+b,0); $('#imgStat').innerHTML=`With k = ${k}: <b>${ML.pct(cum)}</b> of the variance kept, a ${(D/Math.max(k,1)).toFixed(1)}× compression.`;
+  let cc=0; const pts=p.ratio.slice(0,60).map((r,j)=>{ cc+=r; return [j+1,cc]; }); ML.chart(screeImg,[{pts,color:P.c4,width:2.5},{pts:p.ratio.slice(0,60).map((r,j)=>[j+1,r]),color:P.c1,width:2,dots:true,r:2}],{y0:0,y1:1,vline:Math.max(k,0.5),xl:'component',yfmt:v=>(100*v).toFixed(0)+'%'}); }
+function drawEig(){ const p=IM.pca, eg=$('#eig'); eg.innerHTML=''; for(let j=0;j<16;j++){ const d=document.createElement('div'); d.style.cssText='font-size:10px;text-align:center;color:var(--muted)'; d.appendChild(imgCanvas(p.vectors[j],true)); d.appendChild(document.createTextNode('PC'+(j+1))); eg.appendChild(d); }
+  const P=ML.palette(), cols=[P.c1,P.c3,P.c4,P.c2], Z=IM.X.map(x=>IM.pca.project(x,2)); const mx=Math.max(...Z.map(z=>Math.max(Math.abs(z[0]),Math.abs(z[1]))));
+  imgSc.setBounds({x0:-mx*1.05,x1:mx*1.05,y0:-mx*1.05,y1:mx*1.05}); imgSc.clear(); imgSc.points(Z,Z.map(()=>0),{r:3,color:i=>cols[IM.lab[i]],alpha:()=>.8});
+  $('#imgLegend').innerHTML=NAMES.map((n,k)=>`<span><i class="sw" style="background:${cols[k]}"></i>${n}</span>`).join('')+'<span>(labels only for colour; PCA never saw them)</span>'; }
+ML.bindRange('kImg',drawImgs);
+
+/* ---------- PCA vs LDA ---------- */
+const lp=new ML.Plot('#lp'), lh=new ML.Plot('#lh',{equal:false});
+function drawLDA(){ const P=ML.palette(), r=ML.rng(4), X=[], y=[]; for(let i=0;i<240;i++){ const k=i%2, u=2.0*r.gauss(), v=0.3*r.gauss()+(k?0.55:-0.55), a=0.5; X.push([u*Math.cos(a)-v*Math.sin(a), u*Math.sin(a)+v*Math.cos(a)]); y.push(k); }
+  const p=Mo.PCA(X), g=Mo.GDA(X,y,{type:'lda'}), wl=Math.hypot(g.w[0],g.w[1]), ul=[g.w[0]/wl,g.w[1]/wl], up=p.vectors[0];
+  lp.clear(); lp.grid(1); lp.points(X,y,{r:3.6}); lp.line(-4*up[0],-4*up[1],4*up[0],4*up[1],{color:P.star,width:3}); lp.line(-4*ul[0],-4*ul[1],4*ul[0],4*ul[1],{color:P.c1,width:3});
+  lp.text('PCA',3.2*up[0],3.2*up[1],{color:P.star,halo:true,dx:6}); lp.text('LDA',2.6*ul[0],2.6*ul[1],{color:P.c1,halo:true,dx:6});
+  lh.clear(); const c=lh.ctx, half=lh.h/2;
+  const sep=(u,row,label)=>{ const pr=X.map(x=>x[0]*u[0]+x[1]*u[1]), lo=Math.min(...pr), hi=Math.max(...pr), B=40, h=[new Array(B).fill(0),new Array(B).fill(0)]; pr.forEach((v,i)=>h[y[i]][Math.min(B-1,Math.floor((v-lo)/(hi-lo+1e-9)*B))]++); const mx=Math.max(...h[0],...h[1]);
+    [0,1].forEach(k=>{ c.fillStyle=k?P.k1:P.k0; c.globalAlpha=.6; for(let b=0;b<B;b++){ const hh=h[k][b]/mx*(half-30); c.fillRect(10+b/B*(lh.w-20),row+half-12-hh,(lh.w-20)/B-1,hh); } }); c.globalAlpha=1; c.fillStyle=P.ink; c.font='700 12px Inter,system-ui,sans-serif'; c.fillText(label,10,row+14);
+    let best=0; const thr=[...pr].sort((a,b)=>a-b); thr.forEach(t=>{ let ok=0; pr.forEach((v,i)=>{ if((v>t?1:0)===y[i]) ok++; }); best=Math.max(best,ok/pr.length,1-ok/pr.length); }); return best; };
+  const a1=sep(up,0,'projected onto PCA direction'), a2=sep(ul,half,'projected onto LDA direction');
+  $('#ldaStats').innerHTML=[['c4',ML.pct(a1),'best 1-D accuracy on PC1'],['c1',ML.pct(a2),'best 1-D accuracy on LDA direction'],['c3',ML.pct(p.ratio[0]),'variance on PC1']].map(([c2,v,l])=>`<div class="stat ${c2}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+
+main.onResize=angP.onResize=draw; p3.onResize=p3p.onResize=scree.onResize=draw3; screeImg.onResize=()=>IM.pca&&drawImgs(); imgSc.onResize=()=>IM.pca&&drawEig(); lp.onResize=lh.onResize=drawLDA;
+ML.onTheme(()=>{ draw(); draw3(); if(IM.pca){ drawImgs(); drawEig(); } drawLDA(); });
+gen(); draw(); gen3(); draw3(); drawLDA(); setTimeout(()=>{ genImgs(); drawImgs(); drawEig(); },30);
+})();
+</script>
+</body>
+</html>

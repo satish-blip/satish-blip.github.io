@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Memory in RNNs: LSTM and GRU</title>
+<meta name="description" content="How gated recurrent cells remember: the LSTM's forget, input and output gates and cell state, a live race of RNN versus LSTM versus GRU on a long-memory task, the gates inside a trained LSTM, and a parameter calculator.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP</p>
+  <h1>Memory in RNNs: <span class="grad">LSTM and GRU</span></h1>
+  <p class="lede">A plain RNN overwrites its whole hidden state at every step, so old information fades and its gradient vanishes. Gated cells add a separate memory lane that is changed only by small, deliberate edits: forget a little, write a little, read a little. That simple change lets them carry information across hundreds of steps.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#cell">1 · The LSTM cell</a><a href="#race">2 · RNN vs LSTM vs GRU</a><a href="#inside">3 · Inside a trained LSTM</a><a href="#highway">4 · The gradient highway</a><a href="#gru">5 · GRU and parameter counts</a><a href="#code">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What are LSTM and GRU, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A plain RNN overwrites its whole memory at every step, so by word 40 the information from word 3 has been squashed through 37 tanh layers, and the gradient that would teach it to remember has faded to nothing. We want a memory that, by default, simply keeps what it has, and that changes only when the network decides it should.</p>
+      <h3>The idea</h3><p><a class="term" data-t="lstm">LSTMs</a> and <a class="term" data-t="gru">GRUs</a> are RNNs with <a class="term" data-t="gate">gates</a>: small sigmoid switches, learned from data, that decide what to forget, what to write and what to read. The LSTM keeps a separate <a class="term" data-t="cell-state">cell state</a> that is updated by adding, not multiplying, so information and gradients can travel through hundreds of steps.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Forget gate: how much of the old memory to keep.</li><li>Input gate: how much new information to write.</li><li>Output gate: how much of the memory to show as the hidden state.</li><li>The GRU merges these into two gates (update and reset) and has no separate cell.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A notebook with a pencil and an eraser. A plain RNN rewrites the whole page every step; an LSTM decides line by line what to erase and what to add, so an important early note can survive.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Remembers across long gaps</li><li>Trains far more reliably than a plain RNN</li><li>GRU gets similar results with fewer parameters</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Still sequential, so slow on long texts</li><li>Four times the parameters of a plain RNN (LSTM)</li><li>Attention does long-range memory better</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="lstm">LSTM</a><a class="term" data-t="gru">GRU</a><a class="term" data-t="gate">Gate</a><a class="term" data-t="cell-state">Cell state</a><a class="term" data-t="sigmoid">Sigmoid</a><a class="term" data-t="vanishing-gradient">Vanishing gradient</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="cell" class="card">
+  <h2><span class="num">1</span>The LSTM cell</h2>
+  <div class="grid2">
+    <div><svg class="diagram" viewBox="0 0 520 300" id="cellSvg"></svg>
+      <p class="hint">The top line is the cell state \(c\): information flows along it with only a multiply (forget) and an add (write). Each gate is a sigmoid layer that reads \([h_{t-1},x_t]\) and outputs numbers between 0 (closed) and 1 (open).</p></div>
+    <div class="prose">
+      <div class="mathbox c1">$$\begin{aligned}f_t&=\sigma(W_f[h_{t-1},x_t]+b_f)&&\text{forget gate}\\ i_t&=\sigma(W_i[h_{t-1},x_t]+b_i)&&\text{input gate}\\ \tilde c_t&=\tanh(W_c[h_{t-1},x_t]+b_c)&&\text{candidate}\\ c_t&=f_t\odot c_{t-1}+i_t\odot\tilde c_t&&\text{cell state}\\ o_t&=\sigma(W_o[h_{t-1},x_t]+b_o)&&\text{output gate}\\ h_t&=o_t\odot\tanh(c_t)&&\text{hidden state}\end{aligned}$$</div>
+      <ul>
+        <li><b>Forget gate</b> \(f\): how much of each memory slot to keep. 1 = keep everything.</li>
+        <li><b>Input gate</b> \(i\) and <b>candidate</b> \(\tilde c\): what new information to write, and how much of it.</li>
+        <li><b>Output gate</b> \(o\): which parts of the memory to expose as \(h_t\) for this step's prediction.</li>
+      </ul>
+      <p>Hochreiter and Schmidhuber (1997). The forget gate was added by Gers et al. (2000); initialising its bias to 1, so the cell starts by remembering, is a common trick used here too.</p>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: one LSTM step</h5><ol>
+        <li><span class="kw">input</span> new input \(x_t\), previous hidden state \(h_{t-1}\), previous cell state \(c_{t-1}\)</li>
+        <li>\(u\leftarrow[h_{t-1};x_t]\) <span class="cm">stack them into one vector</span></li>
+        <li>\(f\leftarrow\sigma(W_fu+b_f)\) <span class="cm">forget gate: keep how much of each memory slot?</span></li>
+        <li>\(i\leftarrow\sigma(W_iu+b_i)\); \(\tilde c\leftarrow\tanh(W_cu+b_c)\) <span class="cm">what to write, and how much</span></li>
+        <li>\(c_t\leftarrow f\odot c_{t-1}+i\odot\tilde c\) <span class="cm">the conveyor belt: add, never squash</span></li>
+        <li>\(o\leftarrow\sigma(W_ou+b_o)\) <span class="cm">output gate: what to reveal</span></li>
+        <li>\(h_t\leftarrow o\odot\tanh(c_t)\)</li>
+        <li><span class="kw">return</span> \(h_t,c_t\) <span class="cm">repeat for the next step</span></li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: why the cell state is a gradient highway</summary><div>
+        <p>Differentiate the cell update: \(\partial c_t/\partial c_{t-1}=\operatorname{diag}(f_t)\), plus small terms through the gates. There is no weight matrix and no tanh slope on this path, just the forget gate. Going back \(n\) steps multiplies by \(f_{t}\odot f_{t-1}\odot\cdots\), and when the network wants to remember it learns \(f\approx1\), so the gradient survives almost unchanged. Compare the plain RNN, where every step multiplies by \(W_{hh}^\top\operatorname{diag}(1-h^2)\).</p>
+        <p>This is the same idea as the residual connection, discovered 18 years earlier: an additive path with factor about 1. A common practical trick follows from it: initialise the forget-gate bias \(b_f\) to 1 or 2 so that \(f\) starts near 1 and the LSTM remembers by default. The GRU merges forget and input into one update gate \(z\), \(h_t=(1-z)\odot h_{t-1}+z\odot\tilde h\), which keeps the highway with fewer parameters.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="race" class="card hl">
+  <h2><span class="num">2</span>RNN versus LSTM versus GRU, trained live</h2>
+  <p class="sub">The memory test from the <a href="../rnn/#memo">RNN page</a>: read \(T\) random bits and report the <b>first</b> one. All three cells have 12 hidden units, Adam, gradient clipping at 5, and the same data. Each uses a learning rate that works well for it (RNN and LSTM 0.01, GRU 0.03).</p>
+  <div class="grid2">
+    <div>
+      <div class="ctl"><label for="T"><span>Sequence length \(T\)</span><output id="TOut"></output></label><input type="range" id="T" min="5" max="60" value="30"></div>
+      <div class="player"><button class="btn primary" id="rRun">Race</button><button class="btn" id="rReset">Reset</button><button class="btn" id="rSeed">New seed</button><span class="pos" id="rIt"></span></div>
+      <div id="rBoard" style="margin-top:12px"></div>
+      <p class="hint">Typical result at \(T=30\): the LSTM solves it within a few hundred steps, the GRU a little later, the plain RNN usually never. At \(T\le10\) all three succeed. Results vary with the seed: that variation is real.</p>
+    </div>
+    <div><div class="plot wide" id="rPlot"></div><div class="legend" id="rLeg"></div></div>
+  </div>
+</section>
+
+<section id="inside" class="card">
+  <h2><span class="num">3</span>Inside the trained LSTM</h2>
+  <p class="sub">Run the race until the LSTM reaches 100%, then look at what its gates do on one test sequence. Rows are the 12 hidden units, columns are time steps. The unit marked ★ has the largest weight in the final answer.</p>
+  <div class="row"><button class="btn" id="iNew">Another test sequence</button><span class="hint" id="iInfo" style="margin:0"></span></div>
+  <div id="iSeq" style="margin-top:8px"></div>
+  <div class="grid2" style="margin-top:8px">
+    <div><h3 style="margin:0 0 4px">Forget gate \(f_t\)</h3><div id="iF"></div><h3 style="margin:10px 0 4px">Input gate \(i_t\)</h3><div id="iI"></div></div>
+    <div><h3 style="margin:0 0 4px">Cell state \(c_t\)</h3><div id="iC"></div><div class="plot short" id="iStar" style="margin-top:10px"></div><div class="legend"><span><i class="sw" style="background:#7c3aed"></i>cell state of ★</span><span><i class="sw" style="background:#16a34a"></i>its forget gate</span><span><i class="sw" style="background:#ea580c"></i>its input gate</span></div></div>
+  </div>
+  <div class="note"><b>What to look for:</b> the ★ unit's forget gate stays close to 1 for the whole sequence, so whatever it stored at step 1 is never erased; its cell state ends up clearly positive or negative depending on the first bit. Press "Another test sequence" until the first bit changes and watch the ★ curve flip sign. That is a learned latch. Your network may use a different unit or pattern.</div>
+</section>
+
+<section id="highway" class="card">
+  <h2><span class="num">4</span>The gradient highway</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>Why does the cell state keep gradients alive? Along the memory lane,</p>
+      <div class="mathbox c3">$$\frac{\partial c_t}{\partial c_{t-1}}=\operatorname{diag}(f_t)\quad\Rightarrow\quad\frac{\partial c_T}{\partial c_t}=\prod_{k=t+1}^{T}\operatorname{diag}(f_k)$$</div>
+      <p>There is no weight matrix and no squashing derivative in that product, only the forget gates. When the network decides to remember (\(f\approx1\)) the gradient passes back almost untouched, exactly like the identity path of a <a href="../../nn/residual/">residual connection</a>. In a plain RNN every step multiplies by \(\operatorname{diag}(1-h^2)W_{hh}\), which usually shrinks it.</p>
+      <p>The chart shows \(\lVert\partial\mathcal L/\partial h_t\rVert\) on the latest training batch of each racer, from step 1 (left) to step \(T\). Once a racer has solved the task its loss, and so every gradient, becomes tiny; compare the shapes early in the race.</p>
+    </div>
+    <div><div class="plot wide" id="hPlot"></div><div class="legend" id="hLeg"></div></div>
+  </div>
+</section>
+
+<section id="gru" class="card">
+  <h2><span class="num">5</span>The GRU, and how many parameters each cell needs</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>The gated recurrent unit (Cho et al. 2014) merges the cell and hidden state and uses two gates:</p>
+      <div class="mathbox c5">$$\begin{aligned}r_t&=\sigma(W_r[h_{t-1},x_t])&&\text{reset}\\ z_t&=\sigma(W_z[h_{t-1},x_t])&&\text{update}\\ \tilde h_t&=\tanh\big(W_hx_t+r_t\odot U_hh_{t-1}\big)\\ h_t&=(1-z_t)\odot\tilde h_t+z_t\odot h_{t-1}\end{aligned}$$</div>
+      <p>The update gate \(z\) plays the role of both forget and input gates (keep \(z\), write \(1-z\)); the reset gate decides how much of the past to use when proposing \(\tilde h\). Fewer parameters, often similar accuracy.</p>
+    </div>
+    <div>
+      <div class="grid2" style="gap:12px">
+        <div class="ctl"><label for="pd"><span>Input size \(d\)</span><output id="pdOut"></output></label><input type="range" id="pd" min="1" max="1024" value="300"></div>
+        <div class="ctl"><label for="ph"><span>Hidden size \(h\)</span><output id="phOut"></output></label><input type="range" id="ph" min="1" max="1024" value="512"></div>
+      </div>
+      <div id="pTbl" style="margin-top:8px"></div>
+      <p class="hint">Weights per layer, ignoring the output layer. One weight block is \(h(d+h)+h\); an LSTM has 4 blocks (f, i, c̃, o), a GRU 3 (r, z, h̃), a plain RNN 1. PyTorch stores two bias vectors per block, so its counts are slightly higher.</p>
+    </div>
+  </div>
+  <div class="tblwrap" style="margin-top:12px"><table class="tbl txt">
+    <tr><th></th><th>Plain RNN</th><th>LSTM</th><th>GRU</th></tr>
+    <tr><td><b>Memory</b></td><td>hidden state only</td><td>separate cell state + hidden state</td><td>hidden state, gated</td></tr>
+    <tr><td><b>Gates</b></td><td>none</td><td>forget, input, output</td><td>reset, update</td></tr>
+    <tr><td><b>Long-range memory</b></td><td>poor (vanishing gradients)</td><td>good</td><td>good</td></tr>
+    <tr><td><b>Where you see it</b></td><td>teaching, tiny models</td><td>speech recognition, ELMo, Google Translate (2016)</td><td>lighter-weight sequence models</td></tr>
+  </table></div>
+  <p class="hint">Since 2017, <a href="../transformers/">transformers</a> have replaced recurrent cells in most of NLP: attention connects every step to every other step directly and trains in parallel, instead of one step at a time.</p>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">6</span>The same thing in Python (PyTorch)</h2>
+<pre class="code">lstm = nn.LSTM(input_size=<span class="s">300</span>, hidden_size=<span class="s">512</span>, num_layers=<span class="s">2</span>, batch_first=<span class="k">True</span>, bidirectional=<span class="k">True</span>)
+out, (h_n, c_n) = lstm(x)          <span class="c"># out: (batch, T, 2*512); h_n, c_n: final hidden and cell states</span>
+gru = nn.GRU(<span class="s">300</span>, <span class="s">512</span>, batch_first=<span class="k">True</span>)
+out, h_n = gru(x)
+sum(p.numel() <span class="k">for</span> p <span class="k">in</span> nn.LSTM(<span class="s">300</span>, <span class="s">512</span>).parameters())   <span class="c"># 1,667,072 = 4 × (512·(300+512) + 2·512)</span></pre>
+</section>
+
+<p class="foot">Part of the <a href="../">NLP series</a>. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/nn.js"></script>
+<script src="../../assets/seq.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML;
+/* ---------- 1. diagram ---------- */
+(function(){ const box=(x,y,w,h,t,c)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" style="fill:color-mix(in srgb,${c} 18%,var(--card));stroke:${c};stroke-width:1.6"/><text x="${x+w/2}" y="${y+h/2+4}" text-anchor="middle">${t}</text>`;
+  const op=(x,y,t,c)=>`<circle cx="${x}" cy="${y}" r="13" style="fill:var(--card);stroke:${c};stroke-width:2"/><text x="${x}" y="${y+5}" text-anchor="middle" style="font-size:15px">${t}</text>`;
+  const L=(d,c,w)=>`<path d="${d}" style="fill:none;stroke:${c||'var(--muted)'};stroke-width:${w||1.6}" marker-end="url(#ah)"/>`;
+  let s=`<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" style="fill:var(--muted)"/></marker></defs>`;
+  s+=`<text x="12" y="44" class="mut">c<tspan dy="4" style="font-size:9px">t−1</tspan></text>`+L('M40,40 L148,40','#db2777',3)+op(162,40,'×','#16a34a')+L('M175,40 L288,40','#db2777',3)+op(302,40,'+','#ea580c')+L('M315,40 L478,40','#db2777',3)+`<text x="484" y="44" class="mut">c<tspan dy="4" style="font-size:9px">t</tspan></text>`;
+  s+=`<text x="12" y="254" class="mut">h<tspan dy="4" style="font-size:9px">t−1</tspan></text><path d="M40,250 L360,250" style="fill:none;stroke:var(--muted);stroke-width:1.6"/><text x="200" y="292" text-anchor="middle" class="mut">x<tspan dy="4" style="font-size:9px">t</tspan></text><path d="M200,278 L200,250" style="fill:none;stroke:var(--muted);stroke-width:1.6"/>`;
+  s+=box(132,160,60,34,'σ  f','#16a34a')+L('M162,250 L162,196')+L('M162,160 L162,55');
+  s+=box(222,160,60,34,'σ  i','#ea580c')+L('M252,250 L252,196')+box(292,160,60,34,'tanh c̃','#7c3aed')+L('M322,250 L322,196')+op(287,110,'×','#ea580c')+L('M252,160 L278,120')+L('M322,160 L296,120')+L('M292,98 L300,55');
+  s+=box(372,160,60,34,'σ  o','#0891b2')+`<path d="M360,250 L402,250 L402,196" style="fill:none;stroke:var(--muted);stroke-width:1.6" marker-end="url(#ah)"/>`+op(450,180,'×','#0891b2')+L('M432,177 L436,179')+`<path d="M450,40 L450,80" style="fill:none;stroke:#db2777;stroke-width:1.6"/>`+box(424,82,52,28,'tanh','#db2777')+L('M450,110 L450,166')+L('M450,193 L450,250 L478,250')+`<text x="484" y="254" class="mut">h<tspan dy="4" style="font-size:9px">t</tspan></text>`;
+  s+=`<text x="90" y="30" class="mut">forget</text><text x="304" y="20" text-anchor="middle" class="mut">write</text><text x="340" y="70" class="mut">memory lane</text>`;
+  $('#cellSvg').innerHTML=s; })();
+
+/* ---------- 2. race ---------- */
+function task(T,n,r){ return Array.from({length:n},()=>{ const y=r()<0.5?1:0, xs=[]; for(let t=0;t<T;t++){ const b=t===0?y:(r()<0.5?1:0); xs.push(Float64Array.of(b?1:-1,t===0?1:0)); } return {xs,y}; }); }
+const TYPES=[['rnn','Plain RNN','#64748b',0.01],['lstm','LSTM','#7c3aed',0.01],['gru','GRU','#0891b2',0.03]];
+const R={seed:1,nets:{},hist:{},norms:{},r:{},timer:null,it:0,test:null}; const rP=new ML.Plot('#rPlot',{equal:false}), hP=new ML.Plot('#hPlot',{equal:false});
+function rReset(){ rStop(); const T=+$('#T').value; TYPES.forEach(([k])=>{ R.nets[k]=SEQ.make(k,{nin:2,nh:12,nout:1,seed:R.seed}); R.hist[k]=[]; R.norms[k]=null; R.r[k]=ML.rng(9+R.seed); }); R.it=0; R.test=task(T,200,ML.rng(77)); rDraw(); inspect(); }
+const acc=m=>{ let ok=0; R.test.forEach(({xs,y})=>{ if((SEQ.predictLast(m,xs)>0.5)===(y===1)) ok++; }); return ok/R.test.length; };
+function rDraw(){ const P=ML.palette(); ML.chart(rP,[...TYPES.map(([k,,c])=>({pts:R.hist[k],color:c,width:2.6})),{pts:[[0,0.5],[Math.max(100,R.it),0.5]],color:P.muted,width:1.2,dash:[5,4]}],{x0:0,y0:0.3,y1:1.02,xl:'training steps',yfmt:v=>(100*v).toFixed(0)+'%'});
+  const leg=TYPES.map(([,n,c])=>`<span><i class="sw" style="background:${c}"></i>${n}</span>`).join(''); $('#rLeg').innerHTML=leg; $('#hLeg').innerHTML=leg;
+  $('#rBoard').innerHTML=NLP.bars(TYPES.map(([k,n,c])=>({label:`${n} (${R.nets[k].count()} params)`,value:R.hist[k].length?R.hist[k].at(-1)[1]:0.5,color:c})),{lw:'170px',max:1,fmt:v=>ML.pct(v)});
+  $('#rIt').textContent=`step ${R.it} · seed ${R.seed}`;
+  const S=TYPES.filter(([k])=>R.norms[k]).map(([k,,c])=>({pts:R.norms[k].map((v,t)=>[t+1,Math.log10(v+1e-30)]),color:c,width:2.4,dots:true,r:2.2}));
+  if(S.length) ML.chart(hP,S,{xl:'time step t',yfmt:v=>'1e'+v.toFixed(0)}); else hP.clear(); }
+function rStop(){ if(R.timer){ clearInterval(R.timer); R.timer=null; $('#rRun').textContent='Race'; } }
+$('#rRun').onclick=()=>{ if(R.timer){ rStop(); return; } $('#rRun').textContent='Pause'; const T=+$('#T').value;
+  R.timer=setInterval(()=>{ for(let s=0;s<4;s++){ TYPES.forEach(([k,,,lr])=>{ const res=SEQ.trainLast(R.nets[k],task(T,16,R.r[k]),{name:'adam',lr},5); R.norms[k]=res.norms; }); R.it++; }
+    if(R.it%20===0){ TYPES.forEach(([k])=>R.hist[k].push([R.it,acc(R.nets[k])])); rDraw(); if(R.it%100===0) inspect(); } if(R.it>=1000){ rStop(); inspect(); } },15); };
+$('#rReset').onclick=rReset; $('#rSeed').onclick=()=>{ R.seed++; rReset(); }; ML.bindRange('T',rReset); rP.onResize=rDraw; hP.onResize=rDraw;
+
+/* ---------- 3. inside ---------- */
+const sP=new ML.Plot('#iStar',{equal:false}); let iSeed=101;
+function inspect(){ const m=R.nets.lstm; if(!m) return; const T=+$('#T').value, ex=task(T,1,ML.rng(iSeed))[0], st=m.run(ex.xs); const nh=m.nh;
+  let star=0; for(let j=1;j<nh;j++) if(Math.abs(m.Wy[j])>Math.abs(m.Wy[star])) star=j;
+  const rows=Array.from({length:nh},(_,j)=>(j===star?'★ ':'')+'u'+(j+1)), cols=st.map((_,t)=>(t===0||(t+1)%5===0)?String(t+1):'');
+  const M=key=>Array.from({length:nh},(_,j)=>st.map(s=>key==='c'?s.c[j]:s[key][j]));
+  const o={cellW:'minmax(14px,1fr)',rowW:'44px',fmt:()=>'',selRow:star};
+  NLP.heat('#iF',M('f'),rows,cols,Object.assign({max:1,color:'#16a34a'},o)); NLP.heat('#iI',M('i'),rows,cols,Object.assign({max:1,color:'#ea580c'},o)); NLP.heat('#iC',M('c'),rows,cols,Object.assign({diverging:true},o));
+  $('#iSeq').innerHTML=NLP.chips(ex.xs.map((x,t)=>x[0]>0?'+':'−'),{colorBy:(x,t)=>t===0?3:(x==='+'?0:1)});
+  const p=SEQ.predictLast(m,ex.xs); $('#iInfo').innerHTML=`First bit: <b>${ex.y?'+':'−'}</b>. LSTM says P(+) = <b>${p.toFixed(3)}</b> (${(p>0.5)===(ex.y===1)?'correct':'wrong'}). LSTM test accuracy now ${ML.pct(acc(m))}.`;
+  ML.chart(sP,[{pts:st.map((s,t)=>[t+1,s.c[star]]),color:'#7c3aed',width:2.6,dots:true,r:2.4},{pts:st.map((s,t)=>[t+1,s.f[star]]),color:'#16a34a',width:2},{pts:st.map((s,t)=>[t+1,s.i[star]]),color:'#ea580c',width:2}],{xl:'time step'}); }
+$('#iNew').onclick=()=>{ iSeed++; inspect(); }; sP.onResize=inspect;
+
+/* ---------- 5. params ---------- */
+function drawP(){ const d=+$('#pd').value, h=+$('#ph').value, blk=h*(d+h)+h; const rows=[['Plain RNN',blk],['GRU',3*blk],['LSTM',4*blk]];
+  $('#pTbl').innerHTML='<table class="tbl"><tr><th>Cell</th><th>Weights per layer</th><th>PyTorch count</th></tr>'+rows.map(([n,v],k)=>`<tr><td>${n}</td><td>${v.toLocaleString()}</td><td>${(v+[1,3,4][k]*h).toLocaleString()}</td></tr>`).join('')+'</table>'; }
+ML.bindRange('pd',drawP); ML.bindRange('ph',drawP);
+
+ML.onTheme(()=>{ rDraw(); inspect(); });
+rReset(); drawP();
+})();
+</script>
+<script>NLP.nav('nlp','memory'); ML.renderMath(document.body);</script>
+</body>
+</html>

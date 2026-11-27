@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Transformers</title>
+<meta name="description" content="The whole block assembled: a clickable architecture diagram, sinusoidal positional encodings, a parameter calculator that reproduces GPT-2, BERT and LLaMA-7B, and text generation with temperature, top-k and top-p.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP</p>
+  <h1>Transformers: <span class="grad">attention plus everything around it</span></h1>
+  <p class="lede">A transformer is a stack of identical blocks. Each block lets the tokens talk to each other (<a href="../self-attention/">self-attention</a>), then lets each token think on its own (an <a class="term" data-t="mlp">MLP</a>), with <a href="../../nn/residual/">residual connections</a> and <a href="../../nn/normalisation/">normalisation</a> keeping a stack of dozens of blocks trainable. Every part of this page uses pieces from the earlier pages.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#arch">1 · The architecture</a><a href="#pe">2 · Where am I? Positions</a><a href="#params">3 · Counting parameters</a><a href="#gen">4 · Generating text</a><a href="#family">5 · The family</a><a href="#py">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a transformer, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>RNNs read one word at a time, so they are slow to train (step 100 must wait for step 99) and still struggle with long-range links. Attention solves the long-range problem, but on its own it is just a weighted average: it has no notion of word order, and no place to do per-token computation. We want an architecture that keeps attention's direct connections, adds the missing pieces, and can be stacked a hundred layers deep without falling apart.</p>
+      <h3>The idea</h3><p>A <a class="term" data-t="transformer">transformer</a> is a stack of identical blocks. Each block has a self-attention layer (tokens exchange information) and an MLP (each token is processed on its own), wrapped with <a class="term" data-t="residual">residual connections</a> and <a class="term" data-t="layernorm">normalisation</a>. Language models like <a class="term" data-t="gpt">GPT</a> are trained to predict the next token (<a class="term" data-t="autoregressive">autoregressive</a>); then they generate by sampling one token at a time, controlled by <a class="term" data-t="temperature">temperature</a>.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Tokenise and embed the text, add position information.</li><li>Pass it through L blocks: attention then MLP, each with a residual add.</li><li>Turn the final vector into a probability for every vocabulary token.</li><li>Train on huge text (<a class="term" data-t="pretraining">pretraining</a>), then adapt (<a class="term" data-t="fine-tuning">fine-tuning</a>).</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A relay of editors each reading the whole draft and adding notes in the margin. Nobody erases anyone else’s notes; by the last editor the margin says what comes next.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Scales to billions of parameters and very long training</li><li>One design for text, code, images and audio</li><li>Parallel training on GPUs</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Quadratic attention cost limits context length</li><li>Needs enormous data and compute</li><li>Generation is one token at a time</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="transformer">Transformer</a><a class="term" data-t="residual-stream">Residual stream</a><a class="term" data-t="layernorm">LayerNorm</a><a class="term" data-t="autoregressive">Autoregressive</a><a class="term" data-t="temperature">Temperature</a><a class="term" data-t="greedy">Greedy decoding</a><a class="term" data-t="perplexity">Perplexity</a><a class="term" data-t="pretraining">Pretraining</a><a class="term" data-t="fine-tuning">Fine-tuning</a><a class="term" data-t="llm">LLM</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="arch" class="card hl">
+  <h2><span class="num">1</span>The architecture, piece by piece</h2>
+  <div class="grid2">
+    <div><div class="seg" id="aSeg"><button data-v="dec" class="on">Decoder-only (GPT, LLaMA)</button><button data-v="enc">Encoder-decoder (2017 original)</button></div>
+      <svg class="diagram" id="aSvg" viewBox="0 0 520 640" style="margin-top:10px"></svg></div>
+    <div>
+      <h3 style="margin-top:0" id="aTitle"></h3>
+      <div class="mathbox c2" id="aMath"></div>
+      <div class="prose" id="aText"></div>
+      <div class="note">Click any box in the diagram. One block in pre-norm form (used by GPT-2 onwards):
+        \(h\leftarrow h+\operatorname{MHA}(\operatorname{Norm}(h))\), then \(h\leftarrow h+\operatorname{MLP}(\operatorname{Norm}(h))\). The vector \(h\) running up the side is the <a class="term" data-t="residual-stream">residual stream</a>: each block reads from it and adds a correction.</div>
+    </div>
+  </div>
+</section>
+
+<section id="pe" class="card">
+  <h2><span class="num">2</span>Where am I? Positional encodings</h2>
+  <div class="grid2">
+    <div><div class="plot" id="peHeat"></div><p class="hint">Rows: positions 0 (top) to <span id="peN"></span>. Columns: the first <span id="peD"></span> of the \(d\) dimensions. Purple positive, orange negative. Left columns spin fast, right columns slowly, like the hands of a clock.</p></div>
+    <div class="prose">
+      <p>Attention by itself ignores order: shuffle the words and every token gets the same set of scores, just permuted. So position has to be written into the vectors. The 2017 transformer added a fixed pattern of sines and cosines:</p>
+      <div class="mathbox c1">$$\mathrm{PE}(t,2i)=\sin\!\frac{t}{10000^{2i/d}},\qquad \mathrm{PE}(t,2i+1)=\cos\!\frac{t}{10000^{2i/d}}$$</div>
+      <div class="ctl"><label for="peDim"><span>Model width \(d\)</span><output id="peDimOut"></output></label><input type="range" id="peDim" min="8" max="128" step="8" value="64"></div>
+      <div class="plot short" id="peSim"></div>
+      <p class="hint">Dot product \(\mathrm{PE}(20)\cdot\mathrm{PE}(t)\): highest at \(t=20\) and falling with distance, so attention can tell near from far. Shifting by \(k\) is the same rotation at every position, which makes relative offsets easy to learn (see the "previous word" head on the <a href="../self-attention/#heads">self-attention page</a>).</p>
+      <p>GPT-2 and BERT learn one position vector per slot instead. Most recent models use <b>RoPE</b> (rotary embeddings), which rotate the query and key vectors by an angle proportional to position, so \(q_t^\top k_j\) depends only on \(t-j\).</p>
+    </div>
+  </div>
+</section>
+
+<section id="params" class="card hl">
+  <h2><span class="num">3</span>Counting parameters: where the numbers live</h2>
+  <div class="row" style="flex-wrap:wrap;gap:6px"><div class="seg" id="pSeg"><button data-v="gpt2" class="on">GPT-2 small</button><button data-v="bert">BERT-base</button><button data-v="llama">LLaMA-7B</button><button data-v="tiny">Tiny</button></div></div>
+  <div class="grid2" style="margin-top:10px">
+    <div>
+      <div class="ctl"><label for="pV"><span>Vocabulary \(V\)</span><output id="pVOut"></output></label><input type="range" id="pV" min="1000" max="256000" step="1" value="50257"></div>
+      <div class="ctl"><label for="pD"><span>Width \(d\)</span><output id="pDOut"></output></label><input type="range" id="pD" min="64" max="8192" step="64" value="768"></div>
+      <div class="ctl"><label for="pL"><span>Layers \(L\)</span><output id="pLOut"></output></label><input type="range" id="pL" min="1" max="96" value="12"></div>
+      <div class="ctl"><label for="pF"><span>MLP hidden size \(d_{ff}\)</span><output id="pFOut"></output></label><input type="range" id="pF" min="128" max="32768" step="64" value="3072"></div>
+      <div class="ctl"><label for="pN"><span>Context length \(n\)</span><output id="pNOut"></output></label><input type="range" id="pN" min="128" max="32768" step="128" value="1024"></div>
+      <p class="hint" id="pFlags"></p>
+    </div>
+    <div>
+      <div class="stats" id="pStats"></div>
+      <div id="pBars" style="margin-top:10px"></div>
+      <div class="mathbox c3" id="pMath" style="margin-top:10px;font-size:13px"></div>
+    </div>
+  </div>
+  <p class="hint">Presets reproduce the published sizes: GPT-2 small 124 M, BERT-base 110 M, LLaMA-7B 6.74 B. The MLP holds about two thirds of the weights in a big model; the vocabulary table dominates a small one.</p>
+</section>
+
+<section id="gen" class="card">
+  <h2><span class="num">4</span>Generating text: temperature, top-k, top-p</h2>
+  <p class="sub">A language model outputs a probability for every token in the vocabulary; the text you see depends on how you pick from it. To keep it in the browser this model is a word <b>bigram</b> counted from a few paragraphs (it only looks at the previous word, where a transformer looks at the whole context), but the decoding rules are exactly the ones used with GPT-style models.</p>
+  <div class="grid2">
+    <div>
+      <div class="ctl"><label for="gT"><span>Temperature \(\tau\)</span><output id="gTOut"></output></label><input type="range" id="gT" min="0.05" max="2.5" step="0.05" value="1"></div>
+      <div class="ctl"><label for="gK"><span>Top-k (keep the k most likely; 0 = off)</span><output id="gKOut"></output></label><input type="range" id="gK" min="0" max="20" value="0"></div>
+      <div class="ctl"><label for="gP"><span>Top-p (keep the smallest set with this much probability)</span><output id="gPOut"></output></label><input type="range" id="gP" min="0.05" max="1" step="0.05" value="1"></div>
+      <div class="player"><button class="btn primary" id="gStep">Next word</button><button class="btn" id="gRun">Write 30 words</button><button class="btn" id="gGreedy">Greedy</button><button class="btn" id="gClear">Start again</button></div>
+      <div class="mathbox c1" id="gText" style="margin-top:10px;font-size:15px;line-height:1.7;text-align:left"></div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Next word after "<span id="gLast"></span>"</h3><div id="gBars"></div>
+      <div class="stats" id="gStats" style="margin-top:10px"></div>
+      <div class="note"><b>Temperature</b> divides the logits before the softmax: \(p_i\propto e^{z_i/\tau}\). Below 1 sharpens, above 1 flattens. <b>Greedy</b> always takes the top word and soon loops. <b>Top-k</b> and <b>top-p</b> cut off the long tail of unlikely words so a high temperature does not produce nonsense. Grey bars are cut.</div>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: generating text with a decoder-only transformer</h5><ol>
+        <li><span class="kw">input</span> prompt tokens \(t_1..t_n\), \(L\) blocks, temperature \(\tau\)</li>
+        <li><span class="kw">repeat</span> until an end token or the length limit</li>
+        <li class="i1">\(x\leftarrow\operatorname{Embed}(t)+\operatorname{Pos}\) <span class="cm">one vector per token</span></li>
+        <li class="i1"><span class="kw">for</span> each block \(l=1..L\) <span class="kw">do</span></li>
+        <li class="i2">\(x\leftarrow x+\operatorname{CausalAttn}(\operatorname{LN}(x))\) <span class="cm">tokens exchange information</span></li>
+        <li class="i2">\(x\leftarrow x+\operatorname{MLP}(\operatorname{LN}(x))\) <span class="cm">each token thinks on its own</span></li>
+        <li class="i1">\(z\leftarrow W_{\text{out}}\operatorname{LN}(x_{\text{last}})\) <span class="cm">logits over the whole vocabulary</span></li>
+        <li class="i1">\(p\leftarrow\operatorname{softmax}(z/\tau)\); sample \(t_{n+1}\sim p\) <span class="cm">or top-k / top-p</span></li>
+        <li class="i1">append \(t_{n+1}\) to the tokens <span class="cm">the output becomes input</span></li>
+        <li><span class="kw">return</span> the generated tokens</li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: the KV cache, and where the compute goes</summary><div>
+        <p>Because of the causal mask, the keys and values of earlier tokens never change when a new token is appended. So a real implementation stores them (the <b>KV cache</b>) and, at each new step, runs the blocks only for the newest token: one query row attending over the cached keys. That turns generation from quadratic work per step into linear, at the price of memory \(2\times L\times n\times d\) numbers per sequence, which is why long contexts are expensive to serve.</p>
+        <p>Inside each block, the MLP (usually \(d\to4d\to d\)) holds about two thirds of the parameters, and attention holds the rest. A useful rule of thumb: a forward pass costs about \(2N\) floating-point operations per token for a model with \(N\) parameters, and training about \(6N\) (forward plus a backward pass twice as expensive).</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="family" class="card">
+  <h2><span class="num">5</span>The family</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Type</th><th>Attention</th><th>Trained to</th><th>Examples</th><th>Good at</th></tr>
+    <tr><td>Encoder-only</td><td>bidirectional self-attention</td><td>fill in masked words (<a class="term" data-t="mlm">MLM</a>)</td><td>BERT, RoBERTa, DeBERTa</td><td>classification, search embeddings, tagging</td></tr>
+    <tr><td>Decoder-only</td><td>causal self-attention</td><td>predict the next token</td><td>GPT series, LLaMA, Mistral, most chat models</td><td>generation, and with enough scale, almost everything</td></tr>
+    <tr><td>Encoder-decoder</td><td>bidirectional encoder, causal decoder, <a href="../cross-attention/">cross-attention</a> between</td><td>map input to output (span corruption, translation)</td><td>original transformer, T5, BART, Whisper</td><td>translation, summarisation, speech to text</td></tr>
+  </table></div>
+  <h3>What changed after 2017</h3>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>2017 original</th><th>Common today</th><th>Why</th></tr>
+    <tr><td>post-norm (normalise after adding)</td><td>pre-norm</td><td>clean residual path, stable deep training</td></tr>
+    <tr><td><a class="term" data-t="layernorm">LayerNorm</a></td><td><a class="term" data-t="rmsnorm">RMSNorm</a></td><td>cheaper, works as well</td></tr>
+    <tr><td>sinusoidal positions</td><td>RoPE</td><td>relative positions, extends to longer contexts</td></tr>
+    <tr><td>ReLU MLP</td><td>SwiGLU (gated, 3 matrices)</td><td>better quality at equal compute</td></tr>
+    <tr><td>multi-head attention</td><td>grouped-query attention</td><td>smaller KV cache, faster generation</td></tr>
+    <tr><td>dense MLP</td><td>mixture of experts in many large models</td><td>more parameters without more compute per token</td></tr>
+  </table></div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> transformers <span class="k">import</span> AutoTokenizer, AutoModelForCausalLM
+
+tok = AutoTokenizer.from_pretrained(<span class="s">"gpt2"</span>)
+model = AutoModelForCausalLM.from_pretrained(<span class="s">"gpt2"</span>)
+print(sum(p.numel() <span class="k">for</span> p <span class="k">in</span> model.parameters()))     <span class="c"># 124,439,808</span>
+
+ids = tok(<span class="s">"The river was quiet and"</span>, return_tensors=<span class="s">"pt"</span>).input_ids
+out = model.generate(ids, max_new_tokens=<span class="s">30</span>, do_sample=<span class="k">True</span>,
+                     temperature=<span class="s">0.8</span>, top_k=<span class="s">50</span>, top_p=<span class="s">0.95</span>)
+print(tok.decode(out[<span class="s">0</span>]))
+
+<span class="c"># one pre-norm block written out</span>
+<span class="k">import</span> torch.nn <span class="k">as</span> nn
+<span class="k">class</span> Block(nn.Module):
+    <span class="k">def</span> __init__(self, d, h):
+        super().__init__()
+        self.n1, self.n2 = nn.LayerNorm(d), nn.LayerNorm(d)
+        self.attn = nn.MultiheadAttention(d, h, batch_first=<span class="k">True</span>)
+        self.mlp = nn.Sequential(nn.Linear(d, <span class="s">4</span>*d), nn.GELU(), nn.Linear(<span class="s">4</span>*d, d))
+    <span class="k">def</span> forward(self, x, mask):
+        a = self.n1(x)
+        x = x + self.attn(a, a, a, attn_mask=mask, need_weights=<span class="k">False</span>)[<span class="s">0</span>]
+        <span class="k">return</span> x + self.mlp(self.n2(x))</pre>
+</section>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette();
+
+/* ---------- 1. architecture ---------- */
+const PARTS={
+ tok:{t:'Tokens in',m:'\\text{"The cat sat"}\\to[464,\\,3797,\\,3332]',x:'Text is split into subword tokens and each becomes an integer id. See <a href="../tokenisation/">tokenisation</a>.'},
+ emb:{t:'Token embedding + position',m:'h^{(0)}_t=E[\\text{id}_t]+\\mathrm{PE}(t)',x:'Each id picks a row of a \\(V\\times d\\) table (<a href="../embeddings/">embeddings</a>), and position information is added (section 2). This is the start of the residual stream.'},
+ norm:{t:'Normalisation',m:'\\operatorname{LN}(h)=\\gamma\\odot\\frac{h-\\mu}{\\sigma}+\\beta',x:'Rescales each token’s vector to a standard size before a sub-layer reads it, so no layer sees exploding or vanishing inputs. See <a href="../../nn/normalisation/">normalisation</a>.'},
+ attn:{t:'Masked multi-head self-attention',m:'\\operatorname{softmax}\\!\\Big(\\frac{QK^\\top}{\\sqrt{d_k}}+M\\Big)V',x:'The only place tokens exchange information. \\(M\\) is the causal mask (\\(-\\infty\\) above the diagonal). See <a href="../self-attention/">self-attention</a>.'},
+ add:{t:'Residual add',m:'h\\leftarrow h+F(h)',x:'The sub-layer’s output is added to its input rather than replacing it, giving gradients a direct path through all \\(L\\) blocks. See <a href="../../nn/residual/">residual connections</a>.'},
+ mlp:{t:'MLP (feed-forward)',m:'\\operatorname{MLP}(x)=W_2\\,\\operatorname{GELU}(W_1x+b_1)+b_2',x:'Applied to every token separately, usually widening to \\(4d\\) and back. It holds most of the parameters and is thought to store much of the model’s factual knowledge. See <a href="../../nn/activations/">activations</a>.'},
+ cross:{t:'Cross-attention',m:'\\operatorname{softmax}\\!\\Big(\\frac{Q_{\\text{dec}}K_{\\text{enc}}^\\top}{\\sqrt{d_k}}\\Big)V_{\\text{enc}}',x:'Only in encoder-decoder models: decoder tokens query the encoder’s output. See <a href="../cross-attention/">cross-attention</a>.'},
+ enc:{t:'Encoder stack',m:'N\\times[\\text{self-attn (no mask)},\\ \\text{MLP}]',x:'Reads the whole input in both directions. Its final vectors become the keys and values for every cross-attention layer of the decoder.'},
+ head:{t:'Output head',m:'p(\\text{next}=i)=\\operatorname{softmax}(W_U\\,\\operatorname{LN}(h^{(L)}_t))_i',x:'A final norm and a \\(d\\times V\\) matrix (often the embedding table reused, "tied") turn the last vector into one logit per vocabulary token. Training minimises <a class="term" data-t="cross-entropy">cross-entropy</a> with the true next token at every position at once.'},
+ rep:{t:'× L blocks',m:'L=12\\ (\\text{GPT-2 small}),\\ 32\\ (\\text{LLaMA-7B}),\\ 96\\ (\\text{GPT-3})',x:'The same block design repeated with different weights. Early blocks tend to handle local syntax, later ones longer-range meaning, though roles overlap.'}};
+let aMode='dec', aSel='attn';
+function drawArch(){ const P=P0(); let s='';
+  const box=(id,x,y,w,h,label,col)=>`<g data-p="${id}" style="cursor:pointer"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="${col}" opacity="${id===aSel?.4:.17}" stroke="${col}" stroke-width="${id===aSel?3:1.2}"/><text x="${x+w/2}" y="${y+h/2+5}" text-anchor="middle" font-size="14" font-weight="600" fill="${P.ink}">${label}</text></g>`;
+  const arrow=(x1,y1,x2,y2)=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${P.muted}" stroke-width="2" marker-end="url(#ah)"/>`;
+  s+=`<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="${P.muted}"/></marker></defs>`;
+  const X=aMode==='dec'?150:250, W=220;
+  if(aMode==='enc'){ s+=box('enc',20,250,180,150,'Encoder × N',P.c3); s+=box('tok',20,580,180,40,'Source tokens',P.muted); s+=arrow(110,578,110,402); }
+  s+=box('tok',X,590,W,40,aMode==='dec'?'Tokens':'Target tokens (so far)',P.muted); s+=arrow(X+W/2,588,X+W/2,566);
+  s+=box('emb',X,520,W,44,'Embedding + position',P.c1); s+=arrow(X+W/2,518,X+W/2,500);
+  const top=aMode==='dec'?110:60, bot=500; s+=`<g data-p="rep" style="cursor:pointer"><rect x="${X-14}" y="${top}" width="${W+28}" height="${bot-top}" rx="14" fill="none" stroke="${P.c2}" stroke-width="${aSel==='rep'?3:1.5}" stroke-dasharray="6 5"/><text x="${X+W+20}" y="${top+20}" font-size="14" font-weight="700" fill="${P.c2}">× L</text></g>`;
+  const rows=aMode==='dec'?[['norm','Norm'],['attn','Masked self-attention'],['add','+ residual'],['norm','Norm'],['mlp','MLP'],['add','+ residual']]:[['norm','Norm'],['attn','Masked self-attention'],['add','+ residual'],['norm','Norm'],['cross','Cross-attention'],['add','+ residual'],['norm','Norm'],['mlp','MLP'],['add','+ residual']];
+  const step=(bot-top-24)/rows.length; rows.forEach(([id,l],i)=>{ const y=bot-12-(i+1)*step+4; s+=box(id,X,y,W,step-12,l,{norm:P.c5,attn:P.c1,add:P.c2,mlp:P.c4,cross:P.c3}[id]); if(i<rows.length-1) s+=arrow(X+W/2,y-1,X+W/2,y-9); });
+  if(aMode==='enc'){ const cy=bot-12-5*step+4+(step-12)/2; s+=`<path d="M200,325 C230,325 220,${cy} ${X-2},${cy}" fill="none" stroke="${P.c3}" stroke-width="2.5" marker-end="url(#ah)"/><text x="206" y="315" font-size="11" fill="${P.c3}">K, V</text>`; }
+  s+=arrow(X+W/2,top+2,X+W/2,top-12); s+=box('head',X,(aMode==='dec'?40:4),W,aMode==='dec'?56:44,'Norm → linear → softmax',P.c6||P.c1);
+  $('#aSvg').innerHTML=s; $('#aSvg').querySelectorAll('g[data-p]').forEach(g=>g.addEventListener('click',()=>{ aSel=g.dataset.p; drawArch(); }));
+  const p=PARTS[aSel]; $('#aTitle').textContent=p.t; $('#aMath').innerHTML=ML.tex(p.m,true); $('#aText').innerHTML='<p>'+p.x+'</p>'; if(window.renderMathInElement) renderMathInElement($('#aText'),{delimiters:[{left:'\\(',right:'\\)',display:false}]}); }
+ML.bindSeg('aSeg',v=>{ aMode=v; ML.setSeg('aSeg',v); if(aSel==='cross'||aSel==='enc') aSel='attn'; drawArch(); });
+
+/* ---------- 2. positional encodings ---------- */
+const peP=new ML.Plot('#peSim',{equal:false}), peH=new ML.Plot('#peHeat',{equal:false});
+const PE=(t,d)=>Array.from({length:d},(_,k)=>{ const i=Math.floor(k/2), w=1/Math.pow(10000,2*i/d); return k%2?Math.cos(t*w):Math.sin(t*w); });
+function drawPE(){ const P=P0(), d=+$('#peDim').value, n=40, show=Math.min(d,32); $('#peDimOut').textContent=d; $('#peN').textContent=n-1; $('#peD').textContent=show;
+  const M=Array.from({length:n},(_,t)=>PE(t,d).slice(0,show));
+  peH.clear(); const c=peH.ctx, L=26, T=4, cw=(peH.w-L-4)/show, ch=(peH.h-T-18)/n;
+  M.forEach((r,t)=>r.forEach((v,k)=>{ c.fillStyle=NLP.div(v); c.fillRect(L+k*cw,T+t*ch,Math.ceil(cw),Math.ceil(ch)); }));
+  c.save(); c.fillStyle=P.muted; c.font='10px Inter,system-ui'; c.textAlign='right'; for(let t=0;t<n;t+=5) c.fillText(t,L-4,T+t*ch+ch); c.textAlign='center'; for(let k=0;k<show;k+=8) c.fillText('dim '+k,L+k*cw+cw/2,peH.h-4); c.restore();
+  const ref=PE(20,d), pts=[]; for(let t=0;t<n;t++) pts.push([t,NLP.dot(ref,PE(t,d))]);
+  ML.chart(peP,[{pts,color:P.c1,width:2.6}],{xl:'position t',vline:20}); }
+$('#peDim').addEventListener('input',drawPE); peP.onResize=drawPE; peH.onResize=drawPE;
+
+/* ---------- 3. parameter calculator ---------- */
+const PRE={gpt2:{V:50257,D:768,L:12,F:3072,N:1024,swiglu:false,bias:true,learnedPos:true,tied:true,types:0,pooler:false,name:'GPT-2 small'},
+  bert:{V:30522,D:768,L:12,F:3072,N:512,swiglu:false,bias:true,learnedPos:true,tied:true,types:2,pooler:true,name:'BERT-base'},
+  llama:{V:32000,D:4096,L:32,F:11008,N:4096,swiglu:true,bias:false,learnedPos:false,tied:false,types:0,pooler:false,name:'LLaMA-7B'},
+  tiny:{V:8000,D:256,L:4,F:1024,N:512,swiglu:false,bias:true,learnedPos:true,tied:true,types:0,pooler:false,name:'Tiny'}};
+let cfg=Object.assign({},PRE.gpt2);
+const fN=x=>x>=1e9?(x/1e9).toFixed(2)+' B':x>=1e6?(x/1e6).toFixed(1)+' M':x>=1e3?(x/1e3).toFixed(1)+' k':String(Math.round(x));
+function setSliders(){ [['pV','V'],['pD','D'],['pL','L'],['pF','F'],['pN','N']].forEach(([id,k])=>$('#'+id).value=cfg[k]); }
+function drawParams(){ const P=P0(); ['V','D','L','F','N'].forEach(k=>{ cfg[k]=+$('#p'+k).value; $('#p'+k+'Out').textContent=cfg[k].toLocaleString(); });
+  const {V,D,L,F,N}=cfg, b=cfg.bias?1:0;
+  const emb=V*D+(cfg.learnedPos?N*D:0)+cfg.types*D+(cfg.types?2*D:0);
+  const attn=4*D*D+b*4*D, mlp=cfg.swiglu?3*D*F:2*D*F+b*(F+D), norms=cfg.bias?4*D:2*D;
+  const blocks=L*(attn+mlp+norms), fin=cfg.types?0:(cfg.bias?2*D:D), out=cfg.tied?0:V*D, pool=cfg.pooler?D*D+D:0;
+  const tot=emb+blocks+fin+out+pool;
+  $('#pFlags').innerHTML=`${cfg.name}: ${cfg.swiglu?'SwiGLU MLP (3 matrices)':'GELU MLP (2 matrices)'}, ${cfg.bias?'with':'no'} biases, ${cfg.learnedPos?'learned positions':'RoPE (no position parameters)'}, ${cfg.tied?'output tied to embeddings':'separate output matrix'}${cfg.types?', segment embeddings and pooler':''}.`;
+  $('#pStats').innerHTML=[['c1',fN(tot),'parameters'],['c2',(tot*2/1e9).toFixed(2)+' GB','weights in 16-bit'],['c3',fN(2*L*D*2)+'B','KV cache per token (16-bit)'],['c4',(2*tot/1e9).toFixed(2)+' GFLOP','per generated token (≈ 2 × params)']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  $('#pBars').innerHTML=NLP.bars([{label:'embeddings',value:emb,color:P.c1},{label:'attention',value:L*attn,color:P.c3},{label:'MLP',value:L*mlp,color:P.c4},{label:'norms',value:L*norms+fin,color:P.c5},{label:'output',value:out+pool,color:P.c2}],{max:tot,fmt:v=>(100*v/tot).toFixed(1)+'%',lw:'90px'});
+  $('#pMath').innerHTML=ML.tex(`\\begin{aligned}\\text{per block}&=\\underbrace{4d^2${b?'+4d':''}}_{\\text{attention}}+\\underbrace{${cfg.swiglu?'3dd_{ff}':'2dd_{ff}'+(b?'+d_{ff}+d':'')}}_{\\text{MLP}}+\\underbrace{${norms/D}d}_{\\text{norms}}=${fN(attn+mlp+norms)}\\\\ \\text{total}&=${fN(emb)}+${L}\\times${fN(attn+mlp+norms)}${out?'+'+fN(out):''}${pool?'+'+fN(pool):''}=${fN(tot)}\\end{aligned}`,true); }
+['pV','pD','pL','pF','pN'].forEach(id=>$('#'+id).addEventListener('input',drawParams));
+ML.bindSeg('pSeg',v=>{ cfg=Object.assign({},PRE[v]); ML.setSeg('pSeg',v); setSliders(); drawParams(); });
+
+/* ---------- 4. decoding ---------- */
+const CORPUS=`the river was quiet in the morning and the old boat sat by the bank . the cat watched the river from the window and the dog slept by the door .
+the girl took the boat down the river to the town . the town was busy in the morning and quiet at night . the old man sold fish by the river and the girl bought fish for the cat .
+the dog ran to the river and the cat ran to the door . in the evening the girl sat by the window and read a book about the sea . the sea was wide and the boat was small .
+the man said the river was cold in the morning . the girl said the sea was cold at night . the cat slept by the window and the dog watched the door .
+a small boat came down the river in the evening . the old man and the girl took the fish to the town . the town was quiet and the river was wide .`;
+const toks=CORPUS.split(/\s+/).filter(Boolean), BI={}; for(let i=0;i<toks.length-1;i++){ const a=toks[i], b=toks[i+1]; (BI[a]=BI[a]||{})[b]=(BI[a][b]||0)+1; }
+let gen=['the'], gR=ML.rng(5);
+function dist(){ const last=gen[gen.length-1], c=BI[last]||BI['.'], ws=Object.keys(c), tau=+$('#gT').value, k=+$('#gK').value, pp=+$('#gP').value;
+  const logit=ws.map(w=>Math.log(c[w])), p=NLP.softmax(logit,tau), ord=ws.map((w,i)=>({w,p:p[i]})).sort((a,b)=>b.p-a.p);
+  let cum=0; ord.forEach((o,i)=>{ o.keep=(k===0||i<k)&&(cum<pp||i===0); cum+=o.p; });
+  const z=ord.filter(o=>o.keep).reduce((s,o)=>s+o.p,0); ord.forEach(o=>o.q=o.keep?o.p/z:0); return ord; }
+function pick(greedy){ const d=dist(); if(greedy) return d[0].w; let u=gR(); for(const o of d){ if(!o.keep) continue; if(u<o.q) return o.w; u-=o.q; } return d[0].w; }
+function drawGen(){ const P=P0(); $('#gTOut').textContent=(+$('#gT').value).toFixed(2); $('#gKOut').textContent=+$('#gK').value||'off'; $('#gPOut').textContent=(+$('#gP').value).toFixed(2);
+  $('#gText').innerHTML=gen.map((w,i)=>i===gen.length-1?`<b style="color:var(--c1)">${NLP.esc(w)}</b>`:NLP.esc(w)).join(' ');
+  $('#gLast').textContent=gen[gen.length-1]; const d=dist();
+  $('#gBars').innerHTML=NLP.bars(d.slice(0,10).map(o=>({label:o.w,value:o.p,color:o.keep?P.c1:P.muted})),{max:Math.max(...d.map(o=>o.p)),fmt:v=>(v*100).toFixed(1)+'%',lw:'80px'});
+  const H=-d.reduce((s,o)=>s+(o.p>0?o.p*Math.log2(o.p):0),0);
+  $('#gStats').innerHTML=`<div class="stat c1"><b>${d.filter(o=>o.keep).length} / ${d.length}</b><span>candidate words kept</span></div><div class="stat c3"><b>${H.toFixed(2)} bits</b><span>entropy of the distribution (higher = more random)</span></div>`; }
+['#gT','#gK','#gP'].forEach(id=>$(id).addEventListener('input',drawGen));
+$('#gStep').addEventListener('click',()=>{ gen.push(pick(false)); drawGen(); });
+$('#gGreedy').addEventListener('click',()=>{ for(let i=0;i<20;i++) gen.push(pick(true)); drawGen(); });
+$('#gRun').addEventListener('click',()=>{ for(let i=0;i<30;i++) gen.push(pick(false)); drawGen(); });
+$('#gClear').addEventListener('click',()=>{ gen=['the']; drawGen(); });
+
+drawArch(); drawPE(); setSliders(); drawParams(); drawGen();
+})();
+</script>
+<script>NLP.nav('nlp','transformers'); ML.renderMath(document.body);</script>
+</body>
+</html>

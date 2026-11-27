@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recurrent Neural Networks</title>
+<meta name="description" content="An RNN reading a sentence one word at a time with its hidden state shown at every step, trained live on a memory task, vanishing and exploding gradients through time, and a character-level language model that writes text in your browser.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP</p>
+  <h1>Recurrent networks: <span class="grad">reading in order</span></h1>
+  <p class="lede">Text is a sequence: the meaning of a word depends on what came before it. A recurrent neural network reads one token at a time and carries a running summary, its hidden state, from each step to the next. The same small set of weights is reused at every step, so it can read sequences of any length.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#unroll">1 · Unrolled through time</a><a href="#memo">2 · Can it remember?</a><a href="#vanish">3 · Vanishing and exploding</a><a href="#lm">4 · A character language model</a><a href="#maths">5 · The maths</a><a href="#code">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a recurrent neural network, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A sentence, a sound clip or a price history has an order, and its length changes from example to example. A plain network takes a fixed-size input and has no idea that word 5 comes after word 4. We want a model that reads one item at a time, carries forward what it has seen so far, and uses the same weights at every step so it works for any length.</p>
+      <h3>The idea</h3><p>An <a class="term" data-t="rnn">RNN</a> reads a sequence one item at a time and keeps a running summary, its <a class="term" data-t="hidden-state">hidden state</a>. At each step it mixes the new input with the old summary using the same weights, so it can handle sequences of any length. It is trained by <a class="term" data-t="bptt">backpropagation through time</a>, which runs the chain rule backwards through every step.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Start with a hidden state of zeros.</li><li>For each token: new state = tanh(input weights × token + recurrent weights × old state + bias).</li><li>Read predictions off the hidden state.</li><li>Train with BPTT; clip big gradients, and expect the <a class="term" data-t="vanishing-gradient">vanishing gradient</a> for long gaps.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Reading a novel while keeping a one-line note of the plot so far, rewriting the note after every sentence. Anything that falls off the note is gone.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Handles any sequence length with fixed parameters</li><li>Natural fit for streaming input</li><li>Small and simple</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Forgets long-range information (vanishing gradients)</li><li>Must run step by step, so it is slow to train</li><li>Largely replaced by transformers for text</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="rnn">RNN</a><a class="term" data-t="hidden-state">Hidden state</a><a class="term" data-t="bptt">BPTT</a><a class="term" data-t="vanishing-gradient">Vanishing gradient</a><a class="term" data-t="tanh">tanh</a><a class="term" data-t="gradient">Gradient</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="unroll" class="card hl">
+  <h2><span class="num">1</span>Unrolled through time</h2>
+  <p class="sub">Type a short sentence. Each word gets a fixed 4-number embedding; a tiny RNN with 6 hidden units (random but fixed weights) reads it. Click a word to see that step's calculation.</p>
+  <input class="txt" id="sent" value="the cat sat on the mat">
+  <svg class="diagram" id="unSvg" viewBox="0 0 720 210" style="margin-top:10px"></svg>
+  <div class="grid2" style="margin-top:8px">
+    <div><h3 style="margin-top:0">Hidden state after each word</h3><div id="hHeat"></div><p class="hint">Rows are time steps, columns are the 6 hidden units. Purple positive, orange negative. Every row depends on all the words above it.</p></div>
+    <div><h3 style="margin-top:0">Step <span id="stepName"></span></h3><div class="mathbox c1" id="stepCalc" style="font-size:13px"></div><p class="hint">The same \(W_{xh}\), \(W_{hh}\) and \(b\) are used at every step: that weight sharing is what "recurrent" means.</p></div>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: RNN forward pass and backpropagation through time</h5><ol>
+        <li><span class="kw">input</span> sequence \(x_1..x_T\), targets \(y_1..y_T\), weights \(W_{xh},W_{hh},W_{hy}\)</li>
+        <li>\(h_0\leftarrow0\)</li>
+        <li><span class="kw">for</span> \(t=1\) <span class="kw">to</span> \(T\) <span class="kw">do</span> <span class="cm">forward, left to right</span></li>
+        <li class="i1">\(h_t\leftarrow\tanh(W_{xh}x_t+W_{hh}h_{t-1}+b)\) <span class="cm">same weights every step</span></li>
+        <li class="i1">\(\hat y_t\leftarrow\operatorname{softmax}(W_{hy}h_t)\); \(\mathcal L\mathrel{+}=-\log\hat y_t[y_t]\)</li>
+        <li>\(g_h\leftarrow0\)</li>
+        <li><span class="kw">for</span> \(t=T\) <span class="kw">down to</span> 1 <span class="kw">do</span> <span class="cm">backward, right to left</span></li>
+        <li class="i1">\(g_h\leftarrow g_h+W_{hy}^\top(\hat y_t-y_t)\) <span class="cm">error from this step’s output</span></li>
+        <li class="i1">\(\delta\leftarrow g_h\odot(1-h_t^2)\); add \(\delta x_t^\top\) to \(\nabla W_{xh}\), \(\delta h_{t-1}^\top\) to \(\nabla W_{hh}\)</li>
+        <li class="i1">\(g_h\leftarrow W_{hh}^\top\delta\) <span class="cm">pass the error one step back in time</span></li>
+        <li><span class="kw">return</span> the summed gradients, then take a step <span class="cm">clip their norm first</span></li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: why long-range gradients vanish or explode</summary><div>
+        <p>The error at step \(T\) reaches step \(t\) through the chain \(\frac{\partial h_T}{\partial h_t}=\prod_{k=t+1}^{T}\operatorname{diag}(1-h_k^2)\,W_{hh}\). That is the same matrix \(W_{hh}\) multiplied in \(T-t\) times. If its largest singular value times the typical tanh slope is below 1, the product shrinks geometrically, and the model cannot learn that word 3 matters for word 40. If it is above 1, the product blows up and one update can wreck the weights.</p>
+        <p>Exploding is easy to treat: <b>gradient clipping</b> rescales \(\nabla\) whenever \(\lVert\nabla\rVert\) exceeds a threshold. Vanishing is the deep problem, and it is what the LSTM's additive cell state (next page) and, later, attention were invented to fix. Truncated BPTT, which only backpropagates for the last few dozen steps, accepts the limitation to save memory and time.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="memo" class="card">
+  <h2><span class="num">2</span>Can it remember? A memory test, trained live</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>The task: a sequence of \(T\) random bits (+1 or −1) is fed in one at a time. A flag marks the first step. After the last bit the network must answer: <b>what was the first bit?</b> Everything in between is noise to be ignored.</p>
+      <p>The answer only depends on step 1, so the error signal must travel back through all \(T\) steps to reach it. Short sequences (\(T\) up to about 15) are learned in seconds. At \(T=30\) a plain RNN usually stays near a coin flip: by the time the gradient reaches step 1 it has shrunk by dozens of orders of magnitude (chart below). Now and then an initialisation gets lucky and finds a "latch" early, so try a few with <b>New seed</b>.</p>
+      <div class="ctl"><label for="T"><span>Sequence length \(T\)</span><output id="TOut"></output></label><input type="range" id="T" min="3" max="60" value="30"></div>
+      <div class="player"><button class="btn primary" id="mRun">Train RNN</button><button class="btn" id="mReset">Reset</button><button class="btn" id="mSeed">New seed</button><span class="pos" id="mIt"></span></div>
+      <div class="stats" id="mStats" style="margin-top:10px"></div>
+      <div class="note">The <a href="../memory/#race">LSTM and GRU page</a> runs the same test with gated cells, which usually pass it within a few hundred steps at \(T=30\).</div>
+    </div>
+    <div>
+      <div class="plot short" id="mAcc"></div><p class="hint">Test accuracy (200 fresh sequences) during training. 50% = guessing.</p>
+      <div class="plot short" id="mGrad"></div><p class="hint">Size of the gradient \(\lVert\partial\mathcal L/\partial h_t\rVert\) reaching each time step \(t\) on the latest batch (log scale). Step 1, the only one that matters, is on the left.</p>
+    </div>
+  </div>
+</section>
+
+<section id="vanish" class="card">
+  <h2><span class="num">3</span>Vanishing and exploding gradients</h2>
+  <div class="grid2">
+    <div><div class="plot wide" id="vPlot"></div>
+      <div class="ctl" style="margin-top:8px"><label for="wsc"><span>Size of the recurrent weights (largest singular value of \(W_{hh}\))</span><output id="wscOut"></output></label><input type="range" id="wsc" min="0.3" max="2.5" step="0.05" value="0.9"></div>
+      <p class="hint">\(\lVert\partial h_{50}/\partial h_t\rVert\) for a random RNN with 16 tanh units, averaged over 5 random inputs, log scale. Below about 1 it collapses; above, tanh saturation fights the growth but gradients can still blow up.</p></div>
+    <div class="prose">
+      <p>Backpropagation through time multiplies one Jacobian per step:</p>
+      <div class="mathbox c2">$$\frac{\partial h_T}{\partial h_t}=\prod_{k=t+1}^{T}\operatorname{diag}\!\big(1-h_k^2\big)\,W_{hh}$$</div>
+      <p>If the factors shrink vectors (largest singular value of \(W_{hh}\) times the tanh slope below 1), the product <b>vanishes</b> exponentially: the network cannot learn anything that depends on the distant past. If they stretch vectors it can <b>explode</b>, producing huge, destabilising updates.</p>
+      <ul><li><b>Exploding:</b> fixed by <i>gradient clipping</i>: if \(\lVert g\rVert>\tau\), rescale \(g\leftarrow\tau g/\lVert g\rVert\). Used in section 2 (\(\tau=5\)).</li>
+      <li><b>Vanishing:</b> needs a change of architecture: an additive memory path whose Jacobian is close to the identity. That is the <a href="../memory/">LSTM</a> cell state, the same trick as a <a href="../../nn/residual/">residual connection</a>, and ultimately <a href="../attention/">attention</a>, which connects every step to every other step directly.</li></ul>
+    </div>
+  </div>
+</section>
+
+<section id="lm" class="card hl">
+  <h2><span class="num">4</span>A character-level language model</h2>
+  <p class="sub">An RNN with 48 hidden units learns to predict the next character of a short text. Then it writes: feed a character in, sample the next from its softmax, feed that back in. This is how text generation worked before transformers (Karpathy's char-RNN).</p>
+  <div class="grid2">
+    <div>
+      <textarea class="txt" id="lmText" rows="4">to be or not to be that is the question. to sleep perchance to dream. the rest is silence. to be is to do. to do is to be.</textarea>
+      <div class="player" style="margin-top:8px"><button class="btn primary" id="lmRun">Train</button><button class="btn" id="lmReset">Reset</button><span class="pos" id="lmIt"></span></div>
+      <div class="ctl" style="margin-top:8px"><label for="temp"><span>Sampling <a class="term" data-t="temperature">temperature</a></span><output id="tempOut"></output></label><input type="range" id="temp" min="0.1" max="2" step="0.05" value="0.6"></div>
+      <div class="plot short" id="lmLoss"></div><p class="hint">Average cross-entropy per character (nats). Guessing uniformly among <span id="nchar"></span> characters gives <span id="unif"></span>.</p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Sample (seeded with "t")</h3>
+      <p class="mono" id="lmSample" style="font-size:14px;min-height:90px;white-space:pre-wrap;background:var(--soft);border-radius:12px;padding:10px 12px"></p>
+      <button class="btn" id="lmSampleBtn">New sample</button>
+      <p class="hint">Low temperature: confident, repetitive. High temperature: creative, then nonsense. Early on the samples are random letters; then spaces and common words appear; then whole phrases.</p>
+    </div>
+  </div>
+</section>
+
+<section id="maths" class="card">
+  <h2><span class="num">5</span>The maths</h2>
+  <div class="grid2 prose">
+    <div><h3>Forward</h3>
+      <div class="mathbox c1">$$\begin{aligned}h_t&=\tanh\big(W_{xh}x_t+W_{hh}h_{t-1}+b_h\big)\\ \hat y_t&=\operatorname{softmax}(W_{hy}h_t+b_y)\end{aligned}$$</div>
+      <p>\(h_0=0\). For classification of the whole sequence use only the last \(h_T\); for language modelling predict at every step and sum the losses.</p>
+      <p>Parameters: \(h(d+h+1)+o(h+1)\) for input size \(d\), hidden size \(h\), output size \(o\), whatever the sequence length.</p></div>
+    <div><h3>Backpropagation through time</h3>
+      <div class="mathbox c3">$$\begin{aligned}\delta_t&=\frac{\partial\mathcal L}{\partial h_t}=W_{hy}^\top(\hat y_t-y_t)+W_{hh}^\top\big[(1-h_{t+1}^2)\odot\delta_{t+1}\big]\\ \frac{\partial\mathcal L}{\partial W_{hh}}&=\sum_t\big[(1-h_t^2)\odot\delta_t\big]h_{t-1}^\top\end{aligned}$$</div>
+      <p>Unroll the network over the sequence, run ordinary backpropagation, and add up the gradients of the shared weights over all steps. <b>Truncated BPTT</b> stops after a fixed number of steps to save memory on long texts.</p></div>
+  </div>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">6</span>The same thing in Python (PyTorch)</h2>
+<pre class="code">rnn = nn.RNN(input_size=<span class="s">32</span>, hidden_size=<span class="s">64</span>, batch_first=<span class="k">True</span>)    <span class="c"># tanh RNN</span>
+head = nn.Linear(<span class="s">64</span>, vocab_size)
+out, h_last = rnn(embed(token_ids))       <span class="c"># out: (batch, T, 64), one hidden state per step</span>
+loss = F.cross_entropy(head(out).transpose(<span class="s">1</span>, <span class="s">2</span>), next_ids)
+loss.backward()                           <span class="c"># backpropagation through time</span>
+torch.nn.utils.clip_grad_norm_(params, max_norm=<span class="s">5.0</span>)   <span class="c"># tame exploding gradients</span></pre>
+</section>
+
+<p class="foot">Part of the <a href="../">NLP series</a>. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/nn.js"></script>
+<script src="../../assets/seq.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML; const esc=NLP.esc;
+const f2=v=>(v>=0?'\\phantom{-}':'')+v.toFixed(2);
+
+/* ---------- 1. unrolled ---------- */
+const NH=6, ND=4, r0=ML.rng(42); const Wx=NLP.randM(NH,ND,r0,0.8), Wh=NLP.randM(NH,NH,r0,0.45), bh=Array.from({length:NH},()=>r0.gauss()*0.1);
+function emb(w){ let s=0; for(const ch of w) s=(s*31+ch.charCodeAt(0))>>>0; const r=ML.rng(s%100000+7); return Array.from({length:ND},()=>+(r.gauss()*0.9).toFixed(2)); }
+let sel=0;
+function unroll(){ const words=($('#sent').value.toLowerCase().match(/[a-z']+/g)||['']).slice(0,10); const H=[]; let h=new Array(NH).fill(0); const pre=[];
+  words.forEach(w=>{ const x=emb(w), a=NLP.mv(Wx,x).map((v,i)=>v+NLP.mv(Wh,h)[i]+bh[i]); pre.push({x,hp:h,a}); h=a.map(Math.tanh); H.push(h); });
+  sel=Math.min(sel,words.length-1);
+  const n=words.length, W=720, dx=Math.min(110,(W-60)/Math.max(n,1)); let s=`<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" style="fill:var(--muted)"/></marker></defs>`;
+  words.forEach((w,t)=>{ const x=40+t*dx; const on=t===sel; const col=on?'var(--c1)':'var(--muted)';
+    s+=`<g data-t="${t}" style="cursor:pointer"><rect x="${x}" y="78" width="${dx-34}" height="44" rx="12" style="fill:color-mix(in srgb,var(--c1) ${on?30:12}%,var(--card));stroke:${col};stroke-width:${on?2.5:1.5}"/><text x="${x+(dx-34)/2}" y="105" text-anchor="middle">h${t+1}</text>`+
+      `<text x="${x+(dx-34)/2}" y="190" text-anchor="middle" style="font-family:'JetBrains Mono',monospace">${esc(w)}</text><line x1="${x+(dx-34)/2}" y1="172" x2="${x+(dx-34)/2}" y2="124" style="stroke:var(--muted);stroke-width:1.6" marker-end="url(#ah)"/>`+
+      `<line x1="${x+(dx-34)/2}" y1="78" x2="${x+(dx-34)/2}" y2="40" style="stroke:var(--muted);stroke-width:1.6" marker-end="url(#ah)"/><text x="${x+(dx-34)/2}" y="30" text-anchor="middle" class="mut">ŷ${t+1}</text></g>`;
+    if(t<n-1) s+=`<line x1="${x+dx-34}" y1="100" x2="${x+dx-2}" y2="100" style="stroke:var(--c1);stroke-width:2.2" marker-end="url(#ah)"/><text x="${x+dx-18}" y="92" text-anchor="middle" class="mut" style="font-size:10px">W_hh</text>`; });
+  s+=`<text x="4" y="105" class="mut">h0=0</text>`;
+  $('#unSvg').innerHTML=s; $('#unSvg').querySelectorAll('[data-t]').forEach(g=>g.onclick=()=>{ sel=+g.dataset.t; unroll(); });
+  NLP.heat('#hHeat',H,words.map((w,t)=>`${t+1} ${w}`),Array.from({length:NH},(_,j)=>'h'+(j+1)),{diverging:true,max:1,selRow:sel,onRow:i=>{ sel=i; unroll(); },rowW:'90px'});
+  const p=pre[sel]; $('#stepName').textContent=`${sel+1}: "${words[sel]}"`;
+  $('#stepCalc').innerHTML=ML.tex(`\\begin{aligned}x_{${sel+1}}&=[${p.x.map(f2).join(',\\ ')}]\\\\ h_{${sel}}&=[${p.hp.map(v=>v.toFixed(2)).join(',\\ ')}]\\\\ a&=W_{xh}x_{${sel+1}}+W_{hh}h_{${sel}}+b=[${p.a.map(v=>v.toFixed(2)).join(',\\ ')}]\\\\ h_{${sel+1}}&=\\tanh(a)=[${H[sel].map(v=>v.toFixed(2)).join(',\\ ')}]\\end{aligned}`,true); }
+$('#sent').addEventListener('input',()=>{ sel=0; unroll(); });
+
+/* ---------- 2. memory test ---------- */
+function task(T,n,r){ return Array.from({length:n},()=>{ const y=r()<0.5?1:0, xs=[]; for(let t=0;t<T;t++){ const b=t===0?y:(r()<0.5?1:0); xs.push(Float64Array.of(b?1:-1,t===0?1:0)); } return {xs,y}; }); }
+const M={seed:3,m:null,timer:null,it:0,acc:[],norms:null,r:null,test:null}; const aP=new ML.Plot('#mAcc',{equal:false}), gP=new ML.Plot('#mGrad',{equal:false});
+function mReset(){ mStop(); const T=+$('#T').value; M.m=SEQ.make('rnn',{nin:2,nh:12,nout:1,seed:M.seed}); M.it=0; M.acc=[]; M.norms=null; M.r=ML.rng(9); M.test=task(T,200,ML.rng(77)); mDraw(); }
+const testAcc=()=>{ let ok=0; M.test.forEach(({xs,y})=>{ if((SEQ.predictLast(M.m,xs)>0.5)===(y===1)) ok++; }); return ok/M.test.length; };
+function mDraw(){ const P=ML.palette(); ML.chart(aP,[{pts:M.acc,color:P.c1,width:2.5},{pts:[[0,0.5],[Math.max(100,M.it),0.5]],color:P.muted,width:1.2,dash:[5,4]}],{y0:0.3,y1:1.02,x0:0,xl:'training steps',yfmt:v=>(100*v).toFixed(0)+'%'});
+  if(M.norms) ML.chart(gP,[{pts:M.norms.map((v,t)=>[t+1,Math.log10(v+1e-30)]),color:P.c4,width:2.4,dots:true,r:2.5}],{xl:'time step t',yfmt:v=>'1e'+v.toFixed(0)}); else { gP.clear(); }
+  const last=M.acc.length?M.acc[M.acc.length-1][1]:0.5; const g=M.norms?M.norms[0]/M.norms[M.norms.length-1]:null;
+  $('#mStats').innerHTML=[['c1',ML.pct(last),'test accuracy'],['c3',M.it,'training steps (batches of 16), seed '+M.seed],['c4',g?g.toExponential(1):'–','gradient at step 1 ÷ at step T']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); $('#mIt').textContent='step '+M.it; }
+function mStop(){ if(M.timer){ clearInterval(M.timer); M.timer=null; $('#mRun').textContent='Train RNN'; } }
+$('#mRun').onclick=()=>{ if(M.timer){ mStop(); return; } $('#mRun').textContent='Pause'; const T=+$('#T').value;
+  M.timer=setInterval(()=>{ for(let k=0;k<10;k++){ const res=SEQ.trainLast(M.m,task(T,16,M.r),{name:'adam',lr:0.01},5); M.norms=res.norms; M.it++; } M.acc.push([M.it,testAcc()]); mDraw(); if(M.it>=1200) mStop(); },30); };
+$('#mReset').onclick=mReset; $('#mSeed').onclick=()=>{ M.seed++; mReset(); }; ML.bindRange('T',mReset); aP.onResize=mDraw; gP.onResize=mDraw;
+
+/* ---------- 3. vanishing ---------- */
+const vP=new ML.Plot('#vPlot',{equal:false});
+function drawV(){ const P=ML.palette(), sc=+$('#wsc').value, n=16, T=50, cols=[P.c4,P.c1,P.c3]; const series=[];
+  [sc*0.6,sc,sc*1.4].forEach((s,k)=>{ const avg=new Array(T).fill(0);
+    for(let rep=0;rep<5;rep++){ const r=ML.rng(100+rep); let W=NLP.randM(n,n,r,1/Math.sqrt(n)); /* rescale to spectral norm s via power iteration */ let v=Array.from({length:n},()=>r.gauss()); for(let i=0;i<30;i++){ const u=NLP.mv(W,v), w2=W[0].map((_,j)=>W.reduce((a,row,i2)=>a+row[j]*u[i2],0)); const nn=Math.hypot(...w2); v=w2.map(x=>x/nn); } const sn=Math.hypot(...NLP.mv(W,v)); W=W.map(row=>row.map(x=>x*s/sn));
+      const Wx=NLP.randM(n,3,r,0.5); let h=new Array(n).fill(0); const H=[]; for(let t=0;t<T;t++){ const x=[r.gauss(),r.gauss(),r.gauss()]; h=NLP.mv(W,h).map((a,i)=>Math.tanh(a+NLP.mv(Wx,x)[i])); H.push(h); }
+      /* propagate a gradient back from step T */ let g=Array.from({length:n},()=>1/Math.sqrt(n)); avg[T-1]+=1/5; for(let t=T-1;t>0;t--){ const d=g.map((x,i)=>x*(1-H[t][i]*H[t][i])); g=W[0].map((_,j)=>W.reduce((a,row,i)=>a+row[j]*d[i],0)); avg[t-1]+=Math.hypot(...g)/5; } }
+    series.push({pts:avg.map((v,t)=>[t+1,Math.log10(v+1e-30)]),color:cols[k],width:k===1?3:1.8,dash:k===1?null:[5,4]}); });
+  ML.chart(vP,series,{xl:'time step t (gradient starts at t = 50)',yfmt:v=>'1e'+v.toFixed(0),y1:Math.max(2,Math.min(12,Math.max(...series.flatMap(s=>s.pts.map(p=>p[1])))))}); }
+ML.bindRange('wsc',drawV,v=>v.toFixed(2)+'  (dashed: ×0.6 and ×1.4)'); vP.onResize=drawV;
+
+/* ---------- 4. char LM ---------- */
+const L={m:null,timer:null,it:0,loss:[],chars:[],idx:{},data:[],r:null}; const lP=new ML.Plot('#lmLoss',{equal:false});
+function lmReset(){ lmStop(); const txt=$('#lmText').value.toLowerCase(); L.chars=[...new Set(txt)].sort(); L.idx={}; L.chars.forEach((c,i)=>L.idx[c]=i); L.data=[...txt].map(c=>L.idx[c]);
+  L.m=SEQ.make('rnn',{nin:L.chars.length,nh:48,nout:L.chars.length,seed:3}); L.it=0; L.loss=[]; L.r=ML.rng(5); $('#nchar').textContent=L.chars.length; $('#unif').textContent=Math.log(L.chars.length).toFixed(2)+' nats'; lmDraw(); sample(); }
+const oh=i=>{ const v=new Float64Array(L.chars.length); v[i]=1; return v; };
+function lmStep(){ const n=L.data.length, len=Math.min(24,n-1), s=Math.floor(L.r()*(n-len-1)); const xs=[], tg=[]; for(let t=0;t<len;t++){ xs.push(oh(L.data[s+t])); tg.push(L.data[s+t+1]); } return SEQ.trainLM(L.m,xs,tg,{name:'adam',lr:0.01},5); }
+function sample(){ const T=+$('#temp').value, r=ML.rng(Math.floor(Math.random()*1e6)); let ci=L.idx['t']??0, out='t'; const xs=[];
+  for(let k=0;k<160;k++){ xs.push(oh(ci)); const st=L.m.run(xs.slice(-40)), y=st[st.length-1].y; const p=NLP.softmax([...y],T); let u=r(), j=0; while(j<p.length-1&&u>p[j]){ u-=p[j]; j++; } ci=j; out+=L.chars[j]; }
+  $('#lmSample').textContent=out; }
+function lmDraw(){ const P=ML.palette(); ML.chart(lP,[{pts:L.loss,color:P.c1,width:2.4},{pts:[[0,Math.log(L.chars.length)],[Math.max(50,L.it),Math.log(L.chars.length)]],color:P.muted,width:1.2,dash:[5,4]}],{y0:0,xl:'training steps'}); $('#lmIt').textContent='step '+L.it; }
+function lmStop(){ if(L.timer){ clearInterval(L.timer); L.timer=null; $('#lmRun').textContent='Train'; } }
+$('#lmRun').onclick=()=>{ if(L.timer){ lmStop(); return; } $('#lmRun').textContent='Pause'; let acc=0,k=0;
+  L.timer=setInterval(()=>{ for(let i=0;i<6;i++){ acc+=lmStep(); k++; L.it++; } if(k>=30){ L.loss.push([L.it,acc/k]); acc=0; k=0; lmDraw(); sample(); } if(L.it>=6000) lmStop(); },20); };
+$('#lmReset').onclick=lmReset; $('#lmSampleBtn').onclick=sample; ML.bindRange('temp',sample,v=>v.toFixed(2)); lP.onResize=lmDraw;
+
+ML.onTheme(()=>{ unroll(); mDraw(); drawV(); lmDraw(); });
+unroll(); mReset(); drawV(); lmReset();
+})();
+</script>
+<script>NLP.nav('nlp','rnn'); ML.renderMath(document.body);</script>
+</body>
+</html>

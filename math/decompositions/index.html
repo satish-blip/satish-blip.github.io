@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Eigenvectors and matrix decompositions, explained interactively</title>
+<meta name="description" content="Eigenvalues and eigenvectors as directions a matrix only stretches, eigendecomposition and powers of a matrix, positive semi-definite matrices as bowls, valleys and saddles, the spectral theorem as rotate-stretch-rotate, covariance ellipses and PCA, and the LU, QR and Cholesky factorisations with live calculators and diagrams.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-math">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Mathematical concepts &middot; Linear algebra</p>
+  <h1>Eigenvectors and <span class="grad">decompositions</span></h1>
+  <p class="lede">A decomposition rewrites one awkward matrix as a product of simple ones: diagonal, triangular or orthogonal. Each simple piece is easy to understand and cheap to compute with, so a hard problem becomes a few easy ones. This page builds the four you will meet most: eigen, LU, QR and Cholesky, and shows what the eigenvalues of a symmetric matrix tell you: positive semi-definiteness, the spectral theorem and covariance ellipses.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#eigen">1 · Eigenvectors</a><a href="#eigdec">2 · Eigendecomposition</a><a href="#psd">3 · Positive semi-definite</a><a href="#spectral">4 · Spectral theorem</a><a href="#psdcov">5 · Covariance and PCA</a><a href="#lu">6 · LU</a><a href="#qr">7 · QR</a><a href="#chol">8 · Cholesky</a><a href="#which">9 · Which one when</a><a href="#py">10 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a decomposition, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>We factor numbers to understand them: \(84=2^2\cdot3\cdot7\) tells you at a glance what divides 84. Matrices can be factored too, and the factors play the same role. A <a href="../matrices/#diagonal">diagonal matrix</a> just stretches each axis. A <a href="../matrices/#triangular">triangular matrix</a> can be solved one row at a time. An <a href="../matrices/#orthogonal">orthogonal matrix</a> is a pure rotation or reflection that keeps lengths. (New to these? The <a href="../matrices/#special">field guide to special matrices</a> explains each one with a live picture.) Write \(A\) as a product of such pieces and every question about \(A\) becomes a question about the pieces.</p>
+      <p>Which factorisation to use depends on the question. "What does \(A\) do when applied many times?" calls for eigenvectors. "Solve \(Ax=b\) for many \(b\)" calls for LU. "Least squares, stably" calls for QR. "Sample from a Gaussian" calls for Cholesky.</p>
+      <h3>How it works</h3>
+      <ol class="steps2"><li>Find the special directions or the elimination steps hidden in \(A\).</li><li>Record them as factors: \(A=V\Lambda V^{-1}\), \(A=LU\), \(A=QR\) or \(A=LL^\top\).</li><li>Solve, invert, take powers or sample using the easy factors.</li><li>Pay the factoring cost once and reuse it many times.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Kneading dough. Each push stretches the dough more in some directions than others. Most lines you draw on it get both turned and stretched, but a few special lines only get longer or shorter, staying on the same line. Those are the eigen-directions, and the stretch along each is its eigenvalue.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Turning \(O(n^3)\) work into reusable \(O(n^2)\) solves</li><li>Revealing structure: stretch directions, rank, stability</li><li>Numerical accuracy when chosen well</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Not every matrix has real eigenvectors (rotations)</li><li>Some factorisations need special matrices (Cholesky needs SPD)</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="eigenvector">Eigenvector</a><a class="term" data-t="diagonal-matrix">Diagonal matrix</a><a class="term" data-t="orthogonal-matrix">Orthogonal matrix</a><a class="term" data-t="triangular">Triangular matrix</a><a class="term" data-t="positive-definite">Positive definite</a><a class="term" data-t="spectral-theorem">Spectral theorem</a><a class="term" data-t="quadratic-form">Quadratic form</a><a class="term" data-t="rayleigh-quotient">Rayleigh quotient</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="eigen" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Eigenvectors: directions that only stretch</h2>
+    <p class="sub">Drag \(x\) around the unit circle. The orange arrow is \(Ax\). The dashed lines are the eigen-directions: put \(x\) on one and \(Ax\) lines up with it.</p>
+    <div class="plot sq" id="pE"></div>
+    <div class="row" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px" id="ePre"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Apply a matrix to vectors pointing in every direction (the unit circle) and the circle becomes an ellipse. Almost every vector is both stretched and turned. We are looking for the exceptions: nonzero vectors \(v\) that come out pointing along the same line,</p>
+      <div class="mathbox c1">$$Av=\lambda v .$$</div>
+      <p>\(v\) is an <a class="term" data-t="eigenvector">eigenvector</a> and the number \(\lambda\) is its eigenvalue: the stretch factor (negative means it flips). How do we find them?</p>
+      <ol class="derive">
+        <li><div class="eq">\(Av-\lambda v=0\;\Rightarrow\;(A-\lambda I)v=0\)</div><div class="why">Move everything to one side; \(\lambda v=\lambda Iv\).</div></li>
+        <li><div class="eq">\(\det(A-\lambda I)=0\)</div><div class="why">A nonzero \(v\) is sent to 0 only if \(A-\lambda I\) flattens space (see <a href="../matrices/#det">determinants</a>).</div></li>
+        <li><div class="eq">\(\lambda^2-(\operatorname{tr}A)\lambda+\det A=0\)</div><div class="why">For a \(2\times2\) matrix, expand \((a-\lambda)(d-\lambda)-bc\). The trace is \(a+d\).</div></li>
+      </ol>
+      
+<p>Solve the quadratic for \(\lambda\), then solve \((A-\lambda I)v=0\) for the direction. A rotation has no real solutions, because it turns every direction; its eigenvalues are complex.</p>
+<details class="deeper"><summary>Going deeper: complex eigenvalues, multiplicity, and why symmetric matrices are special</summary><div><p>Over the complex numbers every \(n\times n\) matrix has exactly \(n\) eigenvalues counted with multiplicity, because \(\det(A-\lambda I)\) is a degree-\(n\) polynomial. A rotation by \(\phi\) has \(\lambda=e^{\pm i\phi}\): the modulus 1 says "no stretching" and the angle says "turn by \(\phi\)".</p>
+<p>A repeated eigenvalue may not come with enough eigenvectors. The shear \(\begin{bmatrix}1&1\\0&1\end{bmatrix}\) has \(\lambda=1\) twice but only one eigen-direction, so it cannot be diagonalised. Such matrices are called <b>defective</b>; the Jordan form handles them.</p>
+<p><b>Spectral theorem.</b> A real symmetric matrix has real eigenvalues and an orthonormal basis of eigenvectors, so \(A=Q\Lambda Q^\top\). Proof sketch for two distinct eigenvalues: \(\lambda_1v_1^\top v_2=(Av_1)^\top v_2=v_1^\top Av_2=\lambda_2v_1^\top v_2\), so \((\lambda_1-\lambda_2)v_1^\top v_2=0\) and \(v_1\perp v_2\). Covariance matrices, Hessians and kernel matrices are all symmetric. That is why PCA always finds perpendicular axes.</p>
+<p>The <b>Rayleigh quotient</b> \(R(x)=\frac{x^\top Ax}{x^\top x}\) of a symmetric matrix is largest at the top eigenvector, where it equals \(\lambda_{\max}\). This is exactly the "maximise variance" statement of PCA.</p></div></details>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>\(A=\)</span><div id="eM"></div></div>
+      <div class="texout" id="eTex"></div>
+      <div class="stats" id="eStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="eigdec" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Eigendecomposition and powers of a matrix</h2>
+    <p class="sub">Apply \(A\) again and again to the starting vector (drag it). After normalising each step, the arrow swings onto the eigenvector with the largest \(|\lambda|\).</p>
+    <div class="plot sq" id="pP"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Suppose a \(2\times2\) matrix has two independent eigenvectors \(v_1,v_2\). Use them as a new set of axes. In those axes, \(A\) does nothing but stretch axis 1 by \(\lambda_1\) and axis 2 by \(\lambda_2\). Put the eigenvectors in the columns of \(V\) and the eigenvalues on the diagonal of \(\Lambda\):</p>
+      <div class="mathbox c2">$$A=V\Lambda V^{-1}$$</div><p>Read it right to left: change to eigen-axes (\(V^{-1}\)), stretch each axis (\(\Lambda\)), change back (\(V\)).</p>
+      <p>The payoff is powers: \(A^k=V\Lambda V^{-1}V\Lambda V^{-1}\cdots=V\Lambda^kV^{-1}\), and \(\Lambda^k\) just raises each \(\lambda_i\) to the \(k\)-th power. Write the start vector as \(x_0=c_1v_1+c_2v_2\). Then</p>
+      <div class="mathbox c3">$$A^kx_0=c_1\lambda_1^k\,v_1+c_2\lambda_2^k\,v_2 .$$</div>
+      <p>If \(|\lambda_1|&gt;|\lambda_2|\), the first term wins exponentially fast, at a rate \(|\lambda_2/\lambda_1|^k\). That is <b>power iteration</b>, the idea behind PageRank and behind exploding and vanishing gradients in <a href="../../dl/nlp/rnn/">RNNs</a>, where the same weight matrix is applied at every time step.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: power iteration</h5><ol><li><span class="kw">input</span> square matrix \(A\), start vector \(x_0 \ne 0\), tolerance \(\varepsilon\)</li><li>\(x \leftarrow x_0 / \|x_0\|\)</li><li><span class="kw">repeat</span></li><li class="i1">\(y \leftarrow Ax\) <span class="cm">one matrix–vector product: cheap even for huge sparse A</span></li><li class="i1">\(\lambda \leftarrow x^\top y\) <span class="cm">Rayleigh quotient: current eigenvalue estimate</span></li><li class="i1">\(x \leftarrow y / \|y\|\) <span class="cm">normalise so the numbers stay finite</span></li><li><span class="kw">until</span> \(x\) changes by less than \(\varepsilon\)</li><li><span class="kw">return</span> \(\lambda, x\) <span class="cm">dominant eigenpair; error shrinks like |λ₂/λ₁|ᵏ</span></li></ol></div>
+<div class="ctl"><label for="kk"><span>Number of applications \(k\)</span><output id="kkOut"></output></label><input type="range" id="kk" min="0" max="12" step="1" value="4"></div>
+      <div class="stats" id="pStats"></div>
+      <p class="hint">Uses the matrix from section 1. Try a matrix whose eigenvalues are close in size and watch convergence slow down.</p>
+    </div>
+  </div>
+</section>
+
+<section id="psd" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Positive semi-definite: bowl, valley or saddle?</h2>
+    <p class="sub">The colour is the value of \(x^\top Ax\) at every point: blue where it is positive, pink where it is negative, and the thin lines are its contour lines. Drag \(x\) and compare it with \(Ax\) (orange). Dashed lines are the eigen-axes.</p>
+    <div class="plot sq" id="pS"></div>
+    <div class="row" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px" id="sPre"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Start with plain numbers. A number \(a\) is non-negative exactly when \(a\,x^2\ge0\) for every \(x\): multiplying by a square never flips the sign. For a matrix the same test uses a vector \(x\) and the <a class="term" data-t="quadratic-form">quadratic form</a></p>
+      <div class="mathbox c1">$$q(x)=x^\top Ax=\sum_{i,j}a_{ij}\,x_ix_j .$$</div>
+      <p>A symmetric matrix \(A\) is <a class="term" data-t="positive-definite">positive semi-definite</a> (PSD, written \(A\succeq0\)) if \(x^\top Ax\ge0\) for every \(x\), and <b>positive definite</b> (\(A\succ0\)) if \(x^\top Ax&gt;0\) for every \(x\ne0\).</p>
+      <p>A small example: \(A=\begin{bmatrix}2&amp;1\\1&amp;2\end{bmatrix}\) gives \(q(x)=2x_1^2+2x_1x_2+2x_2^2=(x_1+x_2)^2+x_1^2+x_2^2\), a sum of squares, so it is never negative. But we cannot always spot such a trick, and we cannot try every \(x\). <b>Is there a test that looks only at \(A\)?</b> The eigenvectors give one.</p>
+      <ol class="derive">
+        <li><div class="eq">\(A=Q\Lambda Q^\top\)</div><div class="why">A symmetric matrix has perpendicular unit eigenvectors \(q_i\) (the spectral theorem, next section). They are the columns of \(Q\), and \(Q^\top Q=I\).</div></li>
+        <li><div class="eq">\(x=Qc,\quad c=Q^\top x\)</div><div class="why">Describe \(x\) in the eigen-axes: \(c_i=q_i^\top x\) is how far \(x\) goes along axis \(i\).</div></li>
+        <li><div class="eq">\(x^\top Ax=c^\top Q^\top Q\Lambda Q^\top Qc=c^\top\Lambda c\)</div><div class="why">Substitute and cancel \(Q^\top Q=I\) twice.</div></li>
+        <li><div class="eq">\(x^\top Ax=\lambda_1c_1^2+\lambda_2c_2^2+\dots+\lambda_nc_n^2\)</div><div class="why">\(\Lambda\) is diagonal, so the cross terms vanish. Every \(c_i^2\ge0\), so the sign is decided by the \(\lambda_i\).</div></li>
+      </ol>
+      <div class="mathbox c2">$$A\succeq0\iff\text{every }\lambda_i\ge0,\qquad A\succ0\iff\text{every }\lambda_i&gt;0 .$$</div>
+      <p>So the surface \(z=x^\top Ax\) has only four shapes, set by the signs of the eigenvalues. All positive: a <b>bowl</b> with one lowest point (positive definite). Some zero, the rest positive: a <b>valley</b> with a flat floor along the zero-eigenvalue direction (semi-definite). Mixed signs: a <b>saddle</b> (indefinite). All negative: a <b>dome</b>. Along each eigen-axis the surface is the parabola \(\lambda_ic_i^2\), so \(\lambda_i\) is literally the curvature in that direction.</p>
+      <p>There is also an arrow picture. Since \(x^\top Ax=x\cdot(Ax)=\|x\|\,\|Ax\|\cos\angle(x,Ax)\), positive definite means <b>\(Ax\) is always less than \(90^\circ\) away from \(x\)</b>. Drag \(x\) into a pink zone of the saddle and the orange arrow swings past the right angle.</p>
+      <h3>Where you meet PSD matrices</h3>
+      <ul>
+        <li><b>Covariance matrices.</b> \(u^\top\Sigma u=\operatorname{Var}(u^\top X)\ge0\): a variance cannot be negative (section 5).</li>
+        <li><b>Gram matrices</b> \(X^\top X\): \(v^\top X^\top Xv=\|Xv\|^2\ge0\). Adding \(\lambda I\) (ridge regression) lifts every eigenvalue by \(\lambda\), so \(X^\top X+\lambda I\) is positive definite and always invertible.</li>
+        <li><b>Hessians.</b> A function is <a class="term" data-t="convex">convex</a> exactly when its <a href="../calculus/#hessian">Hessian</a> is PSD everywhere, and a stationary point is a minimum when the Hessian there is positive definite.</li>
+        <li><b>Kernel matrices.</b> A valid <a href="../../ml/svm/#trick">kernel</a> must give a PSD matrix \(K_{ij}=k(x_i,x_j)\) for every data set (Mercer's condition).</li>
+      </ul>
+      <details class="deeper"><summary>Going deeper: four equivalent tests, two traps, and some closure rules</summary><div>
+        <p>For a symmetric \(A\) these are equivalent ways to say \(A\succ0\): (1) \(x^\top Ax&gt;0\) for all \(x\ne0\); (2) every eigenvalue is positive; (3) every leading principal minor is positive, i.e. \(a_{11}&gt;0\), \(\det A_{2\times2}&gt;0\), …, \(\det A&gt;0\) (Sylvester's criterion); (4) \(A=LL^\top\) with \(L\) lower triangular and a positive diagonal, i.e. the <a href="#chol">Cholesky factorisation</a> succeeds. Test (4) is what numerical libraries actually use: it is about three times faster than computing eigenvalues.</p>
+        <p>For semi-definite, use \(A=B^\top B\) for some \(B\), or "every eigenvalue \(\ge0\)". <b>Trap 1:</b> Sylvester's leading-minor test does not carry over to \(\ge\). \(\begin{bmatrix}0&amp;0\\0&amp;-1\end{bmatrix}\) has leading minors \(0\) and \(0\), yet \(x=(0,1)\) gives \(-1\). For PSD you must check <i>all</i> principal minors, including \(a_{22}\). For a \(2\times2\) matrix: \(a\ge0\), \(d\ge0\) and \(ad-b^2\ge0\).</p>
+        <p><b>Trap 2:</b> for a non-symmetric \(A\) the eigenvalues say nothing about the sign of \(x^\top Ax\), because \(x^\top Ax=x^\top\tfrac12(A+A^\top)x\): the form only sees the symmetric part. \(\begin{bmatrix}1&amp;4\\0&amp;1\end{bmatrix}\) has eigenvalues \(1,1\) but \(x=(1,-1)\) gives \(1-4+1=-2\). That is why the definition insists on symmetric matrices.</p>
+        <p><b>Closure rules.</b> If \(A,B\succeq0\) and \(t\ge0\): \(A+B\succeq0\), \(tA\succeq0\), \(C^\top AC\succeq0\) for any \(C\), and every diagonal entry \(a_{ii}=e_i^\top Ae_i\ge0\). The PSD matrices form a convex cone, the feasible set of semidefinite programming.</p>
+        <p><b>Minimum on the unit circle.</b> With \(\|x\|=1\) we have \(\sum c_i^2=1\), so \(x^\top Ax\) is a weighted average of the eigenvalues: it lies between \(\lambda_{\min}\) and \(\lambda_{\max}\), reaching each at its eigenvector. "PSD" is the statement \(\lambda_{\min}\ge0\).</p>
+      </div></details>
+      <div class="algo" data-anim="psdtest"><h5 class="algo-h">Algorithm: testing whether a symmetric matrix is positive semi-definite</h5><ol><li><span class="kw">input</span> square matrix \(A\), tolerance \(\varepsilon\) for rounding error</li><li>\(A \leftarrow (A + A^\top)/2\) <span class="cm">the quadratic form only sees the symmetric part</span></li><li>\(\lambda_1 \ge \dots \ge \lambda_n,\ q_1,\dots,q_n \leftarrow\) eigen-decomposition of \(A\)</li><li>\(\lambda_{\min} \leftarrow \lambda_n\) <span class="cm">the lowest curvature of the surface xᵀAx</span></li><li><span class="kw">if</span> \(\lambda_{\min} &gt; \varepsilon\) <span class="kw">return</span> positive definite <span class="cm">a bowl</span></li><li><span class="kw">if</span> \(\lambda_{\min} \ge -\varepsilon\) <span class="kw">return</span> positive semi-definite <span class="cm">a valley with a flat floor</span></li><li><span class="kw">return</span> not PSD, with witness \(x=q_n\) <span class="cm">xᵀAx = λmin &lt; 0: a downhill direction</span></li></ol></div>
+      <div class="ctl"><label for="sl1"><span>Eigenvalue \(\lambda_1\)</span><output id="sl1Out"></output></label><input type="range" id="sl1" min="-2" max="3" step="0.1" value="2"></div>
+      <div class="ctl"><label for="sl2"><span>Eigenvalue \(\lambda_2\)</span><output id="sl2Out"></output></label><input type="range" id="sl2" min="-2" max="3" step="0.1" value="0.7"></div>
+      <div class="ctl"><label for="sth"><span>Angle of the eigen-axes \(\theta\)</span><output id="sthOut"></output></label><input type="range" id="sth" min="0" max="180" step="1" value="30"></div>
+      <div class="texout" id="sTex"></div>
+      <div class="stats" id="sStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="spectral" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>The spectral theorem: rotate, stretch, rotate back</h2>
+    <p class="sub">Press Play to apply \(A=Q\Lambda Q^\top\) one factor at a time to the unit circle and a grid. The dashed orange outline is \(A\) applied in one go: the three steps end exactly on it.</p>
+    <div class="plot sq" id="pT"></div>
+    <div class="player" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center"><button class="btn primary" id="tPlay">Play</button><button class="btn" data-s="0">\(x\)</button><button class="btn" data-s="1">\(Q^\top x\)</button><button class="btn" data-s="2">\(\Lambda Q^\top x\)</button><button class="btn" data-s="3">\(Q\Lambda Q^\top x\)</button></div>
+    <div class="ctl" style="margin-top:8px"><label for="tt"><span>Progress through the three steps</span><output id="ttOut"></output></label><input type="range" id="tt" min="0" max="3" step="0.01" value="0"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A general matrix both turns and stretches, and section 2 needed a possibly skewed set of eigenvectors \(V\) to undo that. Symmetric matrices are much nicer:</p>
+      <div class="mathbox c1">$$A=A^\top\ \Longrightarrow\ A=Q\Lambda Q^\top,\qquad Q^\top Q=I,\ \ \Lambda=\operatorname{diag}(\lambda_1,\dots,\lambda_n)\ \text{real}.$$</div>
+      <p>This is the <a class="term" data-t="spectral-theorem">spectral theorem</a>: the eigenvalues are real and the eigenvectors can be chosen perpendicular and of length 1. So \(V\) becomes an <a href="../matrices/#orthogonal">orthogonal matrix</a> \(Q\), and \(V^{-1}\) becomes simply \(Q^\top\). Read \(Ax=Q\Lambda Q^\top x\) from right to left:</p>
+      <ol class="derive">
+        <li><div class="eq">\(c=Q^\top x\)</div><div class="why"><b>Rotate</b> (or reflect) so the eigen-axes line up with the coordinate axes. The purple and teal arrows \(q_1,q_2\) land on \(e_1,e_2\).</div></li>
+        <li><div class="eq">\(\Lambda c=(\lambda_1c_1,\ \lambda_2c_2)\)</div><div class="why"><b>Stretch</b> each axis on its own. Nothing is turned; a negative \(\lambda\) flips that axis.</div></li>
+        <li><div class="eq">\(Q\Lambda c=Ax\)</div><div class="why"><b>Rotate back.</b> The circle has become an ellipse whose axes are the eigenvectors, with half-lengths \(|\lambda_1|,|\lambda_2|\).</div></li>
+      </ol>
+      <p>Multiplying out the columns gives a second, very useful form: a sum of rank-one pieces,</p>
+      <div class="mathbox c3">$$A=\lambda_1q_1q_1^\top+\lambda_2q_2q_2^\top+\dots+\lambda_nq_nq_n^\top .$$</div>
+      <p>Each \(q_iq_i^\top\) projects onto one eigen-axis, and \(\lambda_i\) says how much to keep. Check with \(A=\begin{bmatrix}2&amp;1\\1&amp;2\end{bmatrix}\): \(\lambda_1=3,\ q_1=\tfrac1{\sqrt2}(1,1)\) and \(\lambda_2=1,\ q_2=\tfrac1{\sqrt2}(1,-1)\), so \(3\cdot\tfrac12\begin{bmatrix}1&amp;1\\1&amp;1\end{bmatrix}+1\cdot\tfrac12\begin{bmatrix}1&amp;-1\\-1&amp;1\end{bmatrix}=\begin{bmatrix}2&amp;1\\1&amp;2\end{bmatrix}\). Keeping only the largest terms is exactly how <a href="../../ml/pca/">PCA</a> compresses data.</p>
+      <p><b>Why it pays off.</b> Any function of \(A\) becomes a function of numbers: \(A^k=Q\Lambda^kQ^\top\), \(A^{-1}=Q\Lambda^{-1}Q^\top\) (when no \(\lambda_i=0\)), and for a PSD matrix the square root \(A^{1/2}=Q\Lambda^{1/2}Q^\top\), which turns white noise into samples with covariance \(A\) (section 5).</p>
+      <details class="deeper"><summary>Going deeper: proof of the spectral theorem</summary><div>
+        <p><b>Real eigenvalues.</b> Let \(Av=\lambda v\) with possibly complex \(v\ne0\), and let \(\bar v\) be its complex conjugate. Then \(\bar v^\top Av=\lambda\,\bar v^\top v\). Conjugating and transposing, and using \(A=A^\top\) real, gives \(\bar v^\top Av=\bar\lambda\,\bar v^\top v\). Since \(\bar v^\top v=\sum|v_i|^2&gt;0\), \(\lambda=\bar\lambda\): \(\lambda\) is real.</p>
+        <p><b>Perpendicular eigenvectors.</b> If \(Av=\lambda v\), \(Aw=\mu w\), \(\lambda\ne\mu\), then \(\lambda\,v^\top w=(Av)^\top w=v^\top Aw=\mu\,v^\top w\), so \(v^\top w=0\). When an eigenvalue repeats, its eigenvectors fill a whole plane (or more), and Gram–Schmidt (<a href="#qr">QR</a>) picks a perpendicular set inside it.</p>
+        <p><b>Enough eigenvectors (by induction).</b> Take one unit eigenvector \(q_1\). If \(x\perp q_1\) then \(q_1^\top(Ax)=(Aq_1)^\top x=\lambda_1q_1^\top x=0\), so \(A\) maps the subspace perpendicular to \(q_1\) into itself, and is still symmetric there. Repeat inside that \((n-1)\)-dimensional subspace. After \(n\) steps we have \(n\) perpendicular unit eigenvectors, with no defective case possible.</p>
+        <p>Compare the non-symmetric shear \(\begin{bmatrix}1&amp;1\\0&amp;1\end{bmatrix}\) from section 1, which has only one eigen-direction. The general replacement for every matrix is the <b>SVD</b>, \(A=U\Sigma V^\top\): rotate, stretch, rotate by a <i>different</i> rotation. For a PSD matrix the SVD and the spectral decomposition coincide.</p>
+      </div></details>
+      <div class="algo" data-anim="spectral"><h5 class="algo-h">Algorithm: applying A through its spectral decomposition</h5><ol><li><span class="kw">input</span> symmetric \(A=Q\Lambda Q^\top\), vector \(x\)</li><li>\(c \leftarrow Q^\top x\) <span class="cm">coordinates of x along the eigen-axes (rotate)</span></li><li><span class="kw">for</span> \(i=1,\dots,n\)</li><li class="i1">\(c_i \leftarrow \lambda_i\,c_i\) <span class="cm">stretch each axis independently</span></li><li>\(y \leftarrow Qc\) <span class="cm">rotate back to the original axes</span></li><li><span class="kw">return</span> \(y\) <span class="cm">equals Ax; use λᵢᵏ in line 4 to get Aᵏx</span></li></ol></div>
+      <div class="ctl"><label for="tl1"><span>Eigenvalue \(\lambda_1\)</span><output id="tl1Out"></output></label><input type="range" id="tl1" min="-2" max="2.5" step="0.1" value="2"></div>
+      <div class="ctl"><label for="tl2"><span>Eigenvalue \(\lambda_2\)</span><output id="tl2Out"></output></label><input type="range" id="tl2" min="-2" max="2.5" step="0.1" value="0.6"></div>
+      <div class="ctl"><label for="tth"><span>Angle of the eigen-axes \(\theta\)</span><output id="tthOut"></output></label><input type="range" id="tth" min="0" max="180" step="1" value="35"></div>
+      <div class="texout" id="tTex"></div>
+      <div class="stats" id="tStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="psdcov" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Covariance matrices are PSD: ellipses and PCA</h2>
+    <p class="sub">A cloud with covariance \(\Sigma\) and its 1- and 2-standard-deviation ellipses. Drag the direction \(u\): the ticks are the points projected onto it, and the green curve shows the spread \(\sqrt{u^\top\Sigma u}\) in every direction. It peaks on the top eigenvector.</p>
+    <div class="plot sq" id="pV"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Take centred data points \(x\) with covariance matrix \(\Sigma=\mathbb E[xx^\top]\) (the <a href="../probability/#cov">covariance page</a> builds it from scratch). Squash every point onto a unit direction \(u\): the result is one number per point, \(u^\top x\). Its variance is</p>
+      <ol class="derive">
+        <li><div class="eq">\(\operatorname{Var}(u^\top x)=\mathbb E[(u^\top x)^2]\)</div><div class="why">The data are centred, so the projection has mean 0.</div></li>
+        <li><div class="eq">\(=\mathbb E[u^\top x\,x^\top u]=u^\top\,\mathbb E[xx^\top]\,u\)</div><div class="why">\(u^\top x\) is a number, so it equals its own transpose \(x^\top u\). \(u\) is fixed, so it comes out of the average.</div></li>
+        <li><div class="eq">\(=u^\top\Sigma u\ \ge0\)</div><div class="why">A variance is an average of squares.</div></li>
+      </ol>
+      <div class="mathbox c1">$$u^\top\Sigma u=\operatorname{Var}(u^\top x)\ge0\quad\text{for every }u\ \Longrightarrow\ \Sigma\succeq0 .$$</div>
+      <p>So <b>every covariance matrix is positive semi-definite</b>, with no exceptions. A zero eigenvalue means a direction with no spread at all: the points lie exactly on a line (in 2D) or a flat subspace, so one feature is an exact linear combination of the others. Slide \(\lambda_2\) to 0 to see the cloud collapse. Then \(\Sigma\) has no inverse, and the Gaussian density and the Mahalanobis distance \(x^\top\Sigma^{-1}x\), which both need \(\Sigma^{-1}\), break down.</p>
+      <p><b>Which direction has the most spread?</b> Maximise \(u^\top\Sigma u\) over unit vectors. With \(u=Qc\) and \(\sum c_i^2=1\),</p>
+      <div class="mathbox c2">$$u^\top\Sigma u=\sum_i\lambda_ic_i^2\ \le\ \lambda_1\sum_ic_i^2=\lambda_1,$$</div>
+      <p>with equality when \(c=(1,0,\dots)\), i.e. \(u=q_1\). The best direction is the top eigenvector and the variance it captures is \(\lambda_1\). The ratio \(\frac{u^\top\Sigma u}{u^\top u}\) is called the <a class="term" data-t="rayleigh-quotient">Rayleigh quotient</a>. This one line is the whole of <a href="../../ml/pca/">PCA</a>: the principal components are the eigenvectors of \(\Sigma\), they are perpendicular because \(\Sigma\) is symmetric, and \(\lambda_i/\sum_j\lambda_j\) is the fraction of variance each one explains.</p>
+      <p>The ellipse tells the same story: its axes point along the eigenvectors with half-lengths \(\sqrt{\lambda_1},\sqrt{\lambda_2}\). Sampling uses it in reverse: \(x=Q\Lambda^{1/2}z\) with white noise \(z\) has covariance \(Q\Lambda^{1/2}\,I\,\Lambda^{1/2}Q^\top=\Sigma\) (Cholesky, section 8, gives another valid square root).</p>
+      <details class="deeper"><summary>Going deeper: Lagrange multipliers, the next components, and the width of the ellipse</summary><div>
+        <p><b>Via Lagrange.</b> Maximise \(u^\top\Sigma u\) subject to \(u^\top u=1\). Set the gradient of \(u^\top\Sigma u-\lambda(u^\top u-1)\) to zero: \(2\Sigma u-2\lambda u=0\), i.e. \(\Sigma u=\lambda u\). Every stationary point is an eigenvector, and the value there is \(u^\top\Sigma u=\lambda\), so the maximum is the largest eigenvalue (see <a href="../calculus/#lagrange">Lagrange multipliers</a>).</p>
+        <p><b>The next component.</b> Add the constraint \(u\perp q_1\). Then \(c_1=0\) and the same bound gives \(\lambda_2\), reached at \(q_2\). In general \(\lambda_k=\max\{u^\top\Sigma u:\|u\|=1,\ u\perp q_1,\dots,q_{k-1}\}\) (the Courant–Fischer min-max theorem).</p>
+        <p><b>Width of the ellipse.</b> The 1-sd ellipse \(\{x:x^\top\Sigma^{-1}x=1\}\), squeezed between two parallel lines perpendicular to \(u\), has half-width exactly \(\sqrt{u^\top\Sigma u}\). So the green curve is the ellipse's "shadow length" in each direction. It touches the ellipse on the two axes, where the shadow is longest and shortest.</p>
+        <p><b>Sample covariance.</b> For a data matrix \(X\) (rows are centred points), \(S=\tfrac1nX^\top X\) is a Gram matrix, so it is PSD by the identity \(v^\top X^\top Xv=\|Xv\|^2\). With fewer points than features (\(n&lt;d\)), \(S\) has rank at most \(n\), so it is singular. This is why high-dimensional statistics adds shrinkage, \(S+\lambda I\).</p>
+      </div></details>
+      <div class="ctl"><label for="vl1"><span>Variance along the first axis \(\lambda_1\)</span><output id="vl1Out"></output></label><input type="range" id="vl1" min="0" max="4" step="0.05" value="2.5"></div>
+      <div class="ctl"><label for="vl2"><span>Variance along the second axis \(\lambda_2\)</span><output id="vl2Out"></output></label><input type="range" id="vl2" min="0" max="4" step="0.05" value="0.5"></div>
+      <div class="ctl"><label for="vth"><span>Angle of the first axis \(\theta\)</span><output id="vthOut"></output></label><input type="range" id="vth" min="0" max="180" step="1" value="30"></div>
+      <div class="texout" id="vTex"></div>
+      <div class="stats" id="vStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="lu" class="card">
+  <h2><span class="num">6</span>LU: elimination, written down</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>On the <a href="../matrices/#rank">matrices page</a> we solved systems by row reduction. Each step "subtract \(\ell\) times row \(j\) from row \(i\)" is a small matrix. Collect all those multipliers \(\ell_{ij}\) in a lower-triangular matrix \(L\) (ones on the diagonal), and the end result of elimination in an upper-triangular \(U\):</p>
+      <div class="mathbox c4">$$PA=LU .$$</div>
+      <p>\(P\) records any row swaps (pivoting, for numerical safety). Why bother? Because triangular systems are trivial to solve. To solve \(Ax=b\): first solve \(Ly=Pb\) from the top down (<b>forward substitution</b>), then \(Ux=y\) from the bottom up (<b>back substitution</b>). Factoring costs about \(\tfrac23n^3\) operations once; each new \(b\) then costs only \(2n^2\).</p>
+      <p>Edit \(A\) and \(b\): the factors and both substitutions update.</p>
+<div class="algo"><h5 class="algo-h">Algorithm: LU with partial pivoting, then solve</h5><ol><li>\(U \leftarrow A\); \(L \leftarrow I\); \(P \leftarrow I\)</li><li><span class="kw">for</span> \(c = 1\) <span class="kw">to</span> \(n-1\) <span class="kw">do</span></li><li class="i1">swap row \(c\) of \(U\) with the row below having the largest \(|U_{rc}|\); record it in \(P\) (and \(L\)'s finished columns)</li><li class="i1"><span class="kw">for</span> \(r = c+1\) <span class="kw">to</span> \(n\) <span class="kw">do</span></li><li class="i2">\(L_{rc} \leftarrow U_{rc}/U_{cc}\); row\(_r(U) \leftarrow\) row\(_r(U) - L_{rc}\,\)row\(_c(U)\)</li><li><span class="cm">solve Ax = b using the factors</span></li><li><span class="kw">for</span> \(i = 1\) <span class="kw">to</span> \(n\): \(y_i \leftarrow (Pb)_i - \sum_{k&lt;i} L_{ik}y_k\) <span class="cm">forward</span></li><li><span class="kw">for</span> \(i = n\) <span class="kw">down to</span> 1: \(x_i \leftarrow (y_i - \sum_{k&gt;i} U_{ik}x_k)/U_{ii}\) <span class="cm">backward</span></li><li><span class="kw">return</span> \(x\)</li></ol></div>
+    </div>
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>\(A=\)</span><div id="luM"></div><span>\(b=\)</span><div id="luB"></div></div>
+      <div class="texout" id="luTex" style="margin-top:8px"></div>
+      <div class="texout" id="luSol"></div>
+    </div>
+  </div>
+</section>
+
+<section id="qr" class="lab">
+  <div class="card hl">
+    <h2><span class="num">7</span>QR: Gram–Schmidt, written down</h2>
+    <p class="sub">Drag \(a_1\) and \(a_2\). Gram–Schmidt turns them into perpendicular unit vectors \(q_1, q_2\) spanning the same plane.</p>
+    <div class="plot sq" id="pQ"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The <a href="../projections/#ortho">projections page</a> showed that orthonormal bases make projection easy. Gram–Schmidt makes one from any independent columns:</p>
+      <ol class="derive">
+        <li><div class="eq">\(q_1=a_1/\|a_1\|\)</div><div class="why">Keep the first direction, scaled to length 1.</div></li>
+        <li><div class="eq">\(u_2=a_2-(q_1\cdot a_2)\,q_1\)</div><div class="why">Remove the part of \(a_2\) that lies along \(q_1\) (its projection). What remains is perpendicular to \(q_1\).</div></li>
+        <li><div class="eq">\(q_2=u_2/\|u_2\|\)</div><div class="why">Scale to length 1. With more columns, subtract the projections onto all previous \(q\)'s.</div></li>
+      </ol>
+      <p>Reading the steps backwards gives \(a_1=r_{11}q_1\) and \(a_2=r_{12}q_1+r_{22}q_2\). In matrix form:</p>
+      <div class="mathbox c3">$$A=QR,\qquad Q^\top Q=I,\ R\text{ upper triangular}.$$</div>
+      <p>For least squares, substitute into the normal equations: \(R^\top Q^\top QR\theta=R^\top Q^\top y\) simplifies to \(R\theta=Q^\top y\), a triangular solve, without ever forming \(X^\top X\). This is what <code>np.linalg.lstsq</code> and most regression libraries do.</p>
+<div class="algo"><h5 class="algo-h">Algorithm: Gram–Schmidt QR</h5><ol><li><span class="kw">input</span> columns \(a_1,\dots,a_n\) of \(A\)</li><li><span class="kw">for</span> \(j = 1\) <span class="kw">to</span> \(n\) <span class="kw">do</span></li><li class="i1">\(u \leftarrow a_j\)</li><li class="i1"><span class="kw">for</span> \(i = 1\) <span class="kw">to</span> \(j-1\) <span class="kw">do</span></li><li class="i2">\(R_{ij} \leftarrow q_i \cdot u\); \(u \leftarrow u - R_{ij}\,q_i\) <span class="cm">modified G–S: project the running u, more stable</span></li><li class="i1">\(R_{jj} \leftarrow \|u\|\); \(q_j \leftarrow u/R_{jj}\) <span class="cm">R_jj ≈ 0 means a_j depends on earlier columns</span></li><li><span class="kw">return</span> \(Q = [q_1 \cdots q_n]\), \(R\)</li></ol></div>
+      <div class="texout" id="qTex"></div>
+    </div>
+  </div>
+</section>
+
+<section id="chol" class="lab">
+  <div class="card hl">
+    <h2><span class="num">8</span>Cholesky: a square root for covariance matrices</h2>
+    <p class="sub">Each dot is \(\mu+Lz\), where \(z\) is a pair of independent standard normal numbers. Change the covariance and the same \(z\)'s are reshaped.</p>
+    <div class="plot sq" id="pC"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A symmetric matrix with \(x^\top Ax&gt;0\) for every \(x\ne0\) is <a class="term" data-t="positive-definite">positive definite</a>. <a href="../probability/#covariance-matrix">Covariance matrices</a> are (at least semi-) definite, because \(x^\top\Sigma x\) is the variance of the combined feature \(x^\top z\) (a weighted sum of the variables), and a variance cannot be negative. Such matrices have a triangular "square root":</p>
+      <div class="mathbox c5">$$\Sigma=LL^\top,\qquad L\ \text{lower triangular with positive diagonal}.$$</div>
+      <p>It is LU made symmetric, at half the cost. A neat use: to draw samples with covariance \(\Sigma\), take independent standard normals \(z\) and set \(x=\mu+Lz\). Then \(\operatorname{Cov}(x)=L\operatorname{Cov}(z)L^\top=LIL^\top=\Sigma\). Gaussian processes, Kalman filters and the reparameterisation trick in VAEs all use this.</p>
+<div class="algo"><h5 class="algo-h">Algorithm: Cholesky factorisation</h5><ol><li><span class="kw">input</span> symmetric positive definite \(A\) (\(n\times n\))</li><li><span class="kw">for</span> \(i = 1\) <span class="kw">to</span> \(n\) <span class="kw">do</span></li><li class="i1"><span class="kw">for</span> \(j = 1\) <span class="kw">to</span> \(i\) <span class="kw">do</span></li><li class="i2">\(s \leftarrow A_{ij} - \sum_{k&lt;j} L_{ik}L_{jk}\)</li><li class="i2"><span class="kw">if</span> \(i = j\) <span class="kw">then</span> <span class="kw">if</span> \(s \le 0\) <span class="kw">then fail</span> <span class="cm">not positive definite</span>; \(L_{ii} \leftarrow \sqrt s\)</li><li class="i2"><span class="kw">else</span> \(L_{ij} \leftarrow s / L_{jj}\)</li><li><span class="kw">return</span> \(L\) <span class="cm">sample: x = μ + L z with z ~ N(0, I)</span></li></ol></div>
+      <div class="ctl"><label for="s1"><span>\(\sigma_1\)</span><output id="s1Out"></output></label><input type="range" id="s1" min="0.2" max="2" step="0.05" value="1.2"></div>
+      <div class="ctl"><label for="s2"><span>\(\sigma_2\)</span><output id="s2Out"></output></label><input type="range" id="s2" min="0.2" max="2" step="0.05" value="0.7"></div>
+      <div class="ctl"><label for="rho"><span>Correlation \(\rho\)</span><output id="rhoOut"></output></label><input type="range" id="rho" min="-0.99" max="0.99" step="0.01" value="0.6"></div>
+      <details class="deeper"><summary>Going deeper: why Cholesky can fail, and what that tells you</summary><div><p>The algorithm takes a square root of \(s=A_{ii}-\sum_kL_{ik}^2\) at every diagonal step. The theorem is that \(A\) is positive definite <i>if and only if</i> every such \(s\) is positive. So attempting a Cholesky factorisation is also the cheapest test of positive definiteness. Optimisers use it to check that a Newton step points downhill.</p>
+<p>Positive definite has several equivalent faces: \(x^\top Ax&gt;0\) for all \(x\ne0\); all eigenvalues positive; all leading principal minors positive; \(A=B^\top B\) for some \(B\) with independent columns. The last is why \(X^\top X\) (for independent features) and every covariance matrix with no exactly redundant variables qualify. In practice a covariance estimated from fewer samples than dimensions is only semi-definite, so libraries add a small "jitter" \(\epsilon I\) before factoring.</p></div></details>
+<div class="texout" id="cTex"></div>
+    </div>
+  </div>
+</section>
+
+<section id="which" class="card">
+  <h2><span class="num">9</span>Which decomposition when</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Factorisation</th><th>Works for</th><th>Pieces</th><th>Cost</th><th>Use it to</th><th>In ML</th></tr>
+    <tr><td><b>Eigen</b> \(V\Lambda V^{-1}\)</td><td>square, diagonalisable</td><td>eigenvectors, eigenvalues</td><td>\(O(n^3)\)</td><td>understand repeated application, stability</td><td>PCA (on \(\Sigma\)), spectral clustering, RNN gradients, PageRank</td></tr>
+    <tr><td><b>Spectral</b> \(Q\Lambda Q^\top\)</td><td>symmetric</td><td>orthonormal eigenvectors, real eigenvalues</td><td>\(O(n^3)\)</td><td>same, with perfect numerical behaviour</td><td>PCA, Hessian analysis, kernels</td></tr>
+    <tr><td><b>LU</b> \(PA=LU\)</td><td>square</td><td>lower and upper triangular</td><td>\(\tfrac23n^3\)</td><td>solve \(Ax=b\) for many \(b\), determinants</td><td>generic linear solves</td></tr>
+    <tr><td><b>QR</b> \(A=QR\)</td><td>any \(m\times n\)</td><td>orthonormal \(Q\), triangular \(R\)</td><td>\(2mn^2\)</td><td>least squares, orthonormal bases</td><td>linear regression solvers, eigenvalue algorithms</td></tr>
+    <tr><td><b>Cholesky</b> \(LL^\top\)</td><td>symmetric positive definite</td><td>one triangular</td><td>\(\tfrac13n^3\)</td><td>fast stable solves, sampling Gaussians</td><td>GPs, ridge regression, Newton steps, VAEs</td></tr>
+    <tr><td><b>SVD</b> \(U\Sigma V^\top\)</td><td>any matrix</td><td>two orthonormal, one diagonal</td><td>\(O(mn^2)\)</td><td>rank, best low-rank approximation, pseudo-inverse</td><td>PCA, LSA, LoRA, compression. See the <a href="../svd/">SVD page</a></td></tr>
+  </table></div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">10</span>The same thing in Python (NumPy / SciPy)</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np, scipy.linalg <span class="k">as</span> sl
+A = np.array([[<span class="s">2.</span>, <span class="s">1.</span>], [<span class="s">1.</span>, <span class="s">3.</span>]])
+lam, V = np.linalg.eig(A)               <span class="c"># A @ V[:, i] == lam[i] * V[:, i]</span>
+lam, Q = np.linalg.eigh(A)              <span class="c"># symmetric: real, orthonormal (preferred)</span>
+np.allclose(Q @ np.diag(lam) @ Q.T, A)
+P, L, U = sl.lu(A)                      <span class="c"># A = P @ L @ U</span>
+lu = sl.lu_factor(A); sl.lu_solve(lu, np.array([<span class="s">1.</span>, <span class="s">2.</span>]))   <span class="c"># reuse for many b</span>
+Q, R = np.linalg.qr(A)                  <span class="c"># Q.T @ Q == I, R upper triangular</span>
+L = np.linalg.cholesky(A)               <span class="c"># A = L @ L.T (fails if not positive definite)</span>
+x = np.array([<span class="s">0.</span>, <span class="s">0.</span>]) + L @ np.random.randn(<span class="s">2</span>, <span class="s">1000</span>)   <span class="c"># samples with covariance A</span></pre>
+</section>
+<p class="foot">Part of the <a href="../">Mathematical concepts</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script>
+(function(){
+const {$} = ML, LA=ML.LA; const B={x0:-4,x1:4,y0:-4,y1:4};
+/* ---- 1. eigenvectors ---- */
+const EA=[[2,1],[1,1.5]]; const pE=new ML.Plot('#pE',{bounds:B}); const EV=[{v:[1,0]}];
+const PRE={'Symmetric':[[2,1],[1,1.5]],'Stretch':[[2,0],[0,0.5]],'Shear':[[1,1],[0,1]],'Rotation':[[0.8,-0.6],[0.6,0.8]],'Reflection':[[0,1],[1,0]],'Non-symmetric':[[1.5,1],[0.25,1]]};
+$('#ePre').innerHTML=Object.keys(PRE).map(k=>`<button class="btn" data-k="${k}">${k}</button>`).join('');
+const eIn=MX.matInput('eM',EA,()=>{ drawE(); drawP(); });
+$('#ePre').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; PRE[b.dataset.k].forEach((r,i)=>r.forEach((v,j)=>EA[i][j]=v)); eIn.redraw(); drawE(); drawP(); });
+function drawE(){ const P=ML.palette(); let x=EV[0].v; const nx=Math.hypot(...x)||1; x=[x[0]/nx,x[1]/nx]; EV[0].v=x; const Ax=LA.mv(EA,x), e=MX.eig2(EA);
+  pE.clear(); pE.grid(1,true);
+  const c=pE.ctx; c.save(); c.strokeStyle=P.muted; c.globalAlpha=.6; c.lineWidth=1.5; c.beginPath(); for(let t=0;t<=96;t++){ const a=t/96*2*Math.PI, p=[Math.cos(a),Math.sin(a)]; t?c.lineTo(pE.X(p[0]),pE.Y(p[1])):c.moveTo(pE.X(p[0]),pE.Y(p[1])); } c.stroke();
+  c.strokeStyle=P.c2; c.globalAlpha=.9; c.lineWidth=2; c.beginPath(); for(let t=0;t<=96;t++){ const a=t/96*2*Math.PI, p=LA.mv(EA,[Math.cos(a),Math.sin(a)]); t?c.lineTo(pE.X(p[0]),pE.Y(p[1])):c.moveTo(pE.X(p[0]),pE.Y(p[1])); } c.stroke(); c.restore();
+  for(let t=0;t<24;t++){ const a=t/24*2*Math.PI, p=[Math.cos(a),Math.sin(a)], q=LA.mv(EA,p); pE.line(p[0],p[1],q[0],q[1],{color:P.muted,width:1,alpha:.35}); }
+  if(!e.complex) e.vectors.forEach((v,i)=>{ pE.hline(-v[1],v[0],0,{color:i?P.c3:P.c1,width:1.5,dash:[6,5],alpha:.8}); });
+  const cross=x[0]*Ax[1]-x[1]*Ax[0], al=Math.abs(cross)/(Math.hypot(...Ax)||1)<0.03;
+  MX.vec(pE,Ax,P.c4,'Ax',{width:al?4:3}); MX.vec(pE,x,P.ink,'x');
+  if(e.complex){ MX.set('eTex',`\\lambda=${MX.n(e.re)}\\pm ${MX.n(e.im)}i\\quad\\text{(complex: no real direction is kept)}`,true); $('#eStats').innerHTML=`<div class="stat c4"><b>none</b><span>real eigenvectors</span></div><div class="stat c2"><b>${MX.n(EA[0][0]+EA[1][1])}</b><span>trace = λ₁ + λ₂</span></div><div class="stat c2"><b>${MX.n(LA.det2(EA))}</b><span>det = λ₁ λ₂</span></div>`; return; }
+  MX.set('eTex',`\\begin{aligned}&\\lambda^2-${MX.n(EA[0][0]+EA[1][1])}\\lambda+${MX.n(LA.det2(EA))}=0\\\\ &\\lambda_1=${MX.n(e.values[0])},\\ v_1=${MX.vtex(e.vectors[0])},\\quad \\lambda_2=${MX.n(e.values[1])},\\ v_2=${MX.vtex(e.vectors[1])}\\end{aligned}`,true);
+  const r=LA.dot(x,Ax);
+  $('#eStats').innerHTML=`<div class="stat c1"><b>${e.values[0].toFixed(2)}</b><span>λ₁ (purple dashes)</span></div><div class="stat c3"><b>${e.values[1].toFixed(2)}</b><span>λ₂ (teal dashes)</span></div><div class="stat ${al?'c5':'c4'}"><b>${al?'yes':'no'}</b><span>is x an eigenvector?${al?' Ax = '+r.toFixed(2)+' x':''}</span></div>`; }
+MX.dragVecs(pE,EV,drawE,{snap:0,lim:4}); pE.onResize=drawE;
+
+/* ---- 2. power iteration ---- */
+const pP=new ML.Plot('#pP',{bounds:{x0:-1.6,x1:1.6,y0:-1.6,y1:1.6}}); const PV=[{v:[0.2,1]}]; let K=4;
+function drawP(){ const P=ML.palette(), e=MX.eig2(EA); pP.clear(); pP.grid(0.5,true);
+  if(!e.complex) e.vectors.forEach((v,i)=>pP.hline(-v[1],v[0],0,{color:i?P.c3:P.c1,width:1.5,dash:[6,5],alpha:.8}));
+  let x=PV[0].v.slice(); const n0=Math.hypot(...x)||1; x=x.map(v=>v/n0); const pts=[x]; let growth=[];
+  for(let k=0;k<K;k++){ const y=LA.mv(EA,x), n=Math.hypot(...y)||1; growth.push(n); x=y.map(v=>v/n); pts.push(x); }
+  pts.forEach((p,i)=>MX.vec(pP,p,i===pts.length-1?P.c4:P.muted,i===0?'x₀':i===pts.length-1?'x'+String(K).split('').map(d=>'₀₁₂₃₄₅₆₇₈₉'[d]).join(''):'',{width:i===pts.length-1?3:1.5,alpha:i===pts.length-1?1:0.25+0.6*i/pts.length}));
+  let ang='–'; if(!e.complex){ const v=e.vectors[Math.abs(e.values[0])>=Math.abs(e.values[1])?0:1]; ang=(Math.acos(Math.min(1,Math.abs(LA.dot(v,x))))*180/Math.PI).toFixed(2)+'°'; }
+  $('#pStats').innerHTML=`<div class="stat c4"><b>${ang}</b><span>angle to dominant eigenvector</span></div><div class="stat c2"><b>${growth.length?growth[growth.length-1].toFixed(3):'–'}</b><span>last stretch ‖Ax‖ (→ |λ₁|)</span></div>`+(e.complex?'':`<div class="stat c1"><b>${Math.abs(e.values[1]/e.values[0]).toFixed(3)}</b><span>|λ₂/λ₁|: shrink per step</span></div>`); }
+MX.dragVecs(pP,PV,drawP,{snap:0,lim:1.5}); ML.bindRange('kk',v=>{K=v;drawP();}); pP.onResize=drawP;
+
+/* ---- 3. PSD: quadratic form landscape ---- */
+const symA=(l1,l2,th)=>{ const c=Math.cos(th), s=Math.sin(th); return [[l1*c*c+l2*s*s,(l1-l2)*c*s],[(l1-l2)*c*s,l1*s*s+l2*c*c]]; };
+const qf=(A,x,y)=>A[0][0]*x*x+2*A[0][1]*x*y+A[1][1]*y*y;
+const kind=(a,b,e=1e-9)=>{ const lo=Math.min(a,b), hi=Math.max(a,b); return lo>e?['positive definite','bowl','c5']:lo>=-e&&hi>e?['positive semi-definite','valley with a flat floor','c3']:hi<-e?['negative definite','dome','c4']:lo>=-e?['zero matrix','flat plane','c2']:hi<=e?['negative semi-definite','upside-down valley','c4']:['indefinite','saddle','c4']; };
+const pS=new ML.Plot('#pS',{bounds:{x0:-2,x1:2,y0:-2,y1:2}}); const SX=[{v:[0.8,0.9]}]; let sL1=2,sL2=0.7,sTh=30;
+const SPRE={'Bowl (PD)':[2,0.7],'Valley (PSD)':[1.6,0],'Saddle':[1.5,-1],'Dome':[-0.8,-1.6]};
+$('#sPre').innerHTML=Object.keys(SPRE).map(k=>`<button class="btn" data-k="${k}">${k}</button>`).join('');
+$('#sPre').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; [sL1,sL2]=SPRE[b.dataset.k]; ['sl1','sl2'].forEach((id,i)=>{ const el=$('#'+id); el.value=[sL1,sL2][i]; el.dispatchEvent(new Event('input')); }); drawS(); });
+function drawS(){ const P=ML.palette(), th=sTh*Math.PI/180, A=symA(sL1,sL2,th), M=Math.max(Math.abs(sL1),Math.abs(sL2),0.3), sc=M*1.2;
+  pS.clear(); pS.regions((x,y)=>{ const q=qf(A,x,y); return Math.abs(q)<1e-9?0.5:0.5-0.5*Math.tanh(q/sc); },5,1);
+  pS.grid(1,true);
+  [-4,-2,-1,-0.5,0.5,1,2,4].forEach(l=>pS.contour((x,y)=>qf(A,x,y),l*M,{color:P.ink,width:1,alpha:.35,res:4}));
+  if(Math.min(sL1,sL2)<-1e-9&&Math.max(sL1,sL2)>1e-9) pS.contour((x,y)=>qf(A,x,y),0,{color:P.ink,width:2.2,alpha:.85,res:4});
+  const q1=[Math.cos(th),Math.sin(th)], q2=[-Math.sin(th),Math.cos(th)];
+  pS.hline(-q1[1],q1[0],0,{color:P.c1,width:1.5,dash:[6,5],alpha:.9}); pS.hline(-q2[1],q2[0],0,{color:P.c3,width:1.5,dash:[6,5],alpha:.9});
+  [[sL1,q2],[sL2,q1]].forEach(([l,qo])=>{ if(Math.abs(l)<1e-9) pS.hline(qo[0],qo[1],0,{color:P.c3,width:4,alpha:.5}); });
+  /* unit circle */
+  const c=pS.ctx; c.save(); c.strokeStyle=P.muted; c.globalAlpha=.7; c.lineWidth=1.2; c.setLineDash([3,4]); c.beginPath(); for(let t=0;t<=96;t++){ const a=t/96*2*Math.PI; t?c.lineTo(pS.X(Math.cos(a)),pS.Y(Math.sin(a))):c.moveTo(pS.X(Math.cos(a)),pS.Y(Math.sin(a))); } c.stroke(); c.restore();
+  const x=SX[0].v, Ax=LA.mv(A,x), q=qf(A,x[0],x[1]), nx=Math.hypot(...x), nA=Math.hypot(...Ax);
+  const ang=nx>1e-9&&nA>1e-9?Math.acos(Math.max(-1,Math.min(1,LA.dot(x,Ax)/(nx*nA))))*180/Math.PI:NaN;
+  const sh=Math.min(1,1.9/Math.max(1e-9,nA)); MX.vec(pS,[Ax[0]*sh,Ax[1]*sh],P.c4,sh<1?'Ax (scaled)':'Ax',{width:3}); MX.vec(pS,x,P.ink,'x');
+  const [name,shape,col]=kind(sL1,sL2), lo=Math.min(sL1,sL2), hi=Math.max(sL1,sL2);
+  MX.set('sTex',`\\begin{gathered}A=Q\\Lambda Q^\\top=${MX.mtex(A)}\\\\ x^\\top Ax=${MX.n(sL1)}\\,c_1^2${sL2<0?'-':'+'}${MX.n(Math.abs(sL2))}\\,c_2^2\\end{gathered}`,true);
+  $('#sStats').innerHTML=`<div class="stat ${col}"><b>${shape.split(' ')[0]==='upside-down'?'valley':shape.split(' ')[0]}</b><span>${name}${shape.includes('valley')?' (a valley with a flat floor)':''}</span></div><div class="stat ${q>=-1e-9?'c5':'c4'}"><b>${q.toFixed(2)}</b><span>xᵀAx at your x</span></div><div class="stat ${ang<=90.01?'c5':'c4'}"><b>${isNaN(ang)?'–':ang.toFixed(0)+'°'}</b><span>angle between x and Ax</span></div><div class="stat ${lo>=-1e-9?'c5':'c4'}"><b>${lo.toFixed(1)}</b><span>λmin: the lowest xᵀAx on the unit circle</span></div>`; }
+MX.dragVecs(pS,SX,drawS,{snap:0,lim:2}); pS.onResize=drawS;
+ML.bindRange('sl1',v=>{sL1=+v;drawS();},v=>(+v).toFixed(1)); ML.bindRange('sl2',v=>{sL2=+v;drawS();},v=>(+v).toFixed(1)); ML.bindRange('sth',v=>{sTh=+v;drawS();},v=>v+'°');
+
+/* ---- 4. spectral theorem: staged morph ---- */
+const pT=new ML.Plot('#pT',{bounds:{x0:-3,x1:3,y0:-3,y1:3}}); let tL1=2,tL2=0.6,tTh=35,tT=0,tRaf=0;
+const ease=u=>u<0?0:u>1?1:u*u*(3-2*u);
+function tMat(t){ const th=tTh*Math.PI/180, r1=ease(t), r2=ease(t-1), r3=ease(t-2);
+  const a=-th*r1+th*r3, c=Math.cos(a), s=Math.sin(a), R=[[c,-s],[s,c]];
+  const D=[[1+(tL1-1)*r2,0],[0,1+(tL2-1)*r2]];
+  /* stage 1: R(-θ r1); stage 2: D·R(-θ); stage 3: R(θ r3)·D·R(-θ) */
+  const Rm=(x)=>[[Math.cos(x),-Math.sin(x)],[Math.sin(x),Math.cos(x)]], mul=(X,Y)=>[[X[0][0]*Y[0][0]+X[0][1]*Y[1][0],X[0][0]*Y[0][1]+X[0][1]*Y[1][1]],[X[1][0]*Y[0][0]+X[1][1]*Y[1][0],X[1][0]*Y[0][1]+X[1][1]*Y[1][1]]];
+  return mul(Rm(th*r3),mul(D,Rm(-th*r1))); }
+const T_STAGE=['Start: the unit circle, a grid and the eigenvectors q₁, q₂.','Step 1, Qᵀ: rotate so q₁ and q₂ lie on the axes.','Step 2, Λ: stretch the axes by λ₁ and λ₂. Nothing turns.','Step 3, Q: rotate back. The result matches A exactly.'];
+function drawT(){ const P=ML.palette(), th=tTh*Math.PI/180, M=tMat(tT), A=symA(tL1,tL2,th), c=pT.ctx;
+  pT.clear(); pT.grid(1,true);
+  const path=(f,n,col,w,al,dash)=>{ c.save(); c.strokeStyle=col; c.lineWidth=w; c.globalAlpha=al; if(dash) c.setLineDash(dash); c.beginPath(); for(let i=0;i<=n;i++){ const p=f(i/n); i?c.lineTo(pT.X(p[0]),pT.Y(p[1])):c.moveTo(pT.X(p[0]),pT.Y(p[1])); } c.stroke(); c.restore(); };
+  /* ghost of A·circle */
+  path(u=>LA.mv(A,[Math.cos(2*Math.PI*u),Math.sin(2*Math.PI*u)]),96,P.c4,2,.8,[6,5]);
+  /* grid lines of [-1,1]^2 */
+  for(let k=-1;k<=1;k+=0.5){ path(u=>LA.mv(M,[-1+2*u,k]),12,P.muted,1.2,.55); path(u=>LA.mv(M,[k,-1+2*u]),12,P.muted,1.2,.55); }
+  /* filled circle */
+  c.save(); c.fillStyle=P.c2; c.globalAlpha=.16; c.beginPath(); for(let i=0;i<=96;i++){ const p=LA.mv(M,[Math.cos(i/96*2*Math.PI),Math.sin(i/96*2*Math.PI)]); i?c.lineTo(pT.X(p[0]),pT.Y(p[1])):c.moveTo(pT.X(p[0]),pT.Y(p[1])); } c.fill(); c.restore();
+  path(u=>LA.mv(M,[Math.cos(2*Math.PI*u),Math.sin(2*Math.PI*u)]),96,P.c2,2.4,1);
+  const q1=[Math.cos(th),Math.sin(th)], q2=[-Math.sin(th),Math.cos(th)];
+  MX.vec(pT,LA.mv(M,q1),P.c1,'q₁',{width:3}); MX.vec(pT,LA.mv(M,q2),P.c3,'q₂',{width:3});
+  const st=tT<=0.005?0:tT>=2.995?3:Math.ceil(tT); $('#ttOut').textContent=T_STAGE[st].split(':')[0];
+  document.querySelectorAll('#spectral [data-s]').forEach(b=>b.classList.toggle('primary',Math.abs(+b.dataset.s-tT)<0.01));
+  MX.set('tTex',`\\underbrace{${MX.mtex(A)}}_{A}=\\underbrace{${MX.mtex([[q1[0],q2[0]],[q1[1],q2[1]]])}}_{Q}\\underbrace{${MX.mtex([[tL1,0],[0,tL2]],1)}}_{\\Lambda}\\underbrace{${MX.mtex([[q1[0],q1[1]],[q2[0],q2[1]]])}}_{Q^\\top}`,true);
+  $('#tStats').innerHTML=`<div class="stat c2"><b>${T_STAGE[st].split(':')[0]}</b><span>${T_STAGE[st].split(': ')[1]}</span></div><div class="stat c1"><b>${tL1.toFixed(1)}</b><span>λ₁: stretch along q₁</span></div><div class="stat c3"><b>${tL2.toFixed(1)}</b><span>λ₂: stretch along q₂</span></div><div class="stat c4"><b>${Math.abs(tL1*tL2).toFixed(2)}</b><span>area of the ellipse ÷ area of the circle = |det A|</span></div>`; }
+function tGo(target){ cancelAnimationFrame(tRaf); const from=tT, dur=Math.abs(target-from)*1100; if(dur<1){ tT=target; drawT(); return; } const t0=performance.now();
+  const step=now=>{ const u=Math.min(1,(now-t0)/dur); tT=from+(target-from)*u; $('#tt').value=tT; drawT(); if(u<1) tRaf=requestAnimationFrame(step); else $('#tPlay').textContent='Play'; }; tRaf=requestAnimationFrame(step); }
+$('#tPlay').addEventListener('click',()=>{ if(tT>=2.99){ tT=0; } $('#tPlay').textContent='Playing…'; tGo(3); });
+document.querySelectorAll('#spectral [data-s]').forEach(b=>b.addEventListener('click',()=>tGo(+b.dataset.s)));
+$('#tt').addEventListener('input',e=>{ cancelAnimationFrame(tRaf); tT=+e.target.value; drawT(); });
+ML.bindRange('tl1',v=>{tL1=+v;drawT();},v=>(+v).toFixed(1)); ML.bindRange('tl2',v=>{tL2=+v;drawT();},v=>(+v).toFixed(1)); ML.bindRange('tth',v=>{tTh=+v;drawT();},v=>v+'°'); pT.onResize=drawT;
+
+/* ---- 5. covariance, projections, Rayleigh quotient ---- */
+const pV=new ML.Plot('#pV',{bounds:{x0:-4,x1:4,y0:-4,y1:4}}); let vL1=2.5,vL2=0.5,vTh=30; const VU=[{v:[Math.cos(1.6),Math.sin(1.6)]}];
+const VZ=(()=>{ const r=ML.rng(11), Z=Array.from({length:260},()=>[r.gauss(),r.gauss()]); const n=Z.length, m=[0,1].map(j=>Z.reduce((s,z)=>s+z[j],0)/n); Z.forEach(z=>{z[0]-=m[0];z[1]-=m[1];});
+  const C=[[0,0],[0,0]]; Z.forEach(z=>{ C[0][0]+=z[0]*z[0]/n; C[0][1]+=z[0]*z[1]/n; C[1][1]+=z[1]*z[1]/n; }); C[1][0]=C[0][1]; const L=MX.chol(C);
+  /* whiten exactly: z ← L⁻¹ z, so the sample covariance is I */
+  return Z.map(z=>{ const a=z[0]/L[0][0]; return [a,(z[1]-L[1][0]*a)/L[1][1]]; }); })();
+function drawV(){ const P=ML.palette(), th=vTh*Math.PI/180, q1=[Math.cos(th),Math.sin(th)], q2=[-Math.sin(th),Math.cos(th)], S=symA(vL1,vL2,th), r1=Math.sqrt(vL1), r2=Math.sqrt(vL2);
+  let u=VU[0].v; const nu=Math.hypot(...u)||1; u=[u[0]/nu,u[1]/nu]; VU[0].v=[u[0]*2.6,u[1]*2.6];
+  const X=VZ.map(z=>[q1[0]*r1*z[0]+q2[0]*r2*z[1], q1[1]*r1*z[0]+q2[1]*r2*z[1]]);
+  pV.clear(); pV.grid(1,true);
+  pV.hline(-u[1],u[0],0,{color:P.ink,width:1.2,alpha:.45});
+  const pr=X.map(x=>x[0]*u[0]+x[1]*u[1]), c=pV.ctx;
+  pV.points(X,X.map(()=>0),{color:()=>P.c1,r:2.4,alpha:()=>.45});
+  c.save(); c.strokeStyle=P.c4; c.globalAlpha=.3; c.lineWidth=1.2; c.beginPath(); pr.forEach(t=>{ const px=pV.X(t*u[0]), py=pV.Y(t*u[1]), nx=-u[1]*5, ny=-u[0]*5; c.moveTo(px+nx,py-ny); c.lineTo(px-nx,py+ny); }); c.stroke(); c.restore();
+  if(vL1>1e-6||vL2>1e-6){ pV.ellipse([0,0],S,1,{color:P.ink,width:1.8}); pV.ellipse([0,0],S,2,{color:P.ink,width:1.2,dash:[5,4]}); }
+  /* polar spread curve sqrt(uᵀΣu) */
+  c.save(); c.strokeStyle=P.c5; c.lineWidth=2.4; c.beginPath(); for(let i=0;i<=180;i++){ const a=i/180*2*Math.PI, d=[Math.cos(a),Math.sin(a)], r=Math.sqrt(Math.max(0,qf(S,d[0],d[1]))); i?c.lineTo(pV.X(r*d[0]),pV.Y(r*d[1])):c.moveTo(pV.X(r*d[0]),pV.Y(r*d[1])); } c.stroke(); c.restore();
+  pV.hline(-q1[1],q1[0],0,{color:P.c5,width:1.3,dash:[6,5],alpha:.8});
+  const v=qf(S,u[0],u[1]), sd=Math.sqrt(Math.max(0,v)), sv=pr.reduce((s,t)=>s+t*t,0)/pr.length;
+  pV.line(-sd*u[0],-sd*u[1],sd*u[0],sd*u[1],{color:P.c4,width:6,alpha:.6});
+  MX.vec(pV,[u[0]*2.6,u[1]*2.6],P.c4,'u',{width:2.5});
+  const ang=Math.acos(Math.min(1,Math.abs(LA.dot(u,q1))))*180/Math.PI, tr=vL1+vL2;
+  MX.set('vTex',`\\Sigma=${MX.mtex(S)},\\qquad u^\\top\\Sigma u=${MX.n(v)}`,true);
+  $('#vStats').innerHTML=`<div class="stat c4"><b>${sv.toFixed(3)}</b><span>variance of the projected points</span></div><div class="stat c5"><b>${v.toFixed(3)}</b><span>uᵀΣu: the same number</span></div><div class="stat c2"><b>${tr>0?(100*v/tr).toFixed(0)+'%':'–'}</b><span>of the total variance (trace Σ = ${tr.toFixed(2)})</span></div><div class="stat ${ang<2?'c5':'c1'}"><b>${ang.toFixed(0)}°</b><span>angle from u to the axis of largest variance</span></div>`; }
+MX.dragVecs(pV,VU,drawV,{snap:0,lim:4}); pV.onResize=drawV;
+ML.bindRange('vl1',v=>{vL1=+v;drawV();},v=>(+v).toFixed(2)); ML.bindRange('vl2',v=>{vL2=+v;drawV();},v=>(+v).toFixed(2)); ML.bindRange('vth',v=>{vTh=+v;drawV();},v=>v+'°');
+
+/* ---- 6. LU ---- */
+const LUA=[[2,1,1],[4,3,3],[8,7,9]], LUB=[[4],[10],[24]];
+MX.matInput('luM',LUA,drawLU,{step:1}); MX.matInput('luB',LUB,drawLU,{step:1});
+function drawLU(){ const {L,U,P}=MX.lu(LUA), Pm=P.map(i=>[0,1,2].map(j=>+(j===i))), b=LUB.map(r=>r[0]), pb=P.map(i=>b[i]);
+  if(U.some((r,i)=>Math.abs(r[i])<1e-12)){ MX.set('luTex',`P=${MX.mtex(Pm,0)},\\ L=${MX.mtex(L)},\\ U=${MX.mtex(U)}`,true); MX.set('luSol','\\text{A zero pivot remains: } A \\text{ is singular, so } Ax=b \\text{ has no unique solution.}',true); return; }
+  const y=[]; for(let i=0;i<3;i++){ let s=pb[i]; for(let k=0;k<i;k++) s-=L[i][k]*y[k]; y[i]=s; }
+  const x=[]; for(let i=2;i>=0;i--){ let s=y[i]; for(let k=i+1;k<3;k++) s-=U[i][k]*x[k]; x[i]=s/U[i][i]; }
+  MX.set('luTex',`P=${MX.mtex(Pm,0)},\\ L=${MX.mtex(L)},\\ U=${MX.mtex(U)}`,true);
+  MX.set('luSol',`Ly=Pb\\Rightarrow y=${MX.vtex(y)}\\ \\text{(top down)},\\qquad Ux=y\\Rightarrow x=${MX.vtex(x,3)}\\ \\text{(bottom up)}`,true); }
+
+/* ---- 7. QR ---- */
+const pQ=new ML.Plot('#pQ',{bounds:B}); const QV=[{v:[2.5,0.8]},{v:[1.4,2.2]}];
+function drawQ(){ const P=ML.palette(), a1=QV[0].v, a2=QV[1].v, n1=Math.hypot(...a1)||1, q1=a1.map(v=>v/n1), r12=LA.dot(q1,a2), proj=q1.map(v=>v*r12), u2=[a2[0]-proj[0],a2[1]-proj[1]], n2=Math.hypot(...u2), q2=n2>1e-9?u2.map(v=>v/n2):[0,0];
+  pQ.clear(); pQ.grid(1,true); pQ.hline(-q1[1],q1[0],0,{color:P.c1,alpha:.25,width:1});
+  pQ.line(0,0,proj[0],proj[1],{color:P.c1,width:6,alpha:.25}); pQ.line(a2[0],a2[1],proj[0],proj[1],{color:P.muted,width:1.5,dash:[4,4]});
+  MX.vec(pQ,u2,P.c3,'u₂',{from:[0,0],width:1.5,alpha:.5});
+  MX.vec(pQ,a1,P.c1,'a₁',{width:2,alpha:.55}); MX.vec(pQ,a2,P.c3,'a₂',{width:2,alpha:.55}); MX.vec(pQ,q1,P.c1,'q₁',{width:3.5}); MX.vec(pQ,q2,P.c3,'q₂',{width:3.5});
+  if(n2>1e-9) MX.rightAngle(pQ,[0,0],q1,q2,0.3);
+  MX.set('qTex',`\\underbrace{${MX.mtex([[a1[0],a2[0]],[a1[1],a2[1]]])}}_{A}=\\underbrace{${MX.mtex([[q1[0],q2[0]],[q1[1],q2[1]]],3)}}_{Q}\\underbrace{${MX.mtex([[n1,r12],[0,n2]])}}_{R}`,true); }
+MX.dragVecs(pQ,QV,drawQ); pQ.onResize=drawQ;
+
+/* ---- 8. Cholesky sampling ---- */
+const pC=new ML.Plot('#pC',{bounds:{x0:-4.5,x1:4.5,y0:-4.5,y1:4.5}}); let s1=1.2,s2=0.7,rho=0.6; const rng=ML.rng(7), Z=Array.from({length:400},()=>[rng.gauss(),rng.gauss()]);
+function drawC(){ const P=ML.palette(), S=[[s1*s1,rho*s1*s2],[rho*s1*s2,s2*s2]], L=MX.chol(S); pC.clear(); pC.grid(1,true); if(!L) return;
+  const X=Z.map(z=>[L[0][0]*z[0], L[1][0]*z[0]+L[1][1]*z[1]]); pC.points(X,X.map(()=>0),{color:()=>P.c1,r:2.6,alpha:()=>.55});
+  pC.ellipse([0,0],S,1,{color:P.c4,width:2}); pC.ellipse([0,0],S,2,{color:P.c4,width:1.5,dash:[5,4]});
+  MX.vec(pC,[L[0][0],L[1][0]],P.ink,'L e₁',{width:2.5}); MX.vec(pC,[0,L[1][1]],P.c3,'L e₂',{width:2.5});
+  MX.set('cTex',`\\Sigma=${MX.mtex(S)}=\\underbrace{${MX.mtex(L,3)}}_{L}\\,L^\\top`,true); }
+ML.bindRange('s1',v=>{s1=v;drawC();},v=>v.toFixed(2)); ML.bindRange('s2',v=>{s2=v;drawC();},v=>v.toFixed(2)); ML.bindRange('rho',v=>{rho=v;drawC();},v=>v.toFixed(2)); pC.onResize=drawC;
+ML.onTheme(()=>{ drawE(); drawP(); drawS(); drawT(); drawV(); drawQ(); drawC(); });
+drawE(); drawP(); drawS(); drawT(); drawV(); drawLU(); drawQ(); drawC();
+})();
+</script>
+<script>NLP.nav('math','decompositions'); ML.renderMath(document.body);</script>
+</body>
+</html>

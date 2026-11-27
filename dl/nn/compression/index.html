@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Model compression for deep learning, explained interactively</title>
+<meta name="description" content="Making neural networks small and fast: model memory at different precisions, quantisation from 8 to 2 bits with live error, outliers and group-wise scales, pruning a network you can watch, knowledge distillation with temperature, low-rank factorisation and LoRA, and efficient architectures such as depthwise convolutions, mixture of experts and the KV cache.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nn">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Step 7 &middot; Efficient deep learning</p>
+  <h1>Model compression: <span class="grad">same skill, fewer bits</span></h1>
+  <p class="lede">A trained network is a large pile of numbers, usually stored with far more precision and far more redundancy than it needs. Compression removes the excess so a model fits on a phone, answers faster and costs less to run, while keeping almost all of its accuracy. Four ideas do most of the work: fewer bits per weight, fewer weights, a smaller student network, and cheaper matrix shapes.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#size">1 · How big?</a><a href="#quant">2 · Quantisation</a><a href="#prune">3 · Pruning</a><a href="#distil">4 · Distillation</a><a href="#lowrank">5 · Low rank</a><a href="#arch">6 · Efficient design</a><a href="#recipe">7 · Recipes</a><a href="#py">8 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is model compression, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>Training needs high precision and lots of spare capacity to find good weights. Using the model afterwards needs much less. Compression keeps the behaviour and throws away the slack:</p>
+      <ol class="steps2"><li><b><a class="term" data-t="quantisation">Quantisation</a></b>: store each weight in 8 or 4 bits instead of 32.</li><li><b><a class="term" data-t="weight-pruning">Pruning</a></b>: set the least important weights to zero and skip them.</li><li><b><a class="term" data-t="distillation">Distillation</a></b>: train a small student to imitate a large teacher.</li><li><b>Factorisation and efficient design</b>: replace big matrices with products of thin ones, or build the network cheap from the start.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>A photo straight from a camera might be 25 MB; the JPEG you send is 2 MB and looks the same. JPEG rounds away detail the eye does not notice (quantisation), drops near-zero frequency components (pruning) and keeps a compact description (low rank). Model compression does the same to weights, with accuracy playing the role of the eye.</p>
+      <div class="pc"><div class="pro"><b>Buys you</b><ul><li>2–8× less memory, so bigger models fit on smaller devices</li><li>Faster inference, since memory bandwidth is usually the bottleneck</li><li>Lower cost and energy per prediction</li></ul></div><div class="con"><b>Costs you</b><ul><li>Some accuracy, more at very low bit-widths</li><li>Speed-ups only if the hardware supports the format</li><li>Extra steps: calibration data, fine-tuning, evaluation</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="quantisation">Quantisation</a><a class="term" data-t="weight-pruning">Pruning</a><a class="term" data-t="lottery-ticket">Lottery ticket</a><a class="term" data-t="distillation">Distillation</a><a class="term" data-t="low-rank">Low rank</a><a class="term" data-t="lora">LoRA</a><a class="term" data-t="moe">Mixture of experts</a><a class="term" data-t="kv-cache">KV cache</a></div>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="size" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>How big is a model? Parameters × bits</h2>
+    <p class="sub">Memory needed just to hold the weights, at four precisions. The dashed lines are typical devices.</p>
+    <div class="plot wide" id="pM"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Memory for the weights is simply \(\text{parameters}\times\text{bits per weight}/8\) bytes. A 7-billion-parameter model needs 28 GB in 32-bit floats, 14 GB in 16-bit, 7 GB in 8-bit and about 3.5 GB in 4-bit: the difference between a data-centre GPU and a laptop.</p>
+      <p>Memory also sets speed. Generating each token of text reads every weight once, so a model that is half the size can produce tokens almost twice as fast on the same hardware. Running needs more than the weights (activations and the <a class="term" data-t="kv-cache">KV cache</a>, section 6), so leave headroom.</p>
+      <div class="ctl"><label for="mP"><span>Parameters</span><output id="mPOut"></output></label><input type="range" id="mP" min="-1" max="3" step="0.01" value="0.845"></div>
+      <div class="stats" id="mStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="quant" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Quantisation: round every weight to a small grid</h2>
+    <p class="sub">A layer's 4,096 weights (histogram) and the grid of values they are rounded to (ticks). Fewer bits, fewer grid points, bigger rounding errors.</p>
+    <div class="ctl"><span class="lbl">Scale</span><div class="seg" id="qSeg"><button data-v="tensor" class="on">One scale per layer</button><button data-v="group">One scale per 64 weights</button></div></div>
+    <div class="plot wide" id="pQ"></div>
+    <div class="plot short" id="pQe" style="margin-top:8px"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>To store a weight in \(b\) bits, choose a scale \(s\) and keep only the integer \(q=\operatorname{round}(w/s)\), limited to the \(2^b\) values that fit. Using the weight means multiplying back: \(\hat w=s\,q\). The simplest scale makes the largest weight land on the largest integer:</p>
+      <div class="mathbox c1">$$s=\frac{\max_i|w_i|}{2^{b-1}-1},\qquad q_i=\operatorname{clip}\!\big(\operatorname{round}(w_i/s),\,-(2^{b-1}-1),\,2^{b-1}-1\big),\qquad \hat w_i=s\,q_i .$$</div>
+      <p>Each weight then moves by at most \(s/2\). Halving the bits roughly squares the number of grid points lost, so error grows fast below 4 bits. Now switch on the outliers. One huge weight stretches the scale, so the grid spacing becomes coarse for the thousands of ordinary weights. This is the central problem in quantising large language models, which have a few very large values. Two fixes: give each small group of weights its own scale (try “one scale per 64 weights”), or keep the outliers in higher precision (LLM.int8()).</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: symmetric k-bit quantisation of a weight matrix</h5><ol>
+        <li><span class="kw">input</span> weights \(W\), bits \(b\), group size \(g\) <span class="cm">g = whole row, or e.g. 64 or 128</span></li>
+        <li><span class="kw">for</span> each group \(G\) of \(g\) weights <span class="kw">do</span></li>
+        <li class="i1">\(s_G\leftarrow\max_{w\in G}|w|\,/\,(2^{b-1}-1)\) <span class="cm">one scale per group, kept in 16 bits</span></li>
+        <li class="i1">\(q\leftarrow\operatorname{clip}(\operatorname{round}(w/s_G))\) for each \(w\in G\) <span class="cm">small integers</span></li>
+        <li>store the integers \(q\) and the scales \(s\)</li>
+        <li><span class="kw">at inference</span>: \(\hat W\leftarrow s\cdot q\), or multiply in integers and rescale once</li>
+        <li><span class="kw">return</span> \(q, s\) <span class="cm">memory ≈ b/32 of the original, plus the scales</span></li>
+      </ol></div>
+      <div class="ctl"><label for="qB"><span>Bits per weight</span><output id="qBOut"></output></label><input type="range" id="qB" min="2" max="8" step="1" value="4"></div>
+      <div class="ctl"><label for="qO"><span>Outliers</span><output id="qOOut"></output></label><input type="range" id="qO" min="0" max="20" step="1" value="0"></div>
+      <div class="stats" id="qStats"></div>
+      <details class="deeper"><summary>Going deeper: PTQ vs QAT, GPTQ and AWQ, and number formats</summary><div>
+        <p><b>Post-training quantisation (PTQ)</b> quantises a finished model, using a few hundred calibration examples to set the scales for activations. <b>Quantisation-aware training (QAT)</b> simulates rounding during training so the weights adapt to it; the rounding has zero gradient almost everywhere, so training uses the straight-through estimator, which treats it as the identity in the backward pass. QAT holds up better at 4 bits and below.</p>
+        <p>For LLMs, <b>GPTQ</b> (2022) quantises one column at a time and adjusts the remaining columns to cancel the error, using second-order information from calibration data. <b>AWQ</b> (2023) protects the 1% of weight channels that see the largest activations by scaling them before rounding. Both give usable 4-bit models; QLoRA (2023) fine-tunes on top of a 4-bit “NF4” base.</p>
+        <p><b>Formats.</b> int8 and int4 are uniform grids. FP8 (E4M3, E5M2) keeps an exponent, so it has fine steps near zero and coarse ones far away, matching bell-shaped weights; recent GPUs compute in FP8 and FP4 directly. Activations are harder to quantise than weights because their outliers change from input to input.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="prune" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Pruning: delete the weights that matter least</h2>
+    <p class="sub">A 2-16-16-1 network trained live on the moons data. Left: its decision regions on test points. Right: its three weight matrices; grey cells are pruned. Raise the sparsity, then fine-tune to win back accuracy.</p>
+    <div class="grid2" style="gap:10px"><div class="plot short" id="pP"></div><div class="plot short" id="pW"></div></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="pFT">Fine-tune 200 steps</button><button class="btn" id="pRe">Retrain from scratch</button><span class="pos" id="pPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Trained networks are full of weights near zero that barely affect the output. <b>Magnitude pruning</b> removes the smallest ones by absolute value. At moderate sparsity accuracy hardly moves; push further and it drops, but a short fine-tune with the zeros held fixed lets the remaining weights compensate. Repeating prune-then-fine-tune in small steps reaches higher sparsity than pruning all at once.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: iterative magnitude pruning</h5><ol>
+        <li><span class="kw">input</span> trained weights \(W\), target sparsity \(S\), steps \(T\)</li>
+        <li>mask \(M\leftarrow\) all ones</li>
+        <li><span class="kw">for</span> \(t=1\) <span class="kw">to</span> \(T\) <span class="kw">do</span></li>
+        <li class="i1">\(\tau\leftarrow\) the \((tS/T)\)-quantile of \(|W|\) over unpruned weights <span class="cm">raise sparsity gradually</span></li>
+        <li class="i1">\(M\leftarrow M\cdot\mathbb 1[|W|&gt;\tau]\); \(W\leftarrow W\odot M\)</li>
+        <li class="i1">fine-tune for a few epochs, keeping \(W\odot M\) <span class="cm">pruned weights stay zero</span></li>
+        <li><span class="kw">return</span> sparse \(W\) and mask \(M\)</li>
+      </ol></div>
+      <div class="ctl"><label for="pS"><span>Sparsity (share of weights removed)</span><output id="pSOut"></output></label><input type="range" id="pS" min="0" max="0.98" step="0.01" value="0"></div>
+      <div class="stats" id="pStats"></div>
+      <details class="deeper"><summary>Going deeper: structured sparsity and the lottery ticket</summary><div>
+        <p><b>Unstructured</b> pruning zeroes individual weights. It compresses well but speeds things up only with sparse kernels, because GPUs prefer dense blocks. <b>Structured</b> pruning removes whole neurons, attention heads, channels or layers, so the result is simply a smaller dense network. NVIDIA GPUs also support a middle way, 2:4 sparsity: in every group of four weights two are zero, which doubles matrix-multiply throughput.</p>
+        <p>The <a class="term" data-t="lottery-ticket">lottery ticket hypothesis</a> (Frankle and Carbin, 2019) found that if you prune a trained network and then retrain the surviving weights <i>from their original initial values</i>, the small network matches the big one. Large networks seem to train well partly because they contain many such lucky subnetworks.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="distil" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Knowledge distillation: learn from the teacher's doubts</h2>
+    <p class="sub">A large teacher network's output for one photo of a cat. Grey: the hard label a dataset provides. Purple: the teacher's probabilities at temperature \(T\). Raise \(T\) to reveal what else the teacher thinks the image resembles.</p>
+    <div class="plot wide" id="pD"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A hard label says only “cat”. The teacher's full distribution says “cat, quite like a dog, a little like a fox, nothing like a car”. Those relative probabilities, which Hinton called dark knowledge, tell the student how the classes relate, so it learns more per example. Dividing the logits by a temperature \(T&gt;1\) softens the distribution so the small probabilities become visible. The student is trained on a mix of both:</p>
+      <div class="mathbox c1">$$\mathcal L=\alpha\,\operatorname{CE}\big(y,\ \operatorname{softmax}(z_s)\big)+(1-\alpha)\,T^2\,\operatorname{KL}\Big(\operatorname{softmax}\big(\tfrac{z_t}{T}\big)\,\Big\|\,\operatorname{softmax}\big(\tfrac{z_s}{T}\big)\Big).$$</div>
+      <p>The \(T^2\) keeps the soft term's gradients at a comparable size as \(T\) changes. DistilBERT (2019) kept about 97% of BERT's language-understanding score with 40% fewer parameters and 60% faster inference this way. Many small open language models are now trained on text or probabilities produced by larger ones.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: knowledge distillation training step</h5><ol>
+        <li><span class="kw">input</span> a batch \((x,y)\), frozen teacher \(f_t\), student \(f_s\), temperature \(T\), weight \(\alpha\)</li>
+        <li>\(z_t\leftarrow f_t(x)\) <span class="cm">teacher logits, no gradient</span></li>
+        <li>\(z_s\leftarrow f_s(x)\) <span class="cm">student logits</span></li>
+        <li>\(\mathcal L_{\text{soft}}\leftarrow T^2\,\operatorname{KL}(\operatorname{softmax}(z_t/T)\,\|\,\operatorname{softmax}(z_s/T))\)</li>
+        <li>\(\mathcal L_{\text{hard}}\leftarrow\operatorname{CE}(y,\operatorname{softmax}(z_s))\)</li>
+        <li>update the student on \(\alpha\mathcal L_{\text{hard}}+(1-\alpha)\mathcal L_{\text{soft}}\)</li>
+      </ol></div>
+      <div class="ctl"><label for="dT"><span>Temperature \(T\)</span><output id="dTOut"></output></label><input type="range" id="dT" min="0.5" max="10" step="0.1" value="1"></div>
+      <div class="stats" id="dStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="lowrank" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Low-rank factorisation: two thin matrices instead of one big one</h2>
+    <p class="sub">The singular values of a 1,024 × 1,024 weight matrix (bars). Keeping the largest \(r\) (purple) replaces \(W\) by \(UV^\top\) with \(U,V\) of width \(r\).</p>
+    <div class="plot wide" id="pR"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The <a href="../../../math/svd/">SVD</a> writes any matrix as a sum of rank-one pieces, ordered by importance: \(W=\sum_k\sigma_ku_kv_k^\top\). If the singular values fall quickly, the first \(r\) pieces capture almost all of \(W\), and storing \(U\) (\(m\times r\)) and \(V\) (\(n\times r\)) costs \(r(m+n)\) numbers instead of \(mn\). The best possible rank-\(r\) error is set by the values you drop: \(\|W-W_r\|_F^2=\sum_{k&gt;r}\sigma_k^2\).</p>
+      <p>The same idea powers <a class="term" data-t="lora">LoRA</a> for fine-tuning: freeze \(W\) and learn only a low-rank change \(\Delta W=BA\), with rank 8 or 16. A 4,096 × 4,096 matrix has 16.8 million weights; a rank-16 update has 131,072, under 1%.</p>
+      <div class="ctl"><label for="rR"><span>Rank kept \(r\)</span><output id="rROut"></output></label><input type="range" id="rR" min="1" max="512" step="1" value="64"></div>
+      <div class="ctl"><label for="rD"><span>How fast singular values decay</span><output id="rDOut"></output></label><input type="range" id="rD" min="5" max="400" step="5" value="60"></div>
+      <div class="stats" id="rStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="arch" class="lab">
+  <div class="card hl">
+    <h2><span class="num">6</span>Efficient by design</h2>
+    <p class="sub">A depthwise-separable convolution (MobileNet) does one small filter per channel, then a 1×1 mix across channels. Compare its parameters with a standard convolution.</p>
+    <div class="plot short" id="pA"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A standard \(k\times k\) convolution from \(C_{\text{in}}\) to \(C_{\text{out}}\) channels has \(k^2C_{\text{in}}C_{\text{out}}\) weights. Splitting it into a per-channel spatial filter and a 1×1 channel mixer needs \(k^2C_{\text{in}}+C_{\text{in}}C_{\text{out}}\), about \(k^2\) times fewer for wide layers.</p>
+      <div class="ctl"><label for="aK"><span>Kernel size \(k\)</span><output id="aKOut"></output></label><input type="range" id="aK" min="1" max="7" step="2" value="3"></div>
+      <div class="ctl"><label for="aC"><span>Channels in = out</span><output id="aCOut"></output></label><input type="range" id="aC" min="8" max="1024" step="8" value="256"></div>
+      <div class="stats" id="aStats"></div>
+      <p>Other design-level savings, mostly for transformers:</p>
+      <ul>
+        <li><b><a class="term" data-t="moe">Mixture of experts</a></b>: each feed-forward layer has many experts and a router sends each token to only one or two. The model stores many parameters but uses a fraction per token, so it computes like a much smaller model.</li>
+        <li><b><a class="term" data-t="kv-cache">KV cache</a></b>: when generating, keys and values of earlier tokens are stored, costing \(2\times\text{layers}\times\text{KV heads}\times d_{\text{head}}\times\text{tokens}\times\text{bytes}\). For long contexts this can exceed the weights, so models share keys and values across heads (multi-query and grouped-query attention) and caches are quantised too.</li>
+        <li><b>FlashAttention</b> computes exact attention in tiles that stay in fast on-chip memory, cutting memory traffic.</li>
+        <li><b>Speculative decoding</b>: a small draft model proposes several tokens and the large model checks them in one pass, giving the same output faster.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="recipe" class="card">
+  <h2><span class="num">7</span>Which technique when?</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Goal</th><th>First try</th><th>Typical result</th></tr>
+    <tr><td>Run an LLM on a laptop or phone</td><td>4-bit weight quantisation (GPTQ, AWQ, or llama.cpp's group-wise formats)</td><td>About 4× smaller than 16-bit, small quality loss</td></tr>
+    <tr><td>Faster server inference, same quality</td><td>int8 or FP8 weights and activations; KV-cache quantisation; speculative decoding</td><td>1.5–3× throughput</td></tr>
+    <tr><td>A much smaller model for one task</td><td>Distil from a large teacher, then quantise the student</td><td>10× or more smaller, task accuracy close to the teacher</td></tr>
+    <tr><td>CNN on a microcontroller or phone</td><td>Efficient architecture (MobileNet, EfficientNet) + int8 QAT</td><td>Real-time vision in a few MB</td></tr>
+    <tr><td>Cheaper fine-tuning</td><td>LoRA or QLoRA</td><td>Train &lt;1% of the parameters on one GPU</td></tr>
+    <tr><td>Fewer FLOPs on GPUs</td><td>Structured or 2:4 pruning, then fine-tune</td><td>Up to 2× on supported hardware</td></tr>
+  </table></div>
+  <p class="note" style="margin-top:12px">Always re-measure on your own test set and on the slices that matter (rare classes, long inputs, other languages): compression often hurts the tails before it hurts the average. See <a href="../../../ml/metrics/">evaluation metrics</a>.</p>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">8</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> torch, torch.nn <span class="k">as</span> nn, torch.nn.functional <span class="k">as</span> F
+
+<span class="c"># dynamic int8 quantisation of the Linear layers (CPU inference)</span>
+qmodel = torch.ao.quantization.quantize_dynamic(model, {nn.Linear}, dtype=torch.qint8)
+
+<span class="c"># load an LLM with 4-bit weights (bitsandbytes NF4), ready for QLoRA</span>
+<span class="k">from</span> transformers <span class="k">import</span> AutoModelForCausalLM, BitsAndBytesConfig
+llm = AutoModelForCausalLM.from_pretrained(<span class="s">"model-name"</span>,
+        quantization_config=BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type=<span class="s">"nf4"</span>))
+
+<span class="c"># magnitude pruning: remove 50% of the smallest weights in every Linear layer</span>
+<span class="k">import</span> torch.nn.utils.prune <span class="k">as</span> prune
+<span class="k">for</span> m <span class="k">in</span> model.modules():
+    <span class="k">if</span> isinstance(m, nn.Linear): prune.l1_unstructured(m, name=<span class="s">"weight"</span>, amount=<span class="s">0.5</span>)
+
+<span class="c"># knowledge distillation loss</span>
+<span class="k">def</span> kd_loss(z_s, z_t, y, T=<span class="s">4.0</span>, alpha=<span class="s">0.5</span>):
+    soft = F.kl_div(F.log_softmax(z_s / T, -<span class="s">1</span>), F.softmax(z_t / T, -<span class="s">1</span>), reduction=<span class="s">"batchmean"</span>) * T * T
+    <span class="k">return</span> alpha * F.cross_entropy(z_s, y) + (<span class="s">1</span> - alpha) * soft</pre>
+</section>
+<p class="foot">Part of the <a href="../">Neural network foundations</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/evo.js"></script>
+<script>
+(function(){
+const {$} = ML;
+function frame(plot,x0,x1,y0,y1,xl,o={}){ return ML.chart(plot,[{pts:[[x0,y0],[x1,y1]],color:'transparent',noline:true}],Object.assign({x0,x1,y0,y1,xl},o)); }
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+const gb=b=>b>=1e12?(b/1e12).toFixed(2)+' TB':b>=1e9?(b/1e9).toFixed(b>=1e11?0:1)+' GB':(b/1e6).toFixed(0)+' MB';
+if(window.EVO) EVO.render('#evoSlot','eff');
+
+/* ---- 1 memory ---- */
+const pM=new ML.Plot('#pM',{equal:false}); let mP=0.845;
+function drawM(){ const P=ML.palette(), n=Math.pow(10,mP)*1e9, bits=[[32,'fp32',P.muted],[16,'fp16 / bf16',P.c3],[8,'int8 / fp8',P.c1],[4,'int4',P.c5]], vals=bits.map(b=>n*b[0]/8/1e9), dev=[[8,'phone'],[16,'laptop'],[24,'gaming GPU'],[80,'data-centre GPU']];
+  const ym=Math.max(...vals,90)*1.08, fr=frame(pM,0,4,0,ym,'precision',{yfmt:v=>v+' GB'}), c=pM.ctx, bw=(fr.fx(1)-fr.fx(0))*.55;
+  vals.forEach((v,i)=>{ c.save(); c.fillStyle=bits[i][2]; c.globalAlpha=.75; c.fillRect(fr.fx(i+.5)-bw/2,fr.fy(v),bw,fr.fy(0)-fr.fy(v)); c.globalAlpha=1; c.fillStyle=P.ink; c.font='600 12px Inter,system-ui'; c.textAlign='center'; c.fillText(gb(v*1e9),fr.fx(i+.5),Math.max(14,fr.fy(v)-6)); c.font='11px Inter,system-ui'; c.fillStyle=P.muted; c.fillText(bits[i][1],fr.fx(i+.5),pM.h-14); c.restore(); });
+  dev.forEach(([g,l])=>{ if(g>ym) return; c.save(); c.strokeStyle=P.c4; c.setLineDash([5,4]); c.beginPath(); c.moveTo(fr.fx(0),fr.fy(g)); c.lineTo(fr.fx(4),fr.fy(g)); c.stroke(); c.fillStyle=P.c4; c.font='11px Inter,system-ui'; c.textAlign='right'; c.fillText(l+' '+g+' GB',fr.fx(4)-4,fr.fy(g)-4); c.restore(); });
+  $('#mPOut').textContent=(n>=1e9?(n/1e9).toFixed(n<1e10?1:0)+' billion':(n/1e6).toFixed(0)+' million');
+  $('#mStats').innerHTML=stat('c3',gb(vals[1]*1e9),'weights in 16-bit')+stat('c5',gb(vals[3]*1e9),'weights in 4-bit')+stat('c1',(2*n/1e9/50).toFixed(n<2e9?2:1)+' tok/s per 100 GB/s','rough speed limit at 16-bit (memory-bound)'); }
+ML.bindRange('mP',v=>{mP=v;drawM();}); pM.onResize=drawM;
+
+/* ---- 2 quantisation ---- */
+const pQ=new ML.Plot('#pQ',{equal:false}), pQe=new ML.Plot('#pQe',{equal:false}); const qr=ML.rng(7), W0=[]; for(let i=0;i<4096;i++) W0.push(0.05*qr.gauss()); const OUT=[...Array(20)].map((_,i)=>[Math.floor(qr()*4096),(qr()<.5?-1:1)*(0.6+0.6*qr())]); const XS=[...Array(64)].map(()=>qr.gauss());
+let qB=4, qO=0, qMode='tensor';
+function quant(W){ const L=Math.pow(2,qB-1)-1, g=qMode==='group'?64:W.length, out=new Array(W.length), S=[]; for(let a=0;a<W.length;a+=g){ const m=Math.max(1e-12,...W.slice(a,a+g).map(Math.abs)), s=m/L; S.push(s); for(let i=a;i<Math.min(W.length,a+g);i++) out[i]=s*Math.max(-L,Math.min(L,Math.round(W[i]/s))); } return {Q:out,S}; }
+function drawQ(){ const P=ML.palette(), W=W0.slice(); OUT.slice(0,qO).forEach(([i,v])=>{ W[i]=v; }); const {Q,S}=quant(W), err=W.map((w,i)=>w-Q[i]), mse=err.reduce((a,e)=>a+e*e,0)/W.length, varW=W.reduce((a,w)=>a+w*w,0)/W.length;
+  const lo=-.25, hi=.25, nb=80, bw=(hi-lo)/nb, cnt=new Array(nb).fill(0); W.forEach(w=>{ const b=Math.floor((w-lo)/bw); if(b>=0&&b<nb) cnt[b]++; }); const ym=Math.max(...cnt)*1.15;
+  const fr=frame(pQ,lo,hi,0,ym,'weight value (outliers beyond ±0.25 not shown)'), c=pQ.ctx; c.save(); c.fillStyle=P.c3; c.globalAlpha=.55; cnt.forEach((k,b)=>{ c.fillRect(fr.fx(lo+b*bw)+.5,fr.fy(k),fr.fx(lo+(b+1)*bw)-fr.fx(lo+b*bw)-1,fr.fy(0)-fr.fy(k)); }); c.restore();
+  const s0=S[0], L=Math.pow(2,qB-1)-1; c.save(); c.strokeStyle=P.c1; c.lineWidth=1.6; for(let k=-L;k<=L;k++){ const x=k*s0; if(x<lo||x>hi) continue; c.beginPath(); c.moveTo(fr.fx(x),fr.fy(0)); c.lineTo(fr.fx(x),fr.fy(ym*.92)); c.stroke(); } c.restore();
+  c.save(); c.font='11px Inter,system-ui'; c.fillStyle=P.c1; c.fillText(qMode==='group'?'grid of the first group of 64 (each group has its own)':'grid: '+(2*L+1)+' levels, spacing '+s0.toFixed(4),54,22); c.restore();
+  /* error per weight (scatter) */
+  const em=Math.max(1e-6,...err.map(Math.abs)), fr2=frame(pQe,lo,hi,-em*1.1,em*1.1,'weight → rounding error'), c2=pQe.ctx; c2.save(); c2.fillStyle=P.c4; c2.globalAlpha=.35; W.forEach((w,i)=>{ if(w<lo||w>hi) return; c2.fillRect(fr2.fx(w)-1,fr2.fy(err[i])-1,2,2); }); c2.restore();
+  /* layer output error with a 64x64 view */
+  let num=0, den=0; for(let r=0;r<64;r++){ let y=0, yq=0; for(let k=0;k<64;k++){ y+=W[r*64+k]*XS[k]; yq+=Q[r*64+k]*XS[k]; } num+=(y-yq)**2; den+=y*y; }
+  const mem=W.length*qB/8+S.length*2;
+  $('#qStats').innerHTML=stat('c1',(10*Math.log10(varW/Math.max(mse,1e-30))).toFixed(1)+' dB','signal-to-noise (higher is better)')+stat('c4',(100*Math.sqrt(num/den)).toFixed(2)+'%','error in the layer’s output')+stat('c5',(W.length*4/mem).toFixed(1)+'×','smaller than fp32 (incl. scales)'); }
+ML.bindRange('qB',v=>{qB=v;drawQ();},v=>v+' bits ('+Math.pow(2,v)+' values)'); ML.bindRange('qO',v=>{qO=v;drawQ();}); ML.bindSeg('qSeg',v=>{qMode=v;drawQ();}); pQ.onResize=drawQ; pQe.onResize=drawQ;
+
+/* ---- 3 pruning: tiny MLP ---- */
+const pP=new ML.Plot('#pP',{equal:false}), pWm=new ML.Plot('#pW',{equal:false}); const H=16; let net, mask, pS=0, steps=0;
+const DTR=ML.dataset('moons',300,0.25,3), DTE=ML.dataset('moons',300,0.25,9);
+function init(seed){ const r=ML.rng(seed), m=(a,b,s)=>[...Array(a)].map(()=>[...Array(b)].map(()=>r.gauss()*s)); net={W:[m(H,2,1),m(H,H,1/Math.sqrt(H)),m(1,H,1/Math.sqrt(H))],b:[new Array(H).fill(0),new Array(H).fill(0),[0]]}; net.m=net.W.map(M=>M.map(r=>r.map(()=>0))); net.v=net.W.map(M=>M.map(r=>r.map(()=>0))); net.mb=net.b.map(v=>v.map(()=>0)); net.vb=net.b.map(v=>v.map(()=>0)); net.t=0; mask=net.W.map(M=>M.map(r=>r.map(()=>1))); }
+function fwd(x){ const a=[x]; for(let l=0;l<3;l++){ const W=net.W[l], z=W.map((row,i)=>row.reduce((s,w,j)=>s+w*mask[l][i][j]*a[l][j],net.b[l][i])); a.push(l<2?z.map(Math.tanh):z.map(ML.sigmoid)); } return a; }
+function train(n,lr=.02){ const X=DTR.X, Y=DTR.y; for(let it=0;it<n;it++){ const gW=net.W.map(M=>M.map(r=>r.map(()=>0))), gb=net.b.map(v=>v.map(()=>0));
+  for(let k=0;k<X.length;k++){ const a=fwd(X[k]); let d=[a[3][0]-Y[k]]; for(let l=2;l>=0;l--){ for(let i=0;i<d.length;i++){ gb[l][i]+=d[i]; for(let j=0;j<a[l].length;j++) gW[l][i][j]+=d[i]*a[l][j]*mask[l][i][j]; } if(l>0){ const nd=a[l].map((v,j)=>{ let s=0; for(let i=0;i<d.length;i++) s+=net.W[l][i][j]*mask[l][i][j]*d[i]; return s*(1-v*v); }); d=nd; } } }
+  net.t++; const b1=.9,b2=.999,c1=1-b1**net.t,c2=1-b2**net.t, N=X.length;
+  for(let l=0;l<3;l++){ for(let i=0;i<net.W[l].length;i++){ for(let j=0;j<net.W[l][i].length;j++){ const g=gW[l][i][j]/N; net.m[l][i][j]=b1*net.m[l][i][j]+(1-b1)*g; net.v[l][i][j]=b2*net.v[l][i][j]+(1-b2)*g*g; net.W[l][i][j]-=lr*(net.m[l][i][j]/c1)/(Math.sqrt(net.v[l][i][j]/c2)+1e-8); net.W[l][i][j]*=mask[l][i][j]; }
+    const g=gb[l][i]/N; net.mb[l][i]=b1*net.mb[l][i]+(1-b1)*g; net.vb[l][i]=b2*net.vb[l][i]+(1-b2)*g*g; net.b[l][i]-=lr*(net.mb[l][i]/c1)/(Math.sqrt(net.vb[l][i]/c2)+1e-8); } } steps++; } }
+function applyPrune(){ const all=[]; net.W.forEach(M=>M.forEach(r=>r.forEach(w=>all.push(Math.abs(w))))); all.sort((a,b)=>a-b); const thr=pS>0?all[Math.min(all.length-1,Math.floor(pS*all.length))]:-1; mask=net.W.map(M=>M.map(r=>r.map(w=>Math.abs(w)>thr||pS===0?1:0))); }
+const acc=D=>D.X.reduce((s,x,i)=>s+((fwd(x)[3][0]>.5?1:0)===D.y[i]?1:0),0)/D.X.length;
+let base=0;
+function drawP(){ const P=ML.palette(), c=pP.ctx; pP.clear(); const Wd=pP.w, Hd=pP.h, S=Math.min(Wd,Hd)-10, ox=(Wd-S)/2, oy=(Hd-S)/2, R=2.6, tx=x=>ox+(x+R)/(2*R)*S, ty=y=>oy+(R-y)/(2*R)*S, G=40;
+  for(let i=0;i<G;i++) for(let j=0;j<G;j++){ const x=-R+(i+.5)*2*R/G, y=R-(j+.5)*2*R/G, p=fwd([x,y])[3][0]; c.fillStyle=p>.5?P.k1:P.k0; c.globalAlpha=.12+.25*Math.abs(p-.5)*2; c.fillRect(ox+i*S/G,oy+j*S/G,S/G+1,S/G+1); } c.globalAlpha=1;
+  DTE.X.forEach((x,i)=>{ c.fillStyle=DTE.y[i]?P.k1:P.k0; c.beginPath(); c.arc(tx(x[0]),ty(x[1]),2.6,0,7); c.fill(); });
+  const cw=pWm.ctx; pWm.clear(); const Ww=pWm.w, Hw=pWm.h, blocks=[[net.W[0],mask[0],'W₁ 16×2'],[net.W[1],mask[1],'W₂ 16×16'],[net.W[2],mask[2],'W₃ 1×16']], cs=Math.min((Ww-40)/(2+16+16)*.95,(Hw-30)/16); let x0=10;
+  blocks.forEach(([M,Mk,l])=>{ const tr=M.length===1, rows=tr?16:M.length, cols=tr?1:M[0].length; for(let i=0;i<rows;i++) for(let j=0;j<cols;j++){ const w=tr?M[0][i]:M[i][j], on=tr?Mk[0][i]:Mk[i][j]; cw.fillStyle=on?(w>0?P.c1:P.c4):P.line; cw.globalAlpha=on?Math.min(1,.25+Math.abs(w)*.8):1; cw.fillRect(x0+j*cs,20+i*cs,cs-1,cs-1); } cw.globalAlpha=1; cw.fillStyle=P.muted; cw.font='11px Inter,system-ui'; cw.fillText(l,x0,13); x0+=cols*cs+14; });
+  const kept=mask.reduce((s,M)=>s+M.reduce((a,r)=>a+r.reduce((b,v)=>b+v,0),0),0), tot=2*H+H*H+H, a=acc(DTE);
+  $('#pPos').textContent=`${steps} training steps`;
+  $('#pStats').innerHTML=stat('c3',(100*base).toFixed(1)+'%','test accuracy, unpruned')+stat(a>=base-.02?'c5':'c4',(100*a).toFixed(1)+'%','test accuracy now')+stat('c1',kept+' / '+tot,'weights kept'); }
+function retrain(){ init(1); steps=0; mask=net.W.map(M=>M.map(r=>r.map(()=>1))); train(700); base=acc(DTE); applyPrune(); drawP(); }
+ML.bindRange('pS',v=>{ pS=v; const t=net; /* prune from current weights */ applyPrune(); drawP(); },v=>(100*v).toFixed(0)+'%');
+$('#pFT').addEventListener('click',()=>{ train(200,.01); drawP(); }); $('#pRe').addEventListener('click',retrain); pP.onResize=drawP; pWm.onResize=drawP;
+
+/* ---- 4 distillation ---- */
+const pD=new ML.Plot('#pD',{equal:false}); let dT=1; const CL=['cat','dog','fox','rabbit','car','aeroplane'], ZT=[7.2,5.1,4.0,2.6,-1.5,-2.4];
+function drawD(){ const P=ML.palette(), sm=z=>{ const m=Math.max(...z), e=z.map(v=>Math.exp(v-m)), s=e.reduce((a,b)=>a+b,0); return e.map(v=>v/s); }, p=sm(ZT.map(z=>z/dT)), fr=frame(pD,0,CL.length,0,1.05,'class'), c=pD.ctx, bw=(fr.fx(1)-fr.fx(0));
+  CL.forEach((l,i)=>{ c.save(); c.fillStyle=P.line; c.fillRect(fr.fx(i)+bw*.12,fr.fy(i===0?1:0),bw*.3,fr.fy(0)-fr.fy(i===0?1:0)); c.fillStyle=P.c1; c.globalAlpha=.8; c.fillRect(fr.fx(i)+bw*.46,fr.fy(p[i]),bw*.4,fr.fy(0)-fr.fy(p[i])); c.globalAlpha=1; c.fillStyle=P.ink; c.font='11px Inter,system-ui'; c.textAlign='center'; c.fillText(l,fr.fx(i+.5),pD.h-14); c.fillText((100*p[i]).toFixed(p[i]<.01?2:1)+'%',fr.fx(i)+bw*.66,Math.max(12,fr.fy(p[i])-5)); c.restore(); });
+  const H_=-p.reduce((a,v)=>a+(v>0?v*Math.log2(v):0),0);
+  $('#dStats').innerHTML=stat('c1',(100*p[0]).toFixed(1)+'%','teacher: cat')+stat('c2',(p[1]/Math.max(p[4],1e-12)).toExponential(1),'dog-to-car ratio (similarity signal)')+stat('c3',H_.toFixed(2)+' bits','entropy of the soft target'); }
+ML.bindRange('dT',v=>{dT=v;drawD();},v=>v.toFixed(1)); pD.onResize=drawD;
+
+/* ---- 5 low rank ---- */
+const pR=new ML.Plot('#pR',{equal:false}); let rR=64, rD=60; const N=1024;
+function drawR(){ const P=ML.palette(), sg=[...Array(N)].map((_,k)=>Math.exp(-k/rD)+0.02*Math.exp(-k/2000)), tot=sg.reduce((a,v)=>a+v*v,0), kept=sg.slice(0,rR).reduce((a,v)=>a+v*v,0);
+  const fr=frame(pR,0,N,0,1.05,'singular value index k'), c=pR.ctx, bw=Math.max(.5,fr.fx(1)-fr.fx(0)); c.save(); sg.forEach((v,k)=>{ c.fillStyle=k<rR?P.c1:P.line; c.fillRect(fr.fx(k),fr.fy(v),bw,fr.fy(0)-fr.fy(v)); }); c.restore();
+  c.save(); c.strokeStyle=P.c4; c.lineWidth=2; c.beginPath(); c.moveTo(fr.fx(rR),12); c.lineTo(fr.fx(rR),pR.h-28); c.stroke(); c.restore();
+  $('#rStats').innerHTML=stat('c1',(rR*2*N).toLocaleString(),'numbers stored, r(m+n)')+stat('c3',(N*N).toLocaleString(),'numbers in W, mn')+stat('c5',(N*N/(rR*2*N)).toFixed(1)+'×','compression')+stat('c4',(100*Math.sqrt(1-kept/tot)).toFixed(2)+'%','relative error ‖W − W_r‖ / ‖W‖'); }
+ML.bindRange('rR',v=>{rR=v;drawR();}); ML.bindRange('rD',v=>{rD=v;drawR();}); pR.onResize=drawR;
+
+/* ---- 6 depthwise ---- */
+const pA=new ML.Plot('#pA',{equal:false}); let aK=3, aC=256;
+function drawA(){ const P=ML.palette(), std=aK*aK*aC*aC, dw=aK*aK*aC+aC*aC, fr=frame(pA,0,2,0,std*1.15,'',{yfmt:v=>v>=1e6?(v/1e6)+'M':v>=1e3?(v/1e3)+'k':v}), c=pA.ctx, bw=(fr.fx(1)-fr.fx(0))*.5;
+  [[std,'standard k×k conv',P.c4],[dw,'depthwise + 1×1',P.c5]].forEach(([v,l,col],i)=>{ c.save(); c.fillStyle=col; c.globalAlpha=.75; c.fillRect(fr.fx(i+.5)-bw/2,fr.fy(v),bw,fr.fy(0)-fr.fy(v)); c.globalAlpha=1; c.fillStyle=P.ink; c.font='600 12px Inter,system-ui'; c.textAlign='center'; c.fillText(v.toLocaleString(),fr.fx(i+.5),Math.max(14,fr.fy(v)-6)); c.font='11px Inter,system-ui'; c.fillText(l,fr.fx(i+.5),pA.h-14); c.restore(); });
+  $('#aStats').innerHTML=stat('c4',std.toLocaleString(),'standard: k²·C·C')+stat('c5',dw.toLocaleString(),'separable: k²·C + C·C')+stat('c1',(std/dw).toFixed(1)+'×','fewer weights and multiply-adds'); }
+ML.bindRange('aK',v=>{aK=v;drawA();}); ML.bindRange('aC',v=>{aC=v;drawA();}); pA.onResize=drawA;
+
+ML.onTheme(()=>{ drawM(); drawQ(); drawP(); drawD(); drawR(); drawA(); });
+drawM(); drawQ(); retrain(); drawD(); drawR(); drawA();
+})();
+</script>
+<script>NLP.nav('nn','compression'); ML.renderMath(document.body);</script>
+</body>
+</html>

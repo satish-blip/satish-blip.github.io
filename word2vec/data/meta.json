@@ -1,0 +1,1 @@
+{"dim": 300, "bits": 4, "shards": [{"name": "core", "count": 25000}, {"name": "ext", "count": 75000}], "source": "word2vec GoogleNews-vectors-negative300 (Mikolov et al., 2013)"}

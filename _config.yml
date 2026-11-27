@@ -1,0 +1,18 @@
+title: Satish Thuwal, FIAI
+description: Pricing actuary writing about pricing, CAT modelling, EVT and actuarial tooling.
+author: Satish Thuwal
+url: "https://satish-blip.github.io"
+baseurl: ""
+permalink: /blog/:year/:month/:title/
+markdown: kramdown
+timezone: Asia/Kolkata
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+  - jekyll-sitemap
+feed:
+  path: blog/feed.xml
+defaults:
+  - scope: { path: "", type: posts }
+    values: { layout: post, image: /og.png }
+exclude: [README.md, BLOGGING.md, Gemfile, Gemfile.lock, vendor]

@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Generalised linear models for insurance pricing, explained interactively</title>
+<meta name="description" content="Generalised linear models from the ground up, the way insurance pricing uses them: families and variance functions, the log link and relativities, exposure offsets and weights, IRLS, base levels and banding, deviance and over-dispersion, Tweedie and frequency × severity, one-way versus multivariate, lift and Gini, and credibility-style shrinkage.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+<style>
+.irtbl td, .irtbl th{ font-family:"JetBrains Mono",monospace; font-size:12.5px; }
+.irwrap{ height:238px; overflow:auto; } .irwrap th{ position:sticky; top:0; background:var(--card); }
+#iNote{ min-height:6.2em; }
+.irtbl tr.cur td{ background:color-mix(in srgb,var(--c1) 10%,transparent); }
+.relcalc{ display:grid; gap:6px; margin:8px 0; }
+.relcalc .rr{ display:flex; justify-content:space-between; gap:10px; font-family:"JetBrains Mono",monospace; font-size:13px; padding:6px 10px; border-radius:9px; background:var(--soft); }
+.relcalc .rr.tot{ background:color-mix(in srgb,var(--c1) 12%,var(--soft)); font-weight:700; }
+.bars3{ display:grid; gap:8px; margin-top:8px; }
+.bars3 .b{ display:grid; grid-template-columns:120px 1fr 52px; align-items:center; gap:8px; font-size:13px; }
+.bars3 .b i{ display:block; height:12px; border-radius:6px; }
+.legend3{ display:flex; gap:14px; flex-wrap:wrap; font-size:12.5px; color:var(--muted); margin-top:6px; } .legend3 span::before{ content:""; display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; background:var(--lc); vertical-align:-1px; }
+.btnrow{ display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Insurance pricing</p>
+  <h1>Generalised linear models: <span class="grad">how insurers price risk</span></h1>
+  <p class="lede">Linear regression assumes the answer can be any number and the noise is the same everywhere. Claim counts are whole numbers, claim costs are positive and skewed, and a policy on risk for six months should expect half the claims. A generalised linear model keeps the simplicity of a weighted sum of factors but lets you choose the distribution and how the sum maps to the mean. With a log link, every factor becomes a multiplier: the rating table an insurer actually uses.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#glm">1 · Three parts</a><a href="#families">2 · Families</a><a href="#link">3 · Log link</a><a href="#offset">4 · Exposure</a><a href="#irls">5 · IRLS</a><a href="#factors">6 · Factors</a><a href="#deviance">7 · Deviance</a><a href="#tweedie">8 · Tweedie</a><a href="#oneway">9 · One-way trap</a><a href="#validate">10 · Validation</a><a href="#credibility">11 · Credibility</a><a href="#py">12 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a GLM, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>A <a class="term" data-t="glm">generalised linear model</a> predicts the <i>average</i> outcome for each row as a function of a weighted sum of its features, exactly like <a href="../linear-regression/">linear regression</a>, but with two extra choices: which probability distribution the outcome follows (Poisson for counts, gamma for costs) and which <a class="term" data-t="link-function">link function</a> connects the weighted sum to the average.</p>
+      <h3>How it works</h3>
+      <ol class="steps2"><li>Write the linear predictor \(\eta=\beta_0+\beta_1x_1+\dots\), as in linear regression.</li><li>Turn it into the mean with the inverse link, for example \(\mu=e^{\eta}\).</li><li>Say how the data scatter around that mean: the family and its variance function \(V(\mu)\).</li><li>Find the \(\beta\)s by <a href="../../math/mle/">maximum likelihood</a>, which here is a sequence of weighted least-squares fits.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>A car insurer charges a <b>base rate</b>, then multiplies it by a factor for your age, another for your car, another for where you live. A 19-year-old pays 2.2× the base, a sports car 1.4×, London 1.3×: in total 2.2 × 1.4 × 1.3 = 4.0× the base. That multiplicative tariff is exactly a Poisson or gamma GLM with a log link; the multipliers are \(e^{\beta}\).</p>
+      <div class="pc"><div class="pro"><b>Why insurers use them</b><ul><li>Every factor's effect is a readable multiplier</li><li>Handles exposure, counts and skewed costs properly</li><li>Standard errors and tests for every relativity</li><li>Regulators and underwriters can audit them</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Correlated factors (one-way views mislead)</li><li>Thin levels with wild relativities</li><li>Over-dispersion hiding behind “significant” p-values</li><li>Effects that drift from year to year</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="exposure">Exposure</a><a class="term" data-t="offset">Offset</a><a class="term" data-t="relativity">Relativity</a><a class="term" data-t="base-level">Base level</a><a class="term" data-t="deviance">Deviance</a><a class="term" data-t="over-dispersion">Over-dispersion</a><a class="term" data-t="tweedie">Tweedie</a><a class="term" data-t="irls">IRLS</a><a class="term" data-t="credibility">Credibility</a></div>
+      <p class="hint">Want to build one? The <a href="../glm-studio/">GLM Pricing Studio</a> fits real pricing GLMs in your browser, with offsets, weights, banding, relativities, lift charts and a statistical view of every number.</p>
+    </div>
+  </div>
+</section>
+
+<section id="glm" class="lab">
+  <div class="card prose">
+    <h2><span class="num">1</span>Three parts: distribution, linear predictor, link</h2>
+    <p>Every GLM is three choices. The <b>random component</b>: \(y_i\) follows a distribution from the exponential family with mean \(\mu_i\) and variance \(\phi\,V(\mu_i)/w_i\). The <b>systematic component</b>: a linear predictor \(\eta_i=\mathbf x_i^\top\boldsymbol\beta\) (plus an offset, section 4). The <b>link</b>: \(g(\mu_i)=\eta_i\).</p>
+    $$\begin{aligned} y_i&\sim\text{ExpFamily}(\mu_i,\ \phi/w_i)\\ g(\mu_i)&=o_i+\mathbf x_i^\top\boldsymbol\beta\\ \operatorname{Var}(y_i)&=\frac{\phi\,V(\mu_i)}{w_i}\end{aligned}$$
+    <p>Linear regression is the special case: normal distribution, identity link, \(V(\mu)=1\). Change any one of the three and you have a different GLM. On the right, the mean curve \(\mu(x)=e^{\beta_0+\beta_1x}\) is the same in every family; what changes is how the data spread around it. Poisson spread grows like \(\sqrt\mu\); gamma spread grows in proportion to \(\mu\) (a constant coefficient of variation); normal spread stays fixed.</p>
+    <details class="deeper"><summary>Going deeper: the exponential family</summary><div>
+      <p>All these distributions can be written \(f(y)=\exp\!\big(\frac{w(y\theta-b(\theta))}{\phi}+c(y,\phi)\big)\). The mean is \(\mu=b'(\theta)\) and the variance \(\phi\,b''(\theta)/w\), so \(V(\mu)=b''(\theta)\). The <b>canonical link</b> is the one that makes \(\theta=\eta\): log for Poisson, logit for binomial, identity for normal, \(-1/\mu\) for gamma. Pricing uses the log link even for gamma because a multiplicative tariff matters more than mathematical convenience.</p>
+    </div></details>
+  </div>
+  <div class="card hl">
+    <h3>Same mean, different scatter</h3>
+    <div class="seg" id="fSeg" role="radiogroup"><button data-v="normal">Normal</button><button data-v="poisson" class="on">Poisson</button><button data-v="gamma">Gamma</button></div>
+    <div class="plot short" id="pFam"></div>
+    <div class="ctl"><label for="fB"><span>Slope \(\beta_1\) (effect of x on the log scale)</span><output id="fBOut"></output></label><input type="range" id="fB" min="-0.2" max="0.35" step="0.01" value="0.2"></div>
+    <div class="ctl"><label for="fN"><span>Gamma shape \(\nu=1/\phi\) (higher = less spread)</span><output id="fNOut"></output></label><input type="range" id="fN" min="1" max="40" step="1" value="6"></div>
+    <div class="btnrow"><button class="btn" id="fRe">New sample</button></div>
+    <div class="stats" id="fStats"></div>
+  </div>
+</section>
+
+<section id="families" class="card prose">
+  <h2><span class="num">2</span>Families and their variance functions</h2>
+  <p>The family is mostly a statement about variance: how much the outcome is expected to wobble at a given mean. That matters because the fit gives each row a weight inversely proportional to its variance (section 5).</p>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Family</th><th>\(V(\mu)\)</th><th>Typical use in pricing</th><th>Note</th></tr>
+    <tr><td><b>Poisson</b></td><td>\(\mu\)</td><td>Claim counts (frequency)</td><td>\(\phi=1\); check for over-dispersion</td></tr>
+    <tr><td><b>Quasi-Poisson</b></td><td>\(\phi\mu\)</td><td>Over-dispersed counts</td><td>Same \(\hat\beta\), standard errors × \(\sqrt{\hat\phi}\)</td></tr>
+    <tr><td><b>Negative binomial</b></td><td>\(\mu+\alpha\mu^2\)</td><td>Counts with hidden risk differences</td><td>A Poisson whose rate has a gamma “frailty”</td></tr>
+    <tr><td><b>Gamma</b></td><td>\(\phi\mu^2\)</td><td>Average claim cost (severity)</td><td>Constant coefficient of variation</td></tr>
+    <tr><td><b>Inverse Gaussian</b></td><td>\(\phi\mu^3\)</td><td>Severity with a heavier tail</td><td>Large claims get even less weight</td></tr>
+    <tr><td><b>Tweedie</b>, \(1&lt;p&lt;2\)</td><td>\(\phi\mu^p\)</td><td>Pure premium (cost per year)</td><td>Has an exact zero: section 8</td></tr>
+    <tr><td><b>Binomial</b></td><td>\(\mu(1-\mu)\)</td><td>Claim yes/no, renewal, conversion</td><td>Logit or cloglog link</td></tr>
+  </table></div>
+  <p class="hint">Rule of thumb: plot squared residuals against the fitted mean on log axes. A slope of 1 suggests Poisson-like variance, 2 suggests gamma, between 1 and 2 suggests Tweedie with that power.</p>
+</section>
+
+<section id="link" class="lab">
+  <div class="card prose">
+    <h2><span class="num">3</span>The log link turns coefficients into relativities</h2>
+    <p>With \(\log\mu=\beta_0+\sum_j\beta_jx_j\), taking exponentials gives a product:</p>
+    $$\mu=e^{\beta_0}\times e^{\beta_1x_1}\times e^{\beta_2x_2}\times\cdots$$
+    <p>For a categorical factor coded with 0/1 dummies, \(e^{\beta_j}\) is the multiplier for that level compared with the <a class="term" data-t="base-level">base level</a>. Insurers call these multipliers <a class="term" data-t="relativity">relativities</a>, and \(e^{\beta_0}\) the base rate. The premium is base rate × one relativity per factor × exposure.</p>
+    <p>Because effects multiply, a 30% loading for young drivers is 30% whether the car is cheap or expensive, which matches how risk behaves far better than adding a fixed £ amount. A coefficient of 0.262 means \(e^{0.262}=1.30\): 30% more.</p>
+    <p class="hint">A 95% interval for a relativity is \(\exp(\hat\beta\pm1.96\,\text{SE})\): asymmetric around the relativity, as it should be for a multiplier.</p>
+  </div>
+  <div class="card hl">
+    <h3>Build a premium from relativities</h3>
+    <div class="ctl"><label for="rA"><span>Driver age relativity \(e^{\beta_\text{age}}\)</span><output id="rAOut"></output></label><input type="range" id="rA" min="0.6" max="2.6" step="0.05" value="2.2"></div>
+    <div class="ctl"><label for="rV"><span>Vehicle group relativity</span><output id="rVOut"></output></label><input type="range" id="rV" min="0.6" max="2" step="0.05" value="1.4"></div>
+    <div class="ctl"><label for="rR"><span>Region relativity</span><output id="rROut"></output></label><input type="range" id="rR" min="0.6" max="1.6" step="0.05" value="1.3"></div>
+    <div class="ctl"><label for="rE"><span>Exposure (years on risk)</span><output id="rEOut"></output></label><input type="range" id="rE" min="0.1" max="1" step="0.05" value="1"></div>
+    <div class="relcalc" id="relCalc"></div>
+  </div>
+</section>
+
+<section id="offset" class="card prose">
+  <h2><span class="num">4</span>Exposure, offsets and weights</h2>
+  <div class="grid2">
+    <div>
+      <p><a class="term" data-t="exposure">Exposure</a> is how long a policy was on risk, in years. A policy that ran for half a year should expect half the claims of an identical full-year policy. The model handles this with an <a class="term" data-t="offset">offset</a>: a term added to the linear predictor whose coefficient is fixed at 1.</p>
+      $$\log\mu_i=\log e_i+\mathbf x_i^\top\boldsymbol\beta\quad\Longleftrightarrow\quad\mu_i=e_i\,e^{\mathbf x_i^\top\boldsymbol\beta}$$
+      <p>So the model predicts a <i>rate per year</i> and multiplies by exposure. For a Poisson GLM there is an equivalent form: model the rate \(y_i/e_i\) with prior weight \(w_i=e_i\) and no offset. The coefficients are identical.</p>
+      <p>An offset can carry any known effect. Pricing teams often use \(\log(\text{current premium})\) as the offset to model only the <i>change</i> to an existing tariff, or fix a factor's relativities from another source and estimate the rest.</p>
+      <p><b>Locking a relativity.</b> The same trick answers “if I set this relativity by hand, how do the others change?” Move the level out of the design and put \(\log(\text{new relativity})\) into its rows' offset; refit, and every other coefficient re-estimates around the fixed one. Factors correlated with it move most. Before refitting, a quick estimate comes from the covariance of the fit: \(\Delta\boldsymbol\beta_{\text{others}}\approx\Sigma_{oj}\,\Sigma_{jj}^{-1}\,\Delta\beta_j\). Try it on the <a href="../glm-studio/#results">studio's Relativities tab</a>.</p>
+      <p class="hint">Adapted from: Goldburd, Khare &amp; Tevet, <i>Generalized Linear Models for Insurance Rating</i>, CAS Monograph 5, section 2.6 (offsets, including fixing deductible factors).</p>
+    </div>
+    <div>
+      <p><b>Prior weights</b> \(w_i\) say how much information a row carries: \(\operatorname{Var}(y_i)=\phi V(\mu_i)/w_i\). An average over more claims is less noisy, so it gets more weight.</p>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Model</th><th>Response \(y\)</th><th>Weight \(w\)</th><th>Offset</th></tr>
+        <tr><td>Frequency (Poisson)</td><td>claim count</td><td>1</td><td>\(\log(\text{exposure})\)</td></tr>
+        <tr><td>Severity (gamma)</td><td>cost ÷ claim count</td><td>claim count</td><td>none</td></tr>
+        <tr><td>Pure premium (Tweedie)</td><td>cost ÷ exposure</td><td>exposure</td><td>none</td></tr>
+        <tr><td>Claim yes/no (binomial, cloglog)</td><td>1 if any claim</td><td>1</td><td>\(\log(\text{exposure})\)</td></tr>
+      </table></div>
+      <details class="deeper"><summary>Going deeper: why cloglog matches Poisson</summary><div>
+        <p>If claims arrive as a Poisson process with rate \(\lambda\), the chance of at least one claim in time \(e\) is \(1-e^{-\lambda e}\). Then \(\log(-\log(1-p))=\log\lambda+\log e\): the complementary log-log link with a \(\log e\) offset gives the same \(\beta\)s as the Poisson frequency model, read from yes/no data.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="irls" class="lab">
+  <div class="card prose">
+    <h2><span class="num">5</span>How the fit works: iteratively reweighted least squares</h2>
+    <p>There is no closed form for \(\hat\beta\) except in the normal case. Instead, <a class="term" data-t="irls">IRLS</a> linearises the link around the current fit and solves a weighted least-squares problem, again and again. It is Newton's method (Fisher scoring) in disguise, and it usually converges in 4–8 steps.</p>
+    <div class="algo"><h5 class="algo-h">Algorithm: IRLS for a GLM</h5><ol>
+      <li><span class="kw">input</span> design \(X\), response \(y\), prior weights \(w\), offset \(o\), family \(V\), link \(g\)</li>
+      <li>start with \(\mu_i\leftarrow(y_i+\bar y)/2\), \(\eta_i\leftarrow g(\mu_i)\)</li>
+      <li><span class="kw">repeat</span></li>
+      <li class="i1">working response \(z_i\leftarrow\eta_i-o_i+(y_i-\mu_i)\,g'(\mu_i)\)</li>
+      <li class="i1">working weight \(W_i\leftarrow w_i\big/\big(V(\mu_i)\,g'(\mu_i)^2\big)\) <span class="cm">log link: \(W_i=w_i\mu_i^2/V(\mu_i)\)</span></li>
+      <li class="i1">\(\boldsymbol\beta\leftarrow(X^\top WX)^{-1}X^\top W\mathbf z\) <span class="cm">weighted least squares</span></li>
+      <li class="i1">\(\eta\leftarrow o+X\boldsymbol\beta\), \(\mu\leftarrow g^{-1}(\eta)\), deviance \(D\leftarrow\sum_iw_i\,d(y_i,\mu_i)\)</li>
+      <li><span class="kw">until</span> \(D\) stops changing</li>
+      <li><span class="kw">return</span> \(\hat{\boldsymbol\beta}\) and \(\widehat{\operatorname{Cov}}(\hat{\boldsymbol\beta})=\hat\phi(X^\top WX)^{-1}\)</li>
+    </ol></div>
+    <p>For Poisson with a log link the working weight is \(W_i=w_i\mu_i\): a policy expected to have more claims carries more information. For gamma with a log link \(W_i=w_i\): on the log scale every claim counts equally, however large.</p>
+  </div>
+  <div class="card hl">
+    <h3>Watch IRLS on three groups</h3>
+    <p class="sub">Poisson frequency, one factor with levels A (base), B and C, aggregated to one row per level with an exposure offset. Each press runs one iteration.</p>
+    <div class="btnrow"><button class="btn primary" id="iStep">One IRLS step</button><button class="btn" id="iRun">Run to convergence</button><button class="btn" id="iReset">Reset</button></div>
+    <div class="tblwrap irwrap"><table class="tbl irtbl" id="iTbl"></table></div>
+    <div class="plot short" id="pIrls"></div>
+    <p class="hint" id="iNote"></p>
+  </div>
+</section>
+
+<section id="factors" class="card prose">
+  <h2><span class="num">6</span>Rating factors: base levels, bands, merges and interactions</h2>
+  <div class="grid2">
+    <div>
+      <h3>Dummy coding and the base level</h3>
+      <p>A factor with \(k\) levels gets \(k-1\) columns of 0/1 dummies. The level without a column is the <a class="term" data-t="base-level">base</a>: its relativity is 1 and the intercept absorbs it. Choosing the level with the most exposure as the base keeps every other level's standard error small, because each is estimated <i>relative to</i> a well-measured reference.</p>
+      <h3>Bands for continuous variables</h3>
+      <p>Age, vehicle age and mileage are usually cut into bands (17–20, 21–24, …) so each band gets its own relativity without forcing a shape. Fewer, wider bands are more stable; narrower bands follow the curve more closely. Alternatives: a straight line on the log scale \(e^{\beta x}\), a power curve \(x^\beta\) (use \(\log x\)), a quadratic, or splines.</p>
+      <h3>Merging levels</h3>
+      <p>Levels with overlapping confidence intervals and similar relativities can be merged into one. That saves parameters and makes the tariff simpler without losing fit.</p>
+    </div>
+    <div>
+      <h3>Aliasing</h3>
+      <p>If one column is an exact combination of others (for example two factors that always move together, or a level that exists only in combination with another factor's level), \(X^\top WX\) is singular and the coefficient cannot be estimated. Software detects this and drops the column: it is <b>aliased</b>. Near-aliasing (high correlation) does not break the fit but inflates standard errors.</p>
+      <h3>Interactions</h3>
+      <p>Main effects assume the age relativity is the same for every car. An interaction age × vehicle group lets young drivers in fast cars get their own extra multiplier. Each pair adds \((k_1-1)(k_2-1)\) parameters, so add only interactions you can justify and that survive a likelihood-ratio test.</p>
+      <details class="deeper"><summary>Going deeper: why one-hot with all \(k\) levels fails</summary><div>
+        <p>With an intercept, the \(k\) dummies of one factor sum to the intercept column, so \(X\) does not have full rank and \(X^\top WX\) has no inverse. Dropping one dummy (the base) restores full rank. The same holds for every factor, which is why a model with \(F\) categorical factors has \(1+\sum_f(k_f-1)\) parameters.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="deviance" class="card prose">
+  <h2><span class="num">7</span>Deviance, dispersion and testing a factor</h2>
+  <div class="grid2">
+    <div>
+      <p>The <a class="term" data-t="deviance">deviance</a> measures how far the fitted model is from a “saturated” model that fits every row exactly: \(D=2\big[\ell(\text{saturated})-\ell(\hat\beta)\big]=\sum_iw_i\,d(y_i,\hat\mu_i)\). It plays the role of the residual sum of squares; for the normal family it <i>is</i> the residual sum of squares.</p>
+      $$\text{Poisson: } d(y,\mu)=2\Big[y\log\frac{y}{\mu}-(y-\mu)\Big]\qquad\text{Gamma: } d(y,\mu)=2\Big[\frac{y-\mu}{\mu}-\log\frac{y}{\mu}\Big]$$
+      <p><b>Dispersion.</b> The Pearson estimate is \(\hat\phi=\frac{1}{n-p}\sum_i\frac{w_i(y_i-\hat\mu_i)^2}{V(\hat\mu_i)}\). For Poisson it should be near 1. Values well above 1 mean <a class="term" data-t="over-dispersion">over-dispersion</a>: real claim counts vary more than Poisson because policies differ in ways the factors do not capture. The relativities are still fine, but every standard error is too small by \(\sqrt{\hat\phi}\), so factors look more significant than they are. Fix: quasi-Poisson or negative binomial.</p>
+    </div>
+    <div>
+      <p><b>Is a factor worth keeping?</b> Fit with and without it. The increase in deviance is a likelihood-ratio statistic:</p>
+      $$\frac{D_{\text{without}}-D_{\text{with}}}{\phi}\ \sim\ \chi^2_{\Delta p}\qquad\text{or, with }\hat\phi\text{ estimated,}\qquad F=\frac{(D_{\text{without}}-D_{\text{with}})/\Delta p}{\hat\phi}$$
+      <p><b>AIC</b> \(=-2\ell+2p\) and <b>BIC</b> \(=-2\ell+p\log n\) compare models on the same data, trading fit for parameters. BIC penalises more and picks smaller models on large portfolios.</p>
+      <p class="hint">Statistical significance is not the only test. A factor should also be stable over time (section 10), make sense to underwriters, and be legal to use.</p>
+    </div>
+  </div>
+</section>
+
+<section id="tweedie" class="lab">
+  <div class="card prose">
+    <h2><span class="num">8</span>Pure premium in one model: Tweedie, and frequency × severity</h2>
+    <p>Most policies have no claims, so cost per year has a big spike at exactly 0 and a long right tail. A <a class="term" data-t="tweedie">Tweedie</a> distribution with \(1&lt;p&lt;2\) is exactly that: a Poisson number of claims, each with a gamma-distributed size.</p>
+    $$y=\sum_{k=1}^{N}Z_k,\quad N\sim\text{Poisson}(\lambda),\quad Z_k\sim\text{Gamma},\qquad \operatorname{Var}(y)=\phi\mu^p,\quad \lambda=\frac{\mu^{2-p}}{\phi(2-p)}$$
+    <p>As \(p\to1\) it behaves like Poisson (frequency dominates); as \(p\to2\) like gamma (severity dominates). \(p\) is usually chosen by profiling the likelihood; motor pure premium often lands near 1.5–1.7.</p>
+    <p>The classic alternative is two models: a Poisson frequency model and a gamma severity model, multiplied. That lets each part have its own factors (vehicle value matters for cost, not for how often you crash), at the price of maintaining two models. The <a href="../glm-studio/#compare">studio's Compare tab</a> builds both and compares their Gini on the same test policies.</p>
+  </div>
+  <div class="card hl">
+    <h3>Simulate a Tweedie portfolio</h3>
+    <p class="sub">10,000 policies with mean cost 1 and dispersion φ = 1. The grey bar on the left is the share with no claim at all.</p>
+    <div class="plot short" id="pTw"></div>
+    <div class="ctl"><label for="tP"><span>Power \(p\)</span><output id="tPOut"></output></label><input type="range" id="tP" min="1.05" max="1.95" step="0.05" value="1.5"></div>
+    <div class="stats" id="tStats"></div>
+  </div>
+</section>
+
+<section id="oneway" class="lab">
+  <div class="card prose">
+    <h2><span class="num">9</span>The one-way trap: why a multivariate model at all</h2>
+    <p>A one-way analysis divides claims by exposure for each level of one factor. It is the first thing every pricing analyst looks at, and it misleads whenever factors are correlated. Young drivers rarely have a no-claims discount, so the one-way “no NCD” loading also contains part of the young-driver effect, and vice versa. Both get double-counted.</p>
+    <p>The GLM fits all factors at once, so each relativity is the effect <i>holding the others fixed</i>. On the right, 20,000 synthetic policies are generated with known relativities (young 1.8×, no NCD 1.4×). Increase the overlap between the two groups and watch the one-way estimates drift away from the truth while the GLM stays on it.</p>
+    <p class="hint">The same idea, in general, is omitted-variable bias. Cramér's V between factors (on the studio's One-way tab) shows where to expect it.</p>
+  </div>
+  <div class="card hl">
+    <h3>One-way versus GLM</h3>
+    <div class="ctl"><label for="oC"><span>Share of young drivers with no NCD (older drivers: 20%)</span><output id="oCOut"></output></label><input type="range" id="oC" min="0.2" max="0.95" step="0.05" value="0.8"></div>
+    <div class="bars3" id="oBars"></div>
+    <div class="legend3"><span style="--lc:#94a3b8">true</span><span style="--lc:#ea580c">one-way</span><span style="--lc:#1d4ed8">GLM (both factors)</span></div>
+    <div class="stats" id="oStats"></div>
+  </div>
+</section>
+
+<section id="validate" class="card prose">
+  <h2><span class="num">10</span>Validation: lift, Gini, double lift, consistency</h2>
+  <div class="grid2">
+    <div>
+      <p><b>Hold out data.</b> Fit on some policies, judge on others. For a tariff that will price next year's business, an <i>out-of-time</i> test (train on 2020–23, test on 2024) is the honest check; it also exposes trends the model does not contain.</p>
+      <p><b>Lift chart.</b> Sort test policies by predicted rate, cut into 10 groups of equal exposure, and plot actual against predicted per group. A good model has a steep, well-tracked line.</p>
+      <p><b>Gini.</b> Sort from lowest to highest predicted risk and plot the cumulative share of claims against the cumulative share of exposure (the Lorenz curve). Gini \(=1-2\times\)area under it: 0 for random ordering, higher for better ranking. It measures ranking only, so a model can have a good Gini and a bad overall level: check actual ÷ expected too.</p>
+    </div>
+    <div>
+      <p><b>Double lift.</b> To compare two models, sort by the <i>ratio</i> of their predictions. Where they disagree most, which one does the actual experience follow?</p>
+      <p><b>Actual ÷ expected by factor.</b> For every column, in the model or not, compare actual with predicted. A pattern in an unused column says it should be in the model; a drift across years says the model needs a trend.</p>
+      <p><b>Against the current premium.</b> The monograph's double lift sorts policies by <i>sort ratio</i> = new model ÷ current premium and plots actual, model and current premium (each indexed to its average) per bucket; the <b>loss ratio chart</b> uses the same sort and shows the actual loss ratio under today's premium, which should be flat if today's rates were right. Its <b>simple quantile plot</b> is judged on accuracy, monotonicity and vertical distance.</p>
+      <p><b>Consistency.</b> Fit factor × year and plot the relativities per year. Lines that cross or wander mean the effect is not stable, and its relativity will not hold next year.</p>
+      <p class="hint">All of these are on the <a href="../glm-studio/#validate">studio's Validation tab</a>; the general metrics are on the <a href="../metrics/">evaluation metrics page</a>.</p>
+      <p class="hint">Adapted from: Goldburd, Khare &amp; Tevet, <i>Generalized Linear Models for Insurance Rating</i>, CAS Monograph 5 (<a href="https://www.casact.org/sites/default/files/2021-01/05-Goldburd-Khare-Tevet.pdf" target="_blank" rel="noopener">PDF</a>), chapter 7.</p>
+    </div>
+  </div>
+</section>
+
+<section id="credibility" class="lab">
+  <div class="card prose">
+    <h2><span class="num">11</span>Thin data: credibility and penalties</h2>
+    <p>A region with 30 policy-years and 5 claims has an observed relativity of, say, 1.6, but that number is mostly noise. Actuaries have long blended such estimates with a prior using <a class="term" data-t="credibility">credibility</a>: \(\hat r=Z\cdot r_\text{observed}+(1-Z)\cdot r_\text{prior}\), with \(Z=\frac{E}{E+k}\) growing with exposure \(E\).</p>
+    <p>A GLM with a <a href="../regularisation/">ridge (L2) penalty</a> does the same thing automatically: it minimises \(-\ell(\beta)/n+\frac{\lambda}{2}\|\beta\|^2\), which pulls every coefficient towards 0, so every relativity towards 1. Levels with lots of data barely move; thin levels move a lot. A lasso (L1) penalty can set a level's coefficient exactly to 0, merging it into the base. Both are on the studio's Model tab.</p>
+    <details class="deeper"><summary>Going deeper: credibility is a Bayesian posterior</summary><div>
+      <p>Put a normal prior \(\beta\sim\mathcal N(0,\tau^2)\) on a level's log-relativity. The posterior mean is a precision-weighted average of the data's estimate and 0, with weight \(Z=\frac{1/\text{SE}^2}{1/\text{SE}^2+1/\tau^2}\). Since \(\text{SE}^2\propto1/E\), this is \(Z=E/(E+k)\) with \(k\) set by \(\tau\): Bühlmann credibility, and ridge regression with \(\lambda\propto1/\tau^2\). See the <a href="../../math/bayesian/">Bayesian page</a>.</p>
+    </div></details>
+  </div>
+  <div class="card hl">
+    <h3>How much to trust a thin level</h3>
+    <div class="plot short" id="pCred"></div>
+    <div class="ctl"><label for="cE"><span>Exposure in the level (policy-years)</span><output id="cEOut"></output></label><input type="range" id="cE" min="1" max="3" step="0.02" value="1.6"></div>
+    <div class="ctl"><label for="cK"><span>Credibility constant \(k\) (prior strength)</span><output id="cKOut"></output></label><input type="range" id="cK" min="10" max="2000" step="10" value="300"></div>
+    <div class="stats" id="cStats"></div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">12</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np, pandas <span class="k">as</span> pd, statsmodels.api <span class="k">as</span> sm, statsmodels.formula.api <span class="k">as</span> smf
+df = pd.read_csv(<span class="s">"motor_portfolio.csv"</span>)
+df[<span class="s">"age_band"</span>] = pd.cut(df.driver_age, [<span class="s">17</span>, <span class="s">21</span>, <span class="s">25</span>, <span class="s">30</span>, <span class="s">40</span>, <span class="s">50</span>, <span class="s">60</span>, <span class="s">70</span>, <span class="s">99</span>], right=<span class="k">False</span>).astype(str)
+
+<span class="c"># frequency: Poisson, log link, log(exposure) offset; base level = most exposure</span>
+freq = smf.glm(<span class="s">"claim_count ~ C(age_band, Treatment('[40, 50)')) + C(vehicle_group, Treatment('C')) + C(region)"</span>,
+               data=df, family=sm.families.Poisson(), offset=np.log(df.exposure)).fit()
+print(freq.summary()); print(np.exp(freq.params))          <span class="c"># relativities</span>
+print(<span class="s">"Pearson chi2/df"</span>, freq.pearson_chi2 / freq.df_resid)  <span class="c"># over-dispersion check</span>
+qp = smf.glm(..., family=sm.families.Poisson(), offset=np.log(df.exposure)).fit(scale=<span class="s">"X2"</span>)  <span class="c"># quasi-Poisson SEs</span>
+
+<span class="c"># severity: gamma, log link, weight = claim count, policies with claims only</span>
+c = df[df.claim_count &gt; <span class="s">0</span>].assign(sev=<span class="k">lambda</span> d: d.claim_amount / d.claim_count)
+sev = smf.glm(<span class="s">"sev ~ C(vehicle_group) + C(region)"</span>, data=c, family=sm.families.Gamma(sm.families.links.Log()), var_weights=c.claim_count).fit()
+
+<span class="c"># pure premium in one model: Tweedie, weight = exposure</span>
+df[<span class="s">"pp"</span>] = df.claim_amount / df.exposure
+tw = smf.glm(<span class="s">"pp ~ C(age_band) + C(vehicle_group) + C(region)"</span>, data=df, family=sm.families.Tweedie(var_power=<span class="s">1.6</span>), var_weights=df.exposure).fit()</pre>
+  <p class="hint">The <a href="../glm-studio/">GLM Pricing Studio</a> writes this script for whatever model you build, and checks its own engine against statsmodels.</p>
+</section>
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything runs in your browser.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../ml/assets/glm.js"></script>
+<script>
+(function(){
+const {$} = ML;
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+function rng(seed){ let a=seed>>>0; return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const normal=r=>{ let u=0,v=0; while(!u) u=r(); while(!v) v=r(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
+const pois=(r,l)=>{ if(l>30){ return Math.max(0,Math.round(l+Math.sqrt(l)*normal(r))); } const L=Math.exp(-l); let k=0,p=1; do{ k++; p*=r(); }while(p>L); return k-1; };
+const gamma=(r,a,th)=>{ if(a<1){ return gamma(r,a+1,th)*Math.pow(r(),1/a); } const d=a-1/3, c=1/Math.sqrt(9*d); for(;;){ let x,v; do{ x=normal(r); v=1+c*x; }while(v<=0); v=v*v*v; const u=r(); if(u<1-0.0331*x*x*x*x || Math.log(u)<0.5*x*x+d*(1-v+Math.log(v))) return d*v*th; } };
+
+/* ---- 1: same mean, different scatter ---- */
+const pF=new ML.Plot('#pFam',{equal:false}); let fam='poisson', fb=0.2, fnu=6, fseed=1;
+function drawF(){ const P=ML.palette(), r=rng(fseed), b0=Math.log(2), mu=x=>Math.exp(b0+fb*x); const sd=x=>fam==='poisson'?Math.sqrt(mu(x)):fam==='gamma'?mu(x)/Math.sqrt(fnu):1.4;
+  const pts=[]; for(let i=0;i<160;i++){ const x=r()*10, m=mu(x); const y=fam==='poisson'?pois(r,m):fam==='gamma'?gamma(r,fnu,m/fnu):m+1.4*normal(r); pts.push([x,y]); }
+  const ymax=Math.max(...pts.map(p=>p[1]), mu(10)+2*sd(10), mu(0)+2*sd(0))*1.05, ymin=fam==='normal'?Math.min(0,...pts.map(p=>p[1])):0;
+  const xs=[...Array(101).keys()].map(i=>i/10);
+  const fr=ML.chart(pF,[{pts:xs.map(x=>[x,mu(x)+2*sd(x)]),color:P.c2,width:1.5,dash:[5,4]},{pts:xs.map(x=>[x,Math.max(ymin,mu(x)-2*sd(x))]),color:P.c2,width:1.5,dash:[5,4]},{pts:pts,color:P.c4,dots:true,noline:true,r:2.6},{pts:xs.map(x=>[x,mu(x)]),color:P.c1,width:3}],{x0:0,x1:10,y0:ymin,y1:ymax,xl:'x'});
+  const cv=fam==='poisson'?'1/√μ':fam==='gamma'?(1/Math.sqrt(fnu)).toFixed(2):'σ/μ';
+  $('#fStats').innerHTML=stat('c1',fam==='poisson'?'μ':fam==='gamma'?'μ²/ν':'σ²','variance at mean μ')+stat('c2',fam==='normal'?'1.4':'grows','spread (dashed = ±2 sd)')+stat('c4',cv,'coefficient of variation')+stat('c5',fb.toFixed(2),'β₁: ×'+Math.exp(fb).toFixed(2)+' per unit of x'); }
+ML.bindSeg('fSeg',v=>{ fam=v; drawF(); }); ML.bindRange('fB',v=>{fb=v;drawF();},v=>v.toFixed(2)); ML.bindRange('fN',v=>{fnu=v;drawF();}); $('#fRe').onclick=()=>{ fseed++; drawF(); }; pF.onResize=drawF;
+
+/* ---- 3: relativity calculator ---- */
+function drawR(){ const base=412, a=+$('#rA').value, v=+$('#rV').value, g=+$('#rR').value, e=+$('#rE').value, tot=base*a*v*g*e;
+  $('#relCalc').innerHTML=`<div class="rr"><span>base rate \\(e^{\\beta_0}\\)</span><span>£${base.toFixed(2)}</span></div><div class="rr"><span>× driver age</span><span>${a.toFixed(2)}</span></div><div class="rr"><span>× vehicle group</span><span>${v.toFixed(2)}</span></div><div class="rr"><span>× region</span><span>${g.toFixed(2)}</span></div><div class="rr"><span>× exposure</span><span>${e.toFixed(2)}</span></div><div class="rr tot"><span>premium (risk cost)</span><span>£${tot.toFixed(2)}</span></div>
+    <p class="hint">log premium = ${Math.log(base).toFixed(3)} + ${Math.log(a).toFixed(3)} + ${Math.log(v).toFixed(3)} + ${Math.log(g).toFixed(3)} + log ${e.toFixed(2)} = ${Math.log(tot).toFixed(3)}: the linear predictor.</p>`; ML.renderMath($('#relCalc')); }
+['rA','rV','rR'].forEach(id=>ML.bindRange(id,drawR,v=>'×'+v.toFixed(2))); ML.bindRange('rE',drawR,v=>v.toFixed(2)+' yr');
+
+/* ---- 5: IRLS on three groups ---- */
+const IG={lv:['A','B','C'], e:[500,300,200], y:[40,36,30]}; const X=[[1,0,0],[1,1,0],[1,0,1]];
+let IT; function iReset(){ const ybar=IG.y.reduce((s,v)=>s+v,0)/3; const mu=IG.y.map(v=>(v+ybar)/2); IT={k:0, mu, beta:null, rows:[{k:0,beta:[NaN,NaN,NaN],dev:devOf(mu)}]}; drawI(); }
+function devOf(mu){ return IG.y.reduce((s,y,i)=>s+2*(y>0?y*Math.log(y/mu[i]):0)-2*(y-mu[i]),0); }
+function iStep(){ const mu=IT.mu, eta=mu.map(Math.log), off=IG.e.map(Math.log); const z=mu.map((m,i)=>eta[i]-off[i]+(IG.y[i]-m)/m), W=mu.slice();
+  const A=[[0,0,0],[0,0,0],[0,0,0]], b=[0,0,0]; for(let i=0;i<3;i++) for(let a=0;a<3;a++){ b[a]+=W[i]*X[i][a]*z[i]; for(let c=0;c<3;c++) A[a][c]+=W[i]*X[i][a]*X[i][c]; }
+  const beta=solve3(A,b); IT.mu=X.map((x,i)=>Math.exp(off[i]+x[0]*beta[0]+x[1]*beta[1]+x[2]*beta[2])); IT.k++; IT.beta=beta; IT.W=W; IT.rows.push({k:IT.k, beta, dev:devOf(IT.mu), W}); drawI(); }
+function solve3(A,b){ const M=A.map((r,i)=>r.concat([b[i]])); for(let i=0;i<3;i++){ let p=i; for(let j=i+1;j<3;j++) if(Math.abs(M[j][i])>Math.abs(M[p][i])) p=j; [M[i],M[p]]=[M[p],M[i]]; for(let j=0;j<3;j++){ if(j===i) continue; const f=M[j][i]/M[i][i]; for(let c=i;c<4;c++) M[j][c]-=f*M[i][c]; } } return M.map((r,i)=>r[3]/r[i]); }
+function drawI(){ const P=ML.palette(); const R=IT.rows; const f=v=>isFinite(v)?v.toFixed(6):'–';
+  $('#iTbl').innerHTML='<tr><th>iter</th><th>β₀ (A)</th><th>β_B</th><th>β_C</th><th>deviance</th></tr>'+R.map((r,i)=>`<tr${i===R.length-1?' class="cur"':''}><td>${r.k}</td><td>${f(r.beta[0])}</td><td>${f(r.beta[1])}</td><td>${f(r.beta[2])}</td><td>${r.dev.toFixed(6)}</td></tr>`).join(''); { const w=$('#iTbl').parentNode; w.scrollTop=w.scrollHeight; }
+  const fr=ML.chart(pI,[{pts:R.map(r=>[r.k,Math.log10(Math.max(r.dev,1e-12))]),color:P.c1,width:2.5,dots:true}],{x0:0,x1:Math.max(6,R.length),y0:-12,y1:Math.max(1,Math.log10(R[0].dev)+0.5),xl:'iteration',yfmt:v=>'1e'+Math.round(v)});
+  const last=R[R.length-1]; $('#iNote').innerHTML = IT.k ? `Relativities now: B ×${Math.exp(last.beta[1]).toFixed(4)}, C ×${Math.exp(last.beta[2]).toFixed(4)} (one-way: B ${((36/300)/(40/500)).toFixed(4)}, C ${((30/200)/(40/500)).toFixed(4)}). Working weights W = μ = [${last.W.map(v=>v.toFixed(1)).join(', ')}]. With one factor the GLM reproduces the one-way exactly; the deviance falls to 0 because there is one parameter per row.` : 'Start: μ halfway between each count and the average count. Press the button.'; }
+const pI=new ML.Plot('#pIrls',{equal:false}); pI.onResize=()=>drawI();
+$('#iStep').onclick=iStep; $('#iRun').onclick=()=>{ for(let k=0;k<8;k++) iStep(); }; $('#iReset').onclick=iReset; iReset();
+
+/* ---- 8: Tweedie ---- */
+const pT=new ML.Plot('#pTw',{equal:false}); let tp=1.5;
+function drawT(){ const P=ML.palette(), r=rng(7), mu=1, phi=1, lam=Math.pow(mu,2-tp)/(phi*(2-tp)), al=(2-tp)/(tp-1), th=phi*(tp-1)*Math.pow(mu,tp-1); const n=10000; let z=0; const ys=[];
+  for(let i=0;i<n;i++){ const N=pois(r,lam); if(!N){ z++; ys.push(0); continue; } let s=0; for(let k=0;k<N;k++) s+=gamma(r,al,th); ys.push(s); }
+  const m=ys.reduce((a,v)=>a+v,0)/n, v=ys.reduce((a,x)=>a+(x-m)**2,0)/n; const B=40, top=4, h=new Array(B).fill(0); ys.forEach(y=>{ if(y>0) h[Math.min(B-1,Math.floor(y/top*B))]++; });
+  const fr=ML.chart(pT,[{pts:[[-0.2,0],[top,Math.max(z/n, ...h.map(c=>c/n))*1.05]],color:'transparent',noline:true}],{x0:-0.25,x1:top,y0:0,y1:Math.max(z/n,...h.map(c=>c/n))*1.08,xl:'cost per policy'});
+  const c=pT.ctx; c.save(); c.fillStyle=P.muted; c.globalAlpha=.6; c.fillRect(fr.fx(-0.2),fr.fy(z/n),fr.fx(0)-fr.fx(-0.2)-1,fr.fy(0)-fr.fy(z/n)); c.globalAlpha=.85; c.fillStyle=P.c1;
+  h.forEach((k,i)=>{ const x0=i*top/B, x1=(i+1)*top/B; c.fillRect(fr.fx(x0)+0.5,fr.fy(k/n),fr.fx(x1)-fr.fx(x0)-1,fr.fy(0)-fr.fy(k/n)); }); c.restore();
+  $('#tStats').innerHTML=stat('c1',(100*z/n).toFixed(1)+'%','policies with no claim')+stat('c2',lam.toFixed(3),'claim rate λ')+stat('c4',m.toFixed(3),'mean (target 1)')+stat('c5',v.toFixed(2),'variance (theory φμᵖ = 1)'); }
+ML.bindRange('tP',v=>{tp=v;drawT();},v=>v.toFixed(2)); pT.onResize=drawT;
+
+/* ---- 9: one-way vs GLM ---- */
+function drawO(){ const ov=+$('#oC').value, r=rng(11), n=20000; const rows=[]; for(let i=0;i<n;i++){ const young=r()<0.3?1:0, ncd0=r()<(young?ov:0.2)?1:0, e=0.3+0.7*r(); const mu=0.08*e*(young?1.8:1)*(ncd0?1.4:1); rows.push({young,ncd0,e,y:pois(r,mu)}); }
+  const ow=k=>{ let a=0,b=0,c=0,d=0; rows.forEach(o=>{ if(o[k]){ a+=o.y; b+=o.e; } else { c+=o.y; d+=o.e; } }); return (a/b)/(c/d); };
+  const D=GLM.design(rows,{factors:[{name:'young',type:'cat',base:'0'},{name:'ncd0',type:'cat',base:'0'}]}); const res=GLM.fit({X:D.X,nCol:D.nCol,y:Float64Array.from(rows,o=>o.y),offset:Float64Array.from(rows,o=>Math.log(o.e)),family:'poisson'});
+  const gy=Math.exp(res.beta[D.cols.findIndex(c=>c.factor==='young')]), gn=Math.exp(res.beta[D.cols.findIndex(c=>c.factor==='ncd0')]), oy=ow('young'), on=ow('ncd0');
+  const mx=Math.max(2.8,oy,on)*1.02, bar=(lab,v,col)=>`<div class="b"><span>${lab}</span><i style="width:${(100*v/mx).toFixed(1)}%;background:${col}"></i><b>×${v.toFixed(2)}</b></div>`;
+  $('#oBars').innerHTML=bar('young: true',1.8,'#94a3b8')+bar('young: one-way',oy,'#ea580c')+bar('young: GLM',gy,'#1d4ed8')+bar('no NCD: true',1.4,'#94a3b8')+bar('no NCD: one-way',on,'#ea580c')+bar('no NCD: GLM',gn,'#1d4ed8');
+  $('#oStats').innerHTML=stat('c4',((oy*on)/(1.8*1.4)).toFixed(2)+'×','one-way overcharge for a young driver with no NCD')+stat('c5',((gy*gn)/(1.8*1.4)).toFixed(2)+'×','GLM, same policy'); }
+ML.bindRange('oC',drawO,v=>Math.round(v*100)+'%');
+
+/* ---- 11: credibility ---- */
+const pC=new ML.Plot('#pCred',{equal:false});
+function drawC(){ const P=ML.palette(), E=Math.pow(10,+$('#cE').value), k=+$('#cK').value, obs=1.6, Z=E/(E+k), est=Math.exp(Z*Math.log(obs));
+  const xs=[...Array(81).keys()].map(i=>Math.pow(10,i/20)); const fr=ML.chart(pC,[{pts:xs.map(x=>[Math.log10(x),x/(x+k)]),color:P.c1,width:3},{pts:[[Math.log10(E),Z]],color:P.c4,dots:true,noline:true,r:6}],{x0:0,x1:4,y0:0,y1:1,xl:'exposure (log₁₀ policy-years)'});
+  $('#cStats').innerHTML=stat('c1',Math.round(E).toLocaleString(),'policy-years in the level')+stat('c2',Z.toFixed(3),'credibility Z = E/(E+k)')+stat('c4','×'+obs.toFixed(2),'observed relativity')+stat('c5','×'+est.toFixed(3),'credibility-weighted (log scale)'); }
+ML.bindRange('cE',drawC,v=>Math.round(Math.pow(10,v)).toLocaleString()); ML.bindRange('cK',drawC); pC.onResize=drawC;
+
+ML.onTheme(()=>{ drawF(); drawI(); drawT(); drawC(); });
+drawF(); drawR(); drawT(); drawO(); drawC();
+})();
+</script>
+<script>ML.nav('glm'); ML.renderMath(document.body);</script>
+</body>
+</html>

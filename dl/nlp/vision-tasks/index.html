@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Core computer vision tasks: detection, segmentation, transfer learning</title>
+<meta name="description" content="From one label per image to a box and a mask per object: IoU, YOLO grids and anchors, non-maximum suppression, precision-recall and mAP, U-Net and Segment Anything, and transfer learning measured live in your browser.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Vision &middot; Foundations (part B of 2)</p>
+  <h1>Core vision tasks: <span class="grad">what is in the picture, where, and which pixels</span></h1>
+  <p class="lede">Classifying a whole image is only the first question. Self-driving cars need a box around every pedestrian, doctors need the exact outline of a tumour, and robots need to know which pixels belong to which object. This page walks through object detection and segmentation on pictures generated in your browser, where the true answer is known exactly, and ends with the trick that makes all of it practical: reusing a network trained on someone else's data.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#tasks">1 · Four tasks, one picture</a><a href="#iou">2 · Boxes and IoU</a><a href="#detectors">3 · How detectors predict boxes</a><a href="#nms">4 · Non-maximum suppression</a><a href="#map">5 · Precision, recall and mAP</a><a href="#seg">6 · Segmentation: U-Net and SAM</a><a href="#transfer">7 · Transfer learning</a><a href="#py">8 · Python</a><a href="#credits">Sources</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What are the core vision tasks, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A classifier answers "is there a dog in this photo?". Most real uses need more: <i>where</i> each dog is, how many there are, and which pixels are dog and which are sofa. The answer is no longer one label but a variable-length list of objects, each with a position and a shape, and a model has to produce that list in one go and be scored fairly when its boxes are slightly off.</p>
+      <h3>The idea</h3><p><a class="term" data-t="object-detection">Object detection</a> outputs a <a class="term" data-t="bounding-box">bounding box</a>, a class and a confidence for every object. <a class="term" data-t="semantic-segmentation">Semantic segmentation</a> gives every pixel a class; <a class="term" data-t="instance-segmentation">instance segmentation</a> also separates one object from the next. All of them reuse a <a class="term" data-t="cnn">CNN</a> (or a vision transformer) as a <i>backbone</i> that turns the image into feature maps, and add a small <i>head</i> for the task. Because backbones trained on millions of images transfer well, most projects start from a pre-trained one (<a class="term" data-t="transfer-learning">transfer learning</a>).</p>
+      <h3>How it works</h3><ol class="steps2"><li>A backbone turns the picture into feature maps.</li><li>A detection head predicts, for many candidate places, a class score and a box adjustment.</li><li><a class="term" data-t="nms">Non-maximum suppression</a> removes duplicate boxes for the same object.</li><li>A segmentation head upsamples the features back to full resolution and labels every pixel.</li><li>Quality is measured by overlap with the truth: <a class="term" data-t="iou">IoU</a> for boxes and masks, <a class="term" data-t="average-precision">mean average precision</a> over a dataset.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A teacher marking a class photo. Classification is writing "class 7B" on the back. Detection is drawing a rectangle round each child's face and writing their name. Segmentation is colouring in every child, the background and the bench with felt-tip pens; instance segmentation uses a different pen for each child.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Counting and locating objects, not just naming them</li><li>Pixel-exact outlines for measurement (medicine, satellite images)</li><li>Pre-trained backbones make small datasets workable</li><li>Real-time detectors (YOLO) run at video speed</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Labels are expensive: a box takes seconds, a mask minutes</li><li>Small, crowded or overlapping objects are hard</li><li>Scores depend on the IoU threshold: always say which</li><li>Classes never seen in training are missed entirely (unless the model is open-vocabulary)</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="object-detection">Object detection</a><a class="term" data-t="bounding-box">Bounding box</a><a class="term" data-t="iou">IoU</a><a class="term" data-t="anchor-box">Anchor box</a><a class="term" data-t="yolo">YOLO</a><a class="term" data-t="faster-rcnn">Faster R-CNN</a><a class="term" data-t="nms">NMS</a><a class="term" data-t="average-precision">mAP</a><a class="term" data-t="semantic-segmentation">Semantic segmentation</a><a class="term" data-t="instance-segmentation">Instance segmentation</a><a class="term" data-t="u-net">U-Net</a><a class="term" data-t="sam">SAM</a><a class="term" data-t="transfer-learning">Transfer learning</a></div>
+      <p class="hint">New to convolutions? Read <a href="../cnn/">part A, convolutional networks</a>, first: every model on this page is built on one.</p>
+    </div>
+  </div>
+</section>
+
+<section id="tasks" class="card hl">
+  <h2><span class="num">1</span>Four tasks, one picture</h2>
+  <p class="sub">The same scene, four different answers. These pictures are drawn by the page from random circles, squares and triangles, so the true boxes and masks are known to the pixel. Switch between the outputs and draw new scenes.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot sq" id="kImg" style="max-width:440px"></div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px"><div class="seg" id="kTask"><button data-v="cls" class="on">Classification</button><button data-v="det">Detection</button><button data-v="sem">Semantic</button><button data-v="ins">Instance</button></div><button class="btn" id="kNew">New scene</button></div>
+    </div>
+    <div class="prose">
+      <h3 style="margin-top:0" id="kTitle"></h3>
+      <div class="note" id="kOut" style="min-height:8.5em"></div>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Task</th><th>Output for one image</th><th>Typical model</th></tr>
+        <tr><td>Classification</td><td>one score per class: a vector of length \(C\)</td><td>ResNet, ViT</td></tr>
+        <tr><td>Detection</td><td>a list of (box, class, score), any length</td><td>Faster R-CNN, YOLO, DETR</td></tr>
+        <tr><td>Semantic segmentation</td><td>a class for every pixel: an \(H\times W\) grid of labels</td><td>U-Net, DeepLab</td></tr>
+        <tr><td>Instance segmentation</td><td>one mask per object, with class and score</td><td>Mask R-CNN, SAM + a detector</td></tr>
+      </table></div>
+      <p class="hint"><b>Panoptic</b> segmentation combines the last two: every pixel gets a class, and pixels of countable things (people, cars) also get an instance id, while "stuff" (sky, road) does not.</p>
+    </div>
+  </div>
+</section>
+
+<section id="iou" class="card">
+  <h2><span class="num">2</span>Boxes, and how much two boxes agree</h2>
+  <p class="sub">A box is four numbers. To score a prediction we need one number that says how well it matches the truth: <a class="term" data-t="iou">intersection over union</a>. Drag the dashed prediction box (drag inside to move it, drag its bottom-right corner to resize) and watch IoU change.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot sq" id="iPlot" style="max-width:440px;touch-action:none"></div>
+      <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap"><button class="btn" id="iGood">Good guess</button><button class="btn" id="iShift">Shifted by half</button><button class="btn" id="iBig">Too big</button></div>
+    </div>
+    <div>
+      <div class="stats" id="iStats"></div>
+      <div class="mathbox c1">$$\text{IoU}(A,B)=\frac{|A\cap B|}{|A\cup B|}=\frac{|A\cap B|}{|A|+|B|-|A\cap B|}$$</div>
+      <div class="note mono" id="iFmt" style="font-size:12.5px;line-height:1.6;min-height:6.5em"></div>
+      <p class="hint">Three common ways to write the same box: corners (Pascal VOC, torchvision), corner plus size (COCO), and centre plus size as fractions of the image (YOLO). Mixing them up is the classic detection bug.</p>
+    </div>
+  </div>
+  <div class="prose" style="margin-top:6px">
+    <p><b>Reading IoU.</b> 1 means identical boxes, 0 means no overlap. Pascal VOC counts a detection as correct when IoU ≥ 0.5; COCO averages over ten thresholds from 0.5 to 0.95, which rewards tight boxes. Notice how harsh IoU is for small objects: shifting a box by half its width already drops IoU to 0.33. IoU also has no gradient when boxes do not overlap, so detectors train with smoother variants (GIoU, DIoU, CIoU) or with direct regression of the box offsets.</p>
+  </div>
+</section>
+
+<section id="detectors" class="card">
+  <h2><span class="num">3</span>How a detector predicts boxes: grids and anchors</h2>
+  <p class="sub">A network has a fixed number of outputs, but an image can contain any number of objects. Detectors solve this by predicting at many fixed places at once and letting most of them say "nothing here". <a class="term" data-t="yolo">YOLO</a> cuts the image into an \(S\times S\) grid: the cell that contains an object's centre is responsible for it. Change the grid and see which cells must fire.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot sq" id="gPlot" style="max-width:440px"></div>
+      <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap"><div class="seg" id="gView"><button data-v="grid" class="on">Grid cells</button><button data-v="anch">Anchor boxes</button></div><button class="btn" id="gNew">New scene</button></div>
+    </div>
+    <div>
+      <div class="ctl"><label for="gS"><span>Grid size \(S\)</span><output id="gSOut"></output></label><input type="range" id="gS" min="2" max="10" value="5"></div>
+      <div class="ctl"><label for="gB"><span>Boxes per cell \(B\) (anchors)</span><output id="gBOut"></output></label><input type="range" id="gB" min="1" max="5" value="3"></div>
+      <div class="stats" id="gStats"></div>
+      <div class="note" id="gNote" style="min-height:6.5em"></div>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:8px">
+    <div>
+      <h3>What each cell predicts</h3>
+      <p>For each of its \(B\) anchor boxes a cell outputs an objectness score, \(C\) class scores and four numbers that nudge the anchor into the right box. The network does not output the box directly; it outputs offsets \((t_x,t_y,t_w,t_h)\) relative to the cell and the anchor:</p>
+      <div class="mathbox c3">$$b_x=c_x+\sigma(t_x),\quad b_y=c_y+\sigma(t_y),\quad b_w=p_w\,e^{t_w},\quad b_h=p_h\,e^{t_h}$$</div>
+      <p>where \((c_x,c_y)\) is the cell's corner and \((p_w,p_h)\) the anchor's size. The sigmoid keeps the centre inside its cell; the exponential keeps widths positive and makes "twice as big" and "half as big" symmetric. In total the head outputs an \(S\times S\times B(5+C)\) tensor, from a single forward pass: that is why YOLO ("you only look once") is fast.</p>
+      <p><b>Anchors</b> are a few preset box shapes (tall, wide, square, several sizes), usually found by k-means on the training boxes using \(1-\text{IoU}\) as the distance. Switch to "Anchor boxes" to see which preset shape fits each object best.</p>
+    </div>
+    <div>
+      <h3>One stage or two?</h3>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th></th><th>Two-stage: <a class="term" data-t="faster-rcnn">Faster R-CNN</a></th><th>One-stage: YOLO, SSD, RetinaNet</th></tr>
+        <tr><td>Step 1</td><td>a region proposal network suggests ~2,000 boxes that might hold an object</td><td>dense predictions at every grid cell and anchor</td></tr>
+        <tr><td>Step 2</td><td>RoI pooling cuts each proposal's features to 7 × 7; a head classifies it and refines the box</td><td>none: scores and boxes come out together</td></tr>
+        <tr><td>Strength</td><td>accurate, especially for small objects</td><td>fast enough for live video</td></tr>
+        <tr><td>Weakness</td><td>slower, more moving parts</td><td>huge imbalance: most anchors are background (RetinaNet's focal loss fixes this)</td></tr>
+      </table></div>
+      <p><b>Without anchors or NMS.</b> Newer designs predict an object's centre and its distances to the four sides (FCOS, CenterNet), or treat detection as set prediction with a transformer: DETR learns 100 "object queries" that cross-attend to the image, each producing one box or "no object", and is trained with a one-to-one matching loss, so it needs no anchors and no NMS.</p>
+    </div>
+  </div>
+</section>
+
+<section id="nms" class="card hl">
+  <h2><span class="num">4</span>Non-maximum suppression: one box per object</h2>
+  <p class="sub">Neighbouring cells and anchors all see the same object, so a raw detector reports it several times. <a class="term" data-t="nms">NMS</a> keeps the most confident box and deletes the others that overlap it too much. The boxes here come from a pretend detector: jittered guesses around each true object, better guesses scoring higher, plus a few false alarms. Step through the algorithm.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot sq" id="nPlot" style="max-width:440px"></div>
+      <div class="player" style="margin-top:8px"><button class="btn primary" id="nPlay">Play</button><button class="btn" id="nStep">Step</button><button class="btn" id="nNew">New scene</button><span class="pos" id="nPos"></span></div>
+    </div>
+    <div>
+      <div class="ctl"><label for="nIoU"><span>IoU threshold for suppression</span><output id="nIoUOut"></output></label><input type="range" id="nIoU" min="1" max="9" value="5"></div>
+      <div class="ctl"><label for="nScore"><span>Minimum score to consider</span><output id="nScoreOut"></output></label><input type="range" id="nScore" min="0" max="8" value="2"></div>
+      <div class="stats" id="nStats"></div>
+      <div id="nList" class="tblwrap" style="height:220px;overflow:auto"></div>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:12px">
+    <div>
+      <div class="algo" data-anim="nms"><h5 class="algo-h">Algorithm: greedy non-maximum suppression</h5><ol>
+        <li><span class="kw">input</span> boxes \(b_i\) with scores \(s_i\) and classes; thresholds \(\tau_{\text{score}}\), \(\tau_{\text{IoU}}\)</li>
+        <li>drop boxes with \(s_i&lt;\tau_{\text{score}}\); sort the rest by score, highest first</li>
+        <li><span class="kw">while</span> boxes remain <span class="kw">do</span></li>
+        <li class="i1">take the top box \(b^\ast\) and keep it</li>
+        <li class="i1"><span class="kw">for</span> every other box \(b\) of the same class: <span class="kw">if</span> \(\text{IoU}(b,b^\ast)&gt;\tau_{\text{IoU}}\) delete \(b\) <span class="cm">a duplicate</span></li>
+        <li><span class="kw">return</span> the kept boxes</li>
+      </ol></div>
+    </div>
+    <div>
+      <p><b>The threshold is a trade-off.</b> Too low (say 0.2) and two real objects standing close together get merged into one. Too high (0.8) and duplicates survive, each counted as a false positive. 0.45 to 0.6 is typical. <b>Soft-NMS</b> lowers the scores of overlapping boxes instead of deleting them, which helps in crowds.</p>
+      <details class="deeper"><summary>Going deeper: why greedy, and what it costs</summary><div>
+        <p>NMS is a hand-written rule, not learned, and it runs after the network, so the network cannot learn to work around its mistakes. With \(n\) boxes it is \(O(n^2)\) in the worst case, which is why detectors first drop low scores and keep at most a few hundred candidates per class. Removing NMS entirely was one motivation for DETR, whose matching loss teaches the network itself to output each object once; recent YOLO versions (v10) use the same one-to-one idea.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="map" class="card">
+  <h2><span class="num">5</span>Precision, recall and mean average precision</h2>
+  <p class="sub">How good is a detector over a whole dataset? Sort all its detections by confidence and walk down the list: each one is a true positive if it overlaps an unmatched true box with IoU above the threshold, otherwise a false positive. Precision and recall after each step trace a curve; the area under it is the <a class="term" data-t="average-precision">average precision</a> (AP) for that class, and mAP averages AP over classes. Here the pretend detector runs on 40 scenes.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot" id="mPlot" style="aspect-ratio:4/3"></div>
+      <p class="hint">Precision against recall for each class (circle, square, triangle). Dotted: the curve as measured; solid: the interpolated "envelope" whose area is AP.</p>
+    </div>
+    <div>
+      <div class="ctl"><label for="mQ"><span>Detector quality</span><output id="mQOut"></output></label><input type="range" id="mQ" min="0" max="10" value="6"></div>
+      <div class="ctl"><label for="mT"><span>IoU threshold for a hit</span><output id="mTOut"></output></label><input type="range" id="mT" min="0" max="9" value="0"></div>
+      <div class="row" style="gap:6px;margin-bottom:6px"><div class="seg" id="mNms"><button data-v="1" class="on">After NMS</button><button data-v="0">Raw (duplicates kept)</button></div></div>
+      <div class="stats" id="mStats"></div>
+      <div class="note" id="mNote" style="min-height:4.5em"></div>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:12px">
+    <div>
+      <div class="algo" data-anim="ap"><h5 class="algo-h">Algorithm: average precision for one class</h5><ol>
+        <li><span class="kw">input</span> all detections of the class over the dataset, the true boxes, IoU threshold \(\tau\)</li>
+        <li>sort the detections by score, highest first</li>
+        <li><span class="kw">for</span> each detection <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">if</span> it overlaps a not-yet-matched true box with IoU ≥ \(\tau\): TP, mark that box matched; <span class="kw">else</span> FP</li>
+        <li class="i1">precision \(=\frac{TP}{TP+FP}\), recall \(=\frac{TP}{\#\text{true boxes}}\)</li>
+        <li>make precision non-increasing: \(p(r)\leftarrow\max_{r'\ge r}p(r')\) <span class="cm">the envelope</span></li>
+        <li>\(\text{AP}\leftarrow\) area under the envelope</li>
+      </ol></div>
+    </div>
+    <div>
+      <p><b>Three numbers you will see quoted.</b> <i>AP50</i> or mAP@0.5 uses \(\tau=0.5\) (Pascal VOC). <i>AP75</i> uses 0.75. <i>COCO mAP</i>, written AP or mAP@[.5:.95], averages AP over \(\tau=0.50,0.55,\dots,0.95\) and over classes; it is the headline number on detection leaderboards and is much lower than AP50 for the same model.</p>
+      <p>Try the raw setting: duplicates become false positives, so precision falls. Raise the IoU threshold: the loose boxes stop counting and AP drops, most of all for a poor detector.</p>
+      <p class="src">Adapted from: the Pascal VOC (Everingham et al., 2010) and <a href="https://cocodataset.org/#detection-eval" target="_blank" rel="noopener">COCO detection evaluation</a> definitions. This page uses all-point interpolation; COCO samples the envelope at 101 recall points, which gives nearly the same value.</p>
+    </div>
+  </div>
+</section>
+
+<section id="seg" class="card hl">
+  <h2><span class="num">6</span>Segmentation: a label for every pixel</h2>
+  <p class="sub">A classifier shrinks the image to a single vector. A segmenter must also come back up to full size. The <a class="term" data-t="u-net">U-Net</a> does both: an encoder that shrinks and deepens, a decoder that grows back, and skip connections that hand fine detail straight across. Below it, try promptable segmentation: click any object and a mask grows from your click.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot" id="uPlot" style="aspect-ratio:16/10"></div>
+      <p class="hint">U-Net with a 256 × 256 input and four levels. Boxes: feature maps (height ∝ size, width ∝ channels). Down arrows: 2 × 2 max pooling. Up arrows: 2 × 2 transposed convolution. Dashed: skip connections, concatenated onto the decoder.</p>
+    </div>
+    <div class="prose">
+      <h3 style="margin-top:0">Why the U shape works</h3>
+      <p>Going down, each level halves the resolution and doubles the channels, so deep features know <i>what</i> is in a large area but have lost <i>where</i> exactly. Going up, transposed convolutions double the resolution, and the skip connection concatenates the encoder's feature map of the same size, which still has sharp edges. The last layer is a \(1\times1\) convolution giving \(C\) class scores per pixel, trained with per-pixel cross-entropy, often plus a Dice loss.</p>
+      <div class="mathbox c1">$$\text{Dice}=\frac{2|A\cap B|}{|A|+|B|},\qquad \text{IoU}=\frac{|A\cap B|}{|A\cup B|},\qquad \text{Dice}=\frac{2\,\text{IoU}}{1+\text{IoU}}$$</div>
+      <p>U-Net was designed in 2015 for microscope images with only 30 labelled training pictures, and is still the default for medical images; it is also the denoising network inside diffusion models such as Stable Diffusion.</p>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <div>
+      <div class="cvimgs c2"><div><div class="plot sq" id="sImg" style="cursor:crosshair"></div><p class="hint c">click an object (the prompt)</p></div><div><div class="plot sq" id="sMask"></div><p class="hint c">predicted mask vs truth</p></div></div>
+      <div class="row" style="margin-top:8px;gap:6px"><button class="btn" id="sNew">New scene</button></div>
+    </div>
+    <div>
+      <div class="ctl"><label for="sTol"><span>Colour tolerance of the region grower</span><output id="sTolOut"></output></label><input type="range" id="sTol" min="1" max="12" value="4"></div>
+      <div class="stats" id="sStats"></div>
+      <p class="hint">Green: correct pixels. Red: predicted but not part of the object (false positives). Orange: missed pixels of the object. The stand-in here grows a region of similar colour from your click, so the shading on each shape and too-high tolerance make it leak or fall short; SAM learned to do this properly from a billion masks.</p>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:12px">
+    <div>
+      <h3>Segment Anything (SAM)</h3>
+      <p><a class="term" data-t="sam">SAM</a> (Meta, 2023) is a <i>promptable</i> segmenter: give it a click, a box or a rough mask and it returns the matching object's mask, for objects and categories it was never explicitly taught. Three parts:</p>
+      <ol><li><b>Image encoder</b>: a large vision transformer (MAE pre-trained) runs once per image and gives a 64 × 64 grid of embeddings.</li><li><b>Prompt encoder</b>: points and boxes become small positional embeddings.</li><li><b>Mask decoder</b>: a light two-layer transformer cross-attends between the prompt and the image embedding and outputs three candidate masks (whole, part, sub-part) with a predicted IoU for each, because a single click is ambiguous.</li></ol>
+      <p>The heavy encoder runs once; each new click costs only the tiny decoder, which is why SAM feels interactive. It was trained on SA-1B: 11 million images with 1.1 billion masks, most produced by SAM itself in a model-in-the-loop data engine. SAM 2 (2024) extends this to video.</p>
+    </div>
+    <div>
+      <h3>Instance masks: Mask R-CNN</h3>
+      <p>Mask R-CNN (2017) adds a third head to Faster R-CNN: for every detected box, a small fully convolutional network predicts a 28 × 28 mask inside the box, which is resized to the box. It also replaced RoI pooling's rounding with <b>RoIAlign</b>, bilinear sampling at exact positions, which matters for pixel-accurate masks. Detect first, then segment inside each box: that is still how most instance-segmentation systems work, and "a detector's boxes as SAM prompts" is a popular modern version.</p>
+      <p class="src">Adapted from: <a href="https://arxiv.org/abs/1505.04597" target="_blank" rel="noopener">Ronneberger, Fischer &amp; Brox, U-Net (2015)</a>, <a href="https://arxiv.org/abs/2304.02643" target="_blank" rel="noopener">Kirillov et al., Segment Anything (2023)</a> and <a href="https://arxiv.org/abs/1703.06870" target="_blank" rel="noopener">He et al., Mask R-CNN (2017)</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="transfer" class="card">
+  <h2><span class="num">7</span>Transfer learning: borrow a network that already sees</h2>
+  <p class="sub">The first layers of every image network learn edges, blobs and textures, whatever the task. So a network trained on a big dataset is a good starting point for a small one. Here is a real experiment, run in your browser: pre-train the tiny CNN from part A on 400 pictures of strokes, then learn a new task (plus, cross, corner L, tee T) from only a few examples, three ways.</p>
+  <div class="grid2">
+    <div>
+      <div class="player"><button class="btn primary" id="xRun">Run the experiment</button><span class="pos" id="xProg">not run yet</span></div>
+      <div class="plot" id="xPlot" style="aspect-ratio:4/3;margin-top:8px"></div>
+      <p class="hint">Test accuracy on 400 new pictures of the new task, against the number of training pictures (log scale), averaged over 2 random seeds. Chance is 25%.</p>
+    </div>
+    <div>
+      <div class="tblwrap" id="xTbl" style="min-height:12em"></div>
+      <div class="note" id="xNote" style="min-height:4.5em">Press Run: it trains 30 small networks, which takes a few seconds.</div>
+      <h3>Which strategy when?</h3>
+      <div class="ctl"><label for="xSize"><span>How much labelled data do you have?</span><output id="xSizeOut"></output></label><input type="range" id="xSize" min="0" max="2" value="0"></div>
+      <div class="row" style="gap:6px"><div class="seg" id="xSim"><button data-v="1" class="on">Similar to the pre-training images</button><button data-v="0">Very different (X-rays, satellites)</button></div></div>
+      <div class="note" id="xAdvice" style="min-height:6em;margin-top:8px"></div>
+    </div>
+  </div>
+  <div class="prose" style="margin-top:8px">
+    <p><b>Three ways to reuse a network.</b> <i>Feature extraction</i>: freeze every pre-trained layer and train only a new classifier on top; cheap and hard to overfit. <i>Fine-tuning</i>: start from the pre-trained weights and keep training all (or the top few) layers on the new data, usually with a learning rate 10 times smaller so the useful features are adjusted, not erased. <i>From scratch</i>: random weights; only sensible with a lot of data or images unlike anything the backbone has seen. Yosinski et al. (2014) showed that features from the first layers transfer almost perfectly between tasks, and the last layers least.</p>
+    <p><b>Practical recipe.</b> Load an ImageNet backbone, replace the final layer with one for your classes, freeze the backbone for a few epochs to train the new head, then unfreeze and fine-tune everything with a small learning rate, with data augmentation (flips, crops, colour jitter) and the same input normalisation the backbone was trained with.</p>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">8</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> torch, torchvision
+<span class="k">from</span> torchvision.ops <span class="k">import</span> box_iou, nms
+
+<span class="c"># IoU and NMS (boxes as x0, y0, x1, y1)</span>
+boxes  = torch.tensor([[<span class="s">10</span>, <span class="s">10</span>, <span class="s">60</span>, <span class="s">60</span>], [<span class="s">12</span>, <span class="s">14</span>, <span class="s">62</span>, <span class="s">58</span>], [<span class="s">100</span>, <span class="s">100</span>, <span class="s">150</span>, <span class="s">140</span>]], dtype=torch.float)
+scores = torch.tensor([<span class="s">0.9</span>, <span class="s">0.75</span>, <span class="s">0.6</span>])
+print(box_iou(boxes, boxes))                 <span class="c"># 3 x 3 matrix of IoUs</span>
+print(nms(boxes, scores, iou_threshold=<span class="s">0.5</span>))  <span class="c"># tensor([0, 2]): box 1 was a duplicate of box 0</span>
+
+<span class="c"># a pre-trained two-stage detector (COCO, 91 classes)</span>
+<span class="k">from</span> torchvision.models.detection <span class="k">import</span> fasterrcnn_resnet50_fpn_v2, FasterRCNN_ResNet50_FPN_V2_Weights
+w = FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT
+det = fasterrcnn_resnet50_fpn_v2(weights=w, box_score_thresh=<span class="s">0.5</span>).eval()
+<span class="c"># out = det([w.transforms()(img)])[0]   -> dict with 'boxes', 'labels', 'scores' (NMS already applied)</span>
+
+<span class="c"># a one-stage real-time detector (pip install ultralytics)</span>
+<span class="k">from</span> ultralytics <span class="k">import</span> YOLO
+yolo = YOLO(<span class="s">"yolov8n.pt"</span>)                      <span class="c"># 3.2 M parameters</span>
+<span class="c"># res = yolo("street.jpg", conf=0.25, iou=0.7)  ;  res[0].boxes.xyxy, .cls, .conf</span>
+<span class="c"># yolo.train(data="my_data.yaml", epochs=50)    # fine-tune on your own labelled boxes</span>
+<span class="c"># yolo.val() reports mAP50 and mAP50-95</span>
+
+<span class="c"># promptable segmentation with SAM (Hugging Face transformers)</span>
+<span class="k">from</span> transformers <span class="k">import</span> SamModel, SamProcessor
+proc = SamProcessor.from_pretrained(<span class="s">"facebook/sam-vit-base"</span>)
+sam  = SamModel.from_pretrained(<span class="s">"facebook/sam-vit-base"</span>)
+<span class="c"># inp = proc(pil_image, input_points=[[[450, 600]]], return_tensors="pt")   # one click</span>
+<span class="c"># masks = proc.image_processor.post_process_masks(sam(**inp).pred_masks, inp["original_sizes"], inp["reshaped_input_sizes"])</span>
+
+<span class="c"># transfer learning: new head on a frozen ImageNet backbone, then fine-tune</span>
+<span class="k">from</span> torchvision.models <span class="k">import</span> resnet18, ResNet18_Weights
+net = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
+<span class="k">for</span> p <span class="k">in</span> net.parameters(): p.requires_grad = <span class="k">False</span>        <span class="c"># 1. feature extraction</span>
+net.fc = torch.nn.Linear(net.fc.in_features, <span class="s">4</span>)               <span class="c"># new trainable head, 4 classes</span>
+opt = torch.optim.AdamW(net.fc.parameters(), lr=<span class="s">1e-3</span>)
+<span class="c"># ... train a few epochs, then</span>
+<span class="k">for</span> p <span class="k">in</span> net.parameters(): p.requires_grad = <span class="k">True</span>         <span class="c"># 2. fine-tune everything</span>
+opt = torch.optim.AdamW([{<span class="s">"params"</span>: net.fc.parameters(), <span class="s">"lr"</span>: <span class="s">1e-3</span>},
+                         {<span class="s">"params"</span>: [p <span class="k">for</span> n, p <span class="k">in</span> net.named_parameters() <span class="k">if</span> <span class="k">not</span> n.startswith(<span class="s">"fc"</span>)], <span class="s">"lr"</span>: <span class="s">1e-4</span>}])</pre>
+  <p class="hint">Next in Step 6: <a href="../visual-tokenisation/">visual tokenisation</a> replaces the convolutional backbone with a transformer that reads the image as patches.</p>
+</section>
+
+<section id="credits" class="card">
+  <h2>Sources and further reading</h2>
+  <div class="prose"><ul>
+    <li>S. Ren, K. He, R. Girshick, J. Sun, <a href="https://arxiv.org/abs/1506.01497" target="_blank" rel="noopener">Faster R-CNN: towards real-time object detection with region proposal networks</a> (2015).</li>
+    <li>J. Redmon, S. Divvala, R. Girshick, A. Farhadi, <a href="https://arxiv.org/abs/1506.02640" target="_blank" rel="noopener">You only look once: unified, real-time object detection</a> (2016), and J. Redmon, A. Farhadi, <a href="https://arxiv.org/abs/1612.08242" target="_blank" rel="noopener">YOLO9000</a> (2017) for the anchor offsets and k-means anchors in section 3.</li>
+    <li>T.-Y. Lin et al., <a href="https://arxiv.org/abs/1708.02002" target="_blank" rel="noopener">Focal loss for dense object detection (RetinaNet)</a> (2017). N. Carion et al., <a href="https://arxiv.org/abs/2005.12872" target="_blank" rel="noopener">End-to-end object detection with transformers (DETR)</a> (2020).</li>
+    <li>M. Everingham et al., The Pascal VOC challenge (IJCV, 2010), and <a href="https://cocodataset.org/#detection-eval" target="_blank" rel="noopener">COCO detection evaluation</a>: the AP definitions in section 5.</li>
+    <li>O. Ronneberger, P. Fischer, T. Brox, <a href="https://arxiv.org/abs/1505.04597" target="_blank" rel="noopener">U-Net: convolutional networks for biomedical image segmentation</a> (2015). K. He, G. Gkioxari, P. Dollár, R. Girshick, <a href="https://arxiv.org/abs/1703.06870" target="_blank" rel="noopener">Mask R-CNN</a> (2017).</li>
+    <li>A. Kirillov et al., <a href="https://arxiv.org/abs/2304.02643" target="_blank" rel="noopener">Segment Anything</a> (2023).</li>
+    <li>J. Yosinski, J. Clune, Y. Bengio, H. Lipson, <a href="https://arxiv.org/abs/1411.1792" target="_blank" rel="noopener">How transferable are features in deep neural networks?</a> (2014).</li>
+    <li>Library documentation: <a href="https://pytorch.org/vision/stable/ops.html" target="_blank" rel="noopener">torchvision.ops</a>, <a href="https://docs.ultralytics.com/" target="_blank" rel="noopener">Ultralytics YOLO</a>, <a href="https://huggingface.co/docs/transformers/model_doc/sam" target="_blank" rel="noopener">Hugging Face SAM</a>.</li>
+  </ul></div>
+</section>
+<script type="application/json" id="quizData">[
+ {"q":"A predicted box and the true box each have area 100 and they overlap in an area of 50. What is their IoU?","o":["0.25","0.33","0.5","0.67"],"a":1,"e":"Union = 100 + 100 − 50 = 150, so IoU = 50 / 150 = 0.33. Overlapping half of each box is not 'half right' by IoU."},
+ {"q":"What does non-maximum suppression remove?","o":["Boxes for rare classes","Lower-scoring boxes of the same class that overlap a kept box too much","All boxes below the IoU threshold with the ground truth","The background class"],"a":1,"e":"NMS keeps the most confident box and deletes duplicates of it: same class, IoU above the threshold. It never looks at the ground truth."},
+ {"q":"Why is COCO mAP (averaged over IoU 0.5 to 0.95) lower than AP50 for the same detector?","o":["It uses more classes","It also requires tight boxes: at IoU 0.9, slightly loose boxes stop counting as hits","It ignores duplicates","It is measured on the training set"],"a":1,"e":"Raising the IoU threshold turns loosely placed boxes into false positives, so AP at 0.75 or 0.95 is lower; averaging over thresholds rewards precise localisation."},
+ {"q":"In a U-Net, what do the skip connections carry?","o":["The class labels","High-resolution encoder feature maps, concatenated onto the decoder at the same size","Gradients only, not activations","The input image, unchanged"],"a":1,"e":"Deep features know what is there but have lost exact position; the skip connections hand the sharp, high-resolution encoder maps across so the decoder can draw precise boundaries."},
+ {"q":"You have 300 labelled chest X-rays and an ImageNet ResNet. What is usually the best start?","o":["Train a ResNet from scratch","Fine-tune the pre-trained network with a small learning rate and augmentation","Use the ImageNet classifier as it is","Use a dense network instead"],"a":1,"e":"With little data, start from pre-trained weights. X-rays differ from ImageNet, so fine-tuning (not just a frozen feature extractor) usually helps, with a small learning rate so the useful early features are kept."}
+]</script>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/cv.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>Object.assign(ML.palette(),{soft:ML.css('--soft')||'#eee'});
+if(window.GLOSS&&GLOSS._alias) GLOSS._alias.forEach(a=>{ const l=a[0].toLowerCase(); if(a[1]==='kernel') a[1]='conv-kernel'; if(l==='feature map'||l==='feature maps') a[1]='feature-map'; if(/^resnets?$/.test(l)) a[1]='resnet'; if(a[1]==='map') a[1]='average-precision'; });
+const stats=(id,rows)=>{ $(id).innerHTML=rows.map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); };
+const CLS=CV.CLASSES, N=160;
+const clsCol=()=>{ const P=P0(); return [P.c1,P.c3,P.c4]; };
+/* draw a scene image into a host and return a mapper from scene pixels to canvas pixels */
+function sceneDraw(host, sc, o={}){ const {x,w,h}=CV.host(host), s=Math.min(w,h), ox=(w-s)/2, oy=(h-s)/2, k=s/sc.n;
+  x.clearRect(0,0,w,h); x.imageSmoothingEnabled=false; x.globalAlpha=o.dim??1; x.drawImage(CV.toCanvas(sc.im,{rgb:true}),ox,oy,s,s); x.globalAlpha=1;
+  const M={x,w,h,s,ox,oy,k,X:v=>ox+v*k,Y:v=>oy+v*k};
+  M.box=(b,col,lw=2.5,dash,label,alpha=1)=>{ x.save(); x.globalAlpha=alpha; x.strokeStyle=col; x.lineWidth=lw; if(dash) x.setLineDash(dash); x.strokeRect(M.X(b[0]),M.Y(b[1]),(b[2]-b[0])*k,(b[3]-b[1])*k); x.setLineDash([]);
+    if(label){ x.font='600 11px Inter,system-ui'; const tw=x.measureText(label).width+8, ty=Math.max(0,M.Y(b[1])-15); x.fillStyle=col; x.fillRect(M.X(b[0]),ty,tw,15); x.fillStyle='#fff'; x.fillText(label,M.X(b[0])+4,ty+11); } x.restore(); };
+  M.mask=(f,alpha=.6)=>{ const c=document.createElement('canvas'); c.width=c.height=sc.n; const cx=c.getContext('2d'), g=cx.createImageData(sc.n,sc.n);
+    for(let i=0;i<sc.n*sc.n;i++){ const col=f(i); if(!col) continue; const o4=4*i; g.data[o4]=col[0]; g.data[o4+1]=col[1]; g.data[o4+2]=col[2]; g.data[o4+3]=255*alpha; } cx.putImageData(g,0,0); x.drawImage(c,ox,oy,s,s); };
+  return M; }
+const hexRgb=c=>ML.rgb(c);
+
+/* ---------- 1. four tasks ---------- */
+const tk={seed:7,task:'cls'}; let tkScene=CV.scene(tk.seed,N);
+function drawTasks(){ const sc=tkScene, P=P0(), cols=clsCol(), M=sceneDraw('#kImg',sc,{dim:tk.task==='sem'||tk.task==='ins'?.35:1}), counts=[0,0,0]; sc.objs.forEach(o=>counts[o.cls]++);
+  const INST=[P.c1,P.c2,P.c3,P.c4,P.c5,P.c6].map(hexRgb);
+  if(tk.task==='det') sc.objs.forEach(o=>M.box(o.box,cols[o.cls],2.5,null,CLS[o.cls]));
+  if(tk.task==='sem') M.mask(i=>sc.cls[i]?hexRgb(cols[sc.cls[i]-1]):null,.85);
+  if(tk.task==='ins') M.mask(i=>sc.inst[i]?INST[(sc.inst[i]-1)%6]:null,.85);
+  const T={cls:'Classification: one answer per picture',det:'Detection: a box, class and score per object',sem:'Semantic segmentation: a class per pixel',ins:'Instance segmentation: a mask per object'}[tk.task];
+  $('#kTitle').textContent=T; const area=c=>{ let n=0; for(const v of sc.cls) if(v===c+1) n++; return n; };
+  $('#kOut').innerHTML={cls:`Multi-label answer: <b>${CLS.map((c,i)=>`${c}: ${counts[i]?'yes':'no'}`).join(', ')}</b>.<br>A single-label classifier would have to pick one class for the whole image, here probably "${CLS[counts.indexOf(Math.max(...counts))]}". Either way: nothing about where, or how many.`,
+    det:`${sc.objs.length} objects:<br>`+sc.objs.map(o=>`<span class="mono" style="font-size:12px">${CLS[o.cls].padEnd(8,' ')} box (${o.box.join(', ')})</span>`).join('<br>'),
+    sem:`Every one of the ${N*N} pixels gets a class: `+CLS.map((c,i)=>`<b style="color:${cols[i]}">${c}</b> ${(100*area(i)/N/N).toFixed(1)}%`).join(', ')+`, background the rest. Two touching circles would merge into one blob: semantic segmentation does not count objects.`,
+    ins:`${sc.objs.length} separate masks, one colour each. Unlike semantic segmentation, two objects of the same class stay separate, so you can count them and measure each one.`}[tk.task]; }
+ML.bindSeg('kTask',v=>{ tk.task=v; drawTasks(); }); $('#kNew').onclick=()=>{ tk.seed++; tkScene=CV.scene(tk.seed,N); drawTasks(); };
+
+/* ---------- 2. IoU ---------- */
+const gt=[50,45,110,115]; let pb=[62,58,126,122], drag=null;
+function drawIoU(){ const P=P0(), {x,w,h}=CV.host('#iPlot'), s=Math.min(w,h), k=s/N, ox=(w-s)/2; x.clearRect(0,0,w,h); x.fillStyle=P.bg; x.fillRect(ox,0,s,s);
+  x.strokeStyle=P.line; x.lineWidth=1; for(let g=0;g<=N;g+=20){ x.beginPath(); x.moveTo(ox+g*k,0); x.lineTo(ox+g*k,s); x.moveTo(ox,g*k); x.lineTo(ox+s,g*k); x.stroke(); }
+  const R=b=>[ox+b[0]*k,b[1]*k,(b[2]-b[0])*k,(b[3]-b[1])*k], I=[Math.max(gt[0],pb[0]),Math.max(gt[1],pb[1]),Math.min(gt[2],pb[2]),Math.min(gt[3],pb[3])];
+  x.fillStyle=P.c5+'33'; x.fillRect(...R(gt)); x.fillStyle=P.c3+'2a'; x.fillRect(...R(pb));
+  if(I[2]>I[0]&&I[3]>I[1]){ x.fillStyle=P.c1+'66'; x.fillRect(...R(I)); }
+  x.lineWidth=3; x.strokeStyle=P.c5; x.strokeRect(...R(gt)); x.strokeStyle=P.c3; x.setLineDash([6,4]); x.strokeRect(...R(pb)); x.setLineDash([]);
+  x.fillStyle=P.c3; x.fillRect(ox+pb[2]*k-6,pb[3]*k-6,12,12);
+  x.font='600 12px Inter'; x.fillStyle=P.c5; x.fillText('truth',ox+gt[0]*k+4,gt[1]*k-6); x.fillStyle=P.c3; x.fillText('prediction',ox+pb[0]*k+4,pb[3]*k+16);
+  const a=(gt[2]-gt[0])*(gt[3]-gt[1]), b=(pb[2]-pb[0])*(pb[3]-pb[1]), inter=Math.max(0,I[2]-I[0])*Math.max(0,I[3]-I[1]), q=inter/(a+b-inter);
+  stats('#iStats',[['c1',q.toFixed(3),'IoU'],['c5',Math.round(inter),'intersection (px²)'],['c3',Math.round(a+b-inter),'union (px²)'],['c4',q>=.5?'hit':'miss','at the 0.5 threshold']]);
+  const r=v=>Math.round(v), wv=pb[2]-pb[0], hv=pb[3]-pb[1];
+  $('#iFmt').innerHTML=`corners  (x0, y0, x1, y1) = (${pb.map(r).join(', ')})<br>COCO     (x, y, w, h)    = (${r(pb[0])}, ${r(pb[1])}, ${r(wv)}, ${r(hv)})<br>YOLO     (cx, cy, w, h)  = (${[(pb[0]+wv/2)/N,(pb[1]+hv/2)/N,wv/N,hv/N].map(v=>v.toFixed(3)).join(', ')})`.replace(/  +/g,m=>'&nbsp;'.repeat(m.length)); }
+const iHost=$('#iPlot'); const iPos=e=>{ const r=iHost.getBoundingClientRect(), s=Math.min(r.width,r.height), ox=(r.width-s)/2; return [(e.clientX-r.left-ox)/s*N,(e.clientY-r.top)/s*N]; };
+iHost.addEventListener('pointerdown',e=>{ const [X,Y]=iPos(e); if(Math.hypot(X-pb[2],Y-pb[3])<8) drag={m:'size'}; else if(X>pb[0]&&X<pb[2]&&Y>pb[1]&&Y<pb[3]) drag={m:'move',dx:X-pb[0],dy:Y-pb[1]}; if(drag) iHost.setPointerCapture(e.pointerId); });
+iHost.addEventListener('pointermove',e=>{ const [X,Y]=iPos(e); iHost.style.cursor=Math.hypot(X-pb[2],Y-pb[3])<8?'nwse-resize':(X>pb[0]&&X<pb[2]&&Y>pb[1]&&Y<pb[3])?'move':'default'; if(!drag) return;
+  if(drag.m==='move'){ const w=pb[2]-pb[0], h=pb[3]-pb[1]; pb[0]=Math.max(0,Math.min(N-w,X-drag.dx)); pb[1]=Math.max(0,Math.min(N-h,Y-drag.dy)); pb[2]=pb[0]+w; pb[3]=pb[1]+h; }
+  else { pb[2]=Math.max(pb[0]+6,Math.min(N,X)); pb[3]=Math.max(pb[1]+6,Math.min(N,Y)); } drawIoU(); });
+iHost.addEventListener('pointerup',()=>{ drag=null; });
+$('#iGood').onclick=()=>{ pb=[53,47,113,119]; drawIoU(); }; $('#iShift').onclick=()=>{ pb=[80,45,140,115]; drawIoU(); }; $('#iBig').onclick=()=>{ pb=[30,25,140,140]; drawIoU(); };
+
+/* ---------- 3. grids and anchors ---------- */
+const gd={S:5,B:3,view:'grid',seed:21}; let gScene=CV.scene(gd.seed,N);
+const ANCH=[[.5,.5],[.35,.7],[.7,.35],[.25,.25],[.85,.85]];
+function drawGrid(){ const sc=gScene, P=P0(), cols=clsCol(), M=sceneDraw('#gPlot',sc,{dim:.8}), {x,k}=M, S=gd.S, cs=N/S, resp=new Set();
+  sc.objs.forEach(o=>{ const cx=(o.box[0]+o.box[2])/2, cy=(o.box[1]+o.box[3])/2; resp.add(Math.min(S-1,Math.floor(cy/cs))*S+Math.min(S-1,Math.floor(cx/cs))); });
+  if(gd.view==='grid'){ resp.forEach(q=>{ const r=Math.floor(q/S), c=q%S; x.fillStyle=P.c2+'40'; x.fillRect(M.X(c*cs),M.Y(r*cs),cs*k,cs*k); x.strokeStyle=P.c2; x.lineWidth=2.5; x.strokeRect(M.X(c*cs)+1,M.Y(r*cs)+1,cs*k-2,cs*k-2); });
+    x.strokeStyle='rgba(255,255,255,.85)'; x.lineWidth=1; x.beginPath(); for(let i=1;i<S;i++){ x.moveTo(M.X(i*cs),M.Y(0)); x.lineTo(M.X(i*cs),M.Y(N)); x.moveTo(M.X(0),M.Y(i*cs)); x.lineTo(M.X(N),M.Y(i*cs)); } x.stroke();
+    sc.objs.forEach(o=>{ const cx=(o.box[0]+o.box[2])/2, cy=(o.box[1]+o.box[3])/2; M.box(o.box,cols[o.cls],2,[5,3]); x.fillStyle=P.c2; x.beginPath(); x.arc(M.X(cx),M.Y(cy),4.5,0,7); x.fill(); }); }
+  else { const A=ANCH.slice(0,gd.B); sc.objs.forEach(o=>{ const w=o.box[2]-o.box[0], h=o.box[3]-o.box[1], cx=(o.box[0]+o.box[2])/2, cy=(o.box[1]+o.box[3])/2;
+      const sh=A.map(([aw,ah])=>{ const W=aw*N*.45, H=ah*N*.45; return {W,H,q:CV.iou([0,0,w,h],[0,0,W,H])}; }); const best=sh.reduce((a,b)=>b.q>a.q?b:a);
+      sh.forEach(a=>M.box([cx-a.W/2,cy-a.H/2,cx+a.W/2,cy+a.H/2],a===best?P.c2:P.muted,a===best?2.5:1.2,a===best?null:[3,3],a===best?'IoU '+a.q.toFixed(2):null,a===best?1:.7));
+      M.box(o.box,cols[o.cls],2); }); }
+  const outN=S*S*gd.B*(5+3);
+  stats('#gStats',[['c1',S+' × '+S,'grid cells'],['c2',resp.size,'cells responsible for an object'],['c3',S*S*gd.B,'candidate boxes'],['c4',outN.toLocaleString('en'),'outputs: S·S·B·(5 + C), C = 3']]);
+  const clash=sc.objs.length-resp.size;
+  $('#gNote').innerHTML=gd.view==='grid'?(clash>0?`<b>${clash} object(s) share a cell</b> with another object. With one box per cell the original YOLO could only report one of them: a known weakness for crowds and small objects, fixed by several anchors per cell and finer grids.`:`Each object's centre (dot) falls in one cell (outlined), which must predict it. All other ${S*S-resp.size} cells should report "no object". The balance of a few positives against many negatives is the central difficulty of one-stage detectors.`):
+    `Each object is shown with the anchor shapes centred on it; the best-fitting one (highest IoU, labelled) is the one trained to predict it, so different anchors specialise in tall, wide or small objects. Real anchor sets come from k-means on the training boxes.`; }
+ML.bindRange('gS',v=>{ gd.S=v; drawGrid(); }); ML.bindRange('gB',v=>{ gd.B=v; drawGrid(); }); ML.bindSeg('gView',v=>{ gd.view=v; drawGrid(); });
+$('#gNew').onclick=()=>{ gd.seed++; gScene=CV.scene(gd.seed,N,{count:5}); drawGrid(); };
+
+/* ---------- 4. NMS ---------- */
+const nm={seed:31,iou:.5,score:.2,step:-1,timer:null}; let nScene, nDets, nRun;
+function nInit(){ nScene=CV.scene(nm.seed,N,{count:4}); nDets=CV.fakeDetect(nScene,0.55,nm.seed); nm.step=-1; nRun=CV.nms(nDets,nm.iou,nm.score); }
+function drawNMS(){ const P=P0(), cols=clsCol(), M=sceneDraw('#nPlot',nScene,{dim:.7}), st=nRun.steps, done=nm.step<0?0:Math.min(st.length,nm.step+1);
+  const kept=new Set(st.slice(0,done).map(s=>s.pick)), gone=new Set([].concat(...st.slice(0,done).map(s=>s.removed))), cur=done&&done<=st.length?st[done-1]:null;
+  nDets.forEach((d,i)=>{ const low=d.score<nm.score; if(low||gone.has(i)) return; if(kept.has(i)) return; M.box(d.box,cols[d.cls],1.3,[4,3],null,.75); });
+  nDets.forEach((d,i)=>{ if(gone.has(i)&&cur&&cur.removed.includes(i)) M.box(d.box,P.c2,1.5,[2,3],null,.9); });
+  nDets.forEach((d,i)=>{ if(kept.has(i)) M.box(d.box,cols[d.cls],cur&&cur.pick===i?3.5:2.5,null,CLS[d.cls]+' '+d.score.toFixed(2)); });
+  const cand=nDets.filter(d=>d.score>=nm.score).length; $('#nPos').textContent=nm.step<0?'start':`step ${done} / ${st.length}`;
+  stats('#nStats',[['c3',nDets.length,'raw detections'],['c4',cand,'above the score threshold'],['c1',kept.size+(done>=st.length?'':' so far'),'kept'],['c2',gone.size,'suppressed']]);
+  $('#nList').innerHTML='<table class="tbl"><tr><th>#</th><th>class</th><th>score</th><th>status</th></tr>'+nDets.map((d,i)=>{ const s=d.score<nm.score?'below threshold':kept.has(i)?'<b>kept</b>':gone.has(i)?'suppressed':'waiting'; return `<tr${cur&&cur.pick===i?' style="background:color-mix(in srgb,var(--c1) 14%,transparent)"':''}><td>${i+1}</td><td>${CLS[d.cls]}</td><td class="mono">${d.score.toFixed(2)}</td><td>${s}</td></tr>`; }).join('')+'</table>'; }
+const nStop=()=>{ clearInterval(nm.timer); nm.timer=null; $('#nPlay').textContent='Play'; };
+$('#nStep').onclick=()=>{ nStop(); nm.step=nm.step>=nRun.steps.length-1?-1:nm.step+1; drawNMS(); };
+$('#nPlay').onclick=()=>{ if(nm.timer){ nStop(); return; } if(nm.step>=nRun.steps.length-1) nm.step=-1; $('#nPlay').textContent='Pause'; nm.timer=setInterval(()=>{ if(nm.step>=nRun.steps.length-1){ nStop(); return; } nm.step++; drawNMS(); },900); };
+$('#nNew').onclick=()=>{ nStop(); nm.seed++; nInit(); drawNMS(); };
+ML.bindRange('nIoU',v=>{ nm.iou=v/10; nRun=CV.nms(nDets,nm.iou,nm.score); nm.step=nRun.steps.length-1; drawNMS(); },v=>(v/10).toFixed(1));
+ML.bindRange('nScore',v=>{ nm.score=v/10; nRun=CV.nms(nDets,nm.iou,nm.score); nm.step=nRun.steps.length-1; drawNMS(); },v=>(v/10).toFixed(1));
+
+/* ---------- 5. precision-recall and mAP ---------- */
+const mp={q:.6,t:.5,nms:true}; const mPlot=new ML.Plot('#mPlot',{equal:false}); const SC40=Array.from({length:40},(_,s)=>CV.scene(500+s,N));
+function mData(q,useNms){ const D=[], G=[]; SC40.forEach((sc,s)=>{ sc.objs.forEach(o=>G.push({box:o.box,cls:o.cls,img:s})); let ds=CV.fakeDetect(sc,q,1); if(useNms){ const k=CV.nms(ds,.5).keep; ds=k.map(i=>ds[i]); } ds.forEach(d=>D.push(Object.assign({},d,{img:s}))); }); return {D,G}; }
+function drawMap(){ const P=P0(), cols=clsCol(), {D,G}=mData(mp.q,mp.nms), res=[0,1,2].map(c=>CV.ap(D,G,c,mp.t)), mAP=res.reduce((s,r)=>s+r.ap,0)/3;
+  const ths=[.5,.55,.6,.65,.7,.75,.8,.85,.9,.95], coco=ths.reduce((s,t)=>s+[0,1,2].reduce((a,c)=>a+CV.ap(D,G,c,t).ap,0)/3,0)/ths.length;
+  const ser=[]; res.forEach((r,c)=>{ const pts=[[0,1]].concat(r.pr.map(q=>[q.r,q.p])); ser.push({pts,color:cols[c],width:1.2,dash:[3,3]});
+    const env=[]; let prevR=0; r.pr.forEach((q,i)=>{ const pm=Math.max(...r.pr.slice(i).map(z=>z.p)); env.push([prevR,pm],[q.r,pm]); prevR=q.r; }); ser.push({pts:env,color:cols[c],width:2.4}); });
+  ML.chart(mPlot,ser,{x0:0,x1:1,y0:0,y1:1.02,xl:'recall',yfmt:v=>v.toFixed(1)});
+  stats('#mStats',res.map((r,c)=>[['c1','c3','c4'][c],r.ap.toFixed(3),'AP '+CLS[c]]).concat([['c2',mAP.toFixed(3),`mAP@${mp.t.toFixed(2)}`],['c5',coco.toFixed(3),'COCO mAP@[.5:.95]']]));
+  const r2=[0,1,2].map(c=>CV.ap(D,G,c,mp.t)), tp=r2.reduce((s,r)=>s+r.pr.filter(q=>q.hit).length,0), fp=D.length-tp; $('#mNote').innerHTML=`${D.length} detections for ${G.length} true objects: ${tp} true positives, ${fp} false positives at IoU ≥ ${mp.t.toFixed(2)}.`+(mp.nms?'':' Many of the false positives are duplicates of objects already found.'); }
+ML.bindRange('mQ',v=>{ mp.q=v/10; drawMap(); },v=>['very poor','poor','poor','weak','weak','fair','fair','good','good','very good','excellent'][v]);
+ML.bindRange('mT',v=>{ mp.t=.5+v*.05; drawMap(); },v=>(.5+v*.05).toFixed(2)); ML.bindSeg('mNms',v=>{ mp.nms=v==='1'; drawMap(); }); mPlot.onResize=drawMap;
+
+/* ---------- 6. U-Net diagram + promptable segmentation ---------- */
+function drawUNet(){ const P=P0(), {x,w,h}=CV.host('#uPlot'); x.clearRect(0,0,w,h); const L=[[256,64],[128,128],[64,256],[32,512],[16,1024]], lev=L.length;
+  const colW=w/(2*lev+.5), top=28, maxH=h*.52, y0=i=>top+i*(h*.68)/(lev-1)*.92;
+  const bx=(cx,i,ch,col,lab)=>{ const hh=Math.max(10,maxH*L[i][0]/256*.9), ww=Math.max(6,colW*.18*Math.log2(ch/32)); x.fillStyle=col+'55'; x.strokeStyle=col; x.lineWidth=1.5; x.fillRect(cx-ww/2,y0(i),ww,hh); x.strokeRect(cx-ww/2,y0(i),ww,hh);
+    x.fillStyle=P.muted; x.font='10px "JetBrains Mono"'; x.textAlign='center'; if(lab) x.fillText(lab,cx,y0(i)+hh+11); return {cx,y:y0(i),hh,ww}; };
+  const enc=[], dec=[];
+  for(let i=0;i<lev;i++) enc.push(bx(colW*(i+.75),i,L[i][1],i===lev-1?P.c3:P.c1,`${L[i][0]}²×${L[i][1]}`));
+  for(let i=lev-2;i>=0;i--) dec.push(bx(w-colW*(i+.75),i,L[i][1]*2,P.c4,i===0?'':`${L[i][0]}²×${L[i][1]}`));
+  x.lineWidth=1.6;
+  for(let i=0;i<lev-1;i++){ const a=enc[i], b=enc[i+1]; x.strokeStyle=P.c2; x.beginPath(); x.moveTo(a.cx,a.y+a.hh); x.lineTo(b.cx,b.y); x.stroke(); }
+  dec.reverse(); for(let i=0;i<lev-1;i++){ const a=i===lev-2?enc[lev-1]:dec[i+1], b=dec[i]; x.strokeStyle=P.c5; x.beginPath(); x.moveTo(a.cx,a.y); x.lineTo(b.cx,b.y+b.hh); x.stroke();
+    x.setLineDash([5,4]); x.strokeStyle=P.muted; x.beginPath(); x.moveTo(enc[i].cx+enc[i].ww/2,enc[i].y+enc[i].hh/2); x.lineTo(b.cx-b.ww/2,b.y+b.hh/2); x.stroke(); x.setLineDash([]); }
+  const o=dec[0]; x.fillStyle=P.ink; x.font='600 11px Inter'; x.textAlign='center'; x.fillText('input 256²×3',enc[0].cx,h-6); x.fillText('1×1 conv → 256²×C',o.cx,h-6);
+  x.fillStyle=P.c2; x.textAlign='left'; x.fillText('encoder ↓',4,13); x.fillStyle=P.c5; x.textAlign='right'; x.fillText('↑ decoder',w-4,13); }
+const sg={seed:41,tol:.16,click:null}; let sgScene=CV.scene(sg.seed,N);
+function drawSeg(){ const P=P0(), M=sceneDraw('#sImg',sgScene); let pred=null, inst=0;
+  if(sg.click){ pred=CV.grow(sgScene.im,sg.click[0],sg.click[1],sg.tol); inst=sgScene.inst[sg.click[1]*N+sg.click[0]]; const {x}=M; x.fillStyle='#fff'; x.strokeStyle='#111'; x.lineWidth=2; x.beginPath(); x.arc(M.X(sg.click[0]+.5),M.Y(sg.click[1]+.5),6,0,7); x.fill(); x.stroke(); }
+  const M2=sceneDraw('#sMask',sgScene,{dim:.25}), G=hexRgb(P.c5), R=hexRgb(P.c4), O=hexRgb(P.c3);
+  if(pred){ let tp=0,fp=0,fn=0; for(let i=0;i<N*N;i++){ const t=inst&&sgScene.inst[i]===inst, p=!!pred[i]; if(t&&p)tp++; else if(p)fp++; else if(t)fn++; }
+    M2.mask(i=>{ const t=inst&&sgScene.inst[i]===inst, p=!!pred[i]; return t&&p?G:p?R:t?O:null; },.9);
+    const iou=tp/Math.max(1,tp+fp+fn), dice=2*tp/Math.max(1,2*tp+fp+fn);
+    stats('#sStats',[['c1',inst?iou.toFixed(3):'–','mask IoU with the true object'],['c5',inst?dice.toFixed(3):'–','Dice'],['c4',fp,'pixels leaked (false positives)'],['c3',fn,'pixels missed']]); }
+  else stats('#sStats',[['c1','–','click an object on the left'],['c5','–','Dice'],['c4','–','leaked'],['c3','–','missed']]); }
+$('#sImg').addEventListener('click',e=>{ const h=CV.hit('#sImg',sgScene.im,e); if(!h) return; sg.click=h; drawSeg(); });
+ML.bindRange('sTol',v=>{ sg.tol=v*.04; drawSeg(); },v=>(v*.04).toFixed(2));
+$('#sNew').onclick=()=>{ sg.seed++; sgScene=CV.scene(sg.seed,N); sg.click=null; drawSeg(); };
+
+/* ---------- 7. transfer learning, measured ---------- */
+const NS=[8,16,32,64,128], xp={res:null,busy:false}; const xPlot=new ML.Plot('#xPlot',{equal:false});
+const STRAT=[['scratch','From scratch'],['frozen','Feature extraction (frozen filters)'],['tune','Fine-tune all layers']];
+function drawX(){ const P=P0(), C=[P.c4,P.c1,P.c3];
+  if(!xp.res){ ML.chart(xPlot,[{pts:[[8,.25],[128,.25]],color:P.muted,dash:[4,4],width:1}],{logx:true,x0:6,x1:160,y0:0,y1:1,xl:'training pictures of the new task',yfmt:v=>Math.round(v*100)+'%'}); return; }
+  ML.chart(xPlot,STRAT.map((s,i)=>({pts:NS.map((n,j)=>[n,xp.res[i][j]]),color:C[i],dots:true,width:2.4})).concat([{pts:[[6,.25],[160,.25]],color:P.muted,dash:[4,4],width:1}]),{logx:true,x0:6,x1:160,y0:0,y1:1,xl:'training pictures of the new task',yfmt:v=>Math.round(v*100)+'%'});
+  $('#xTbl').innerHTML='<table class="tbl"><tr><th>strategy</th>'+NS.map(n=>`<th>${n}</th>`).join('')+'</tr>'+STRAT.map((s,i)=>`<tr><td><span style="color:${C[i]};font-weight:700">●</span> ${s[1]}</td>`+xp.res[i].map(v=>`<td class="mono">${Math.round(100*v)}%</td>`).join('')+'</tr>').join('')+'</table>';
+  const g=xp.res[1][1]-xp.res[0][1]; $('#xNote').innerHTML=`With 16 pictures, starting from the pre-trained filters is <b>${g>=0?Math.round(100*g)+' points better':Math.round(-100*g)+' points worse'}</b> than starting from random filters. The gap shrinks as the new task gets more data, the usual pattern: pre-training matters most when labels are scarce.`; }
+async function runX(){ if(xp.busy) return; xp.busy=true; $('#xRun').disabled=true; const pre=CV.TinyCNN({seed:3,F:6}), A=CV.strokeSet('bars',400,12,11,.2);
+  for(let ep=0;ep<15;ep++){ for(let b=0;b<400;b+=20) pre.step(A.X.slice(b,b+20),A.Y.slice(b,b+20),.05); }
+  const T=CV.strokeSet('marks',400,12,99,.2), res=STRAT.map(()=>NS.map(()=>0)); let done=0, tot=STRAT.length*NS.length*2;
+  for(const seed of [1,2]) for(let j=0;j<NS.length;j++){ const n=NS[j], B=CV.strokeSet('marks',n,12,200+seed*17+n,.2), ep=Math.round(Math.min(120,2400/n));
+    for(let i=0;i<STRAT.length;i++){ const m=CV.TinyCNN({seed:50+seed,F:6}); if(i>0) m.copyFilters(pre); if(i===1) m.freeze=true;
+      for(let e=0;e<ep;e++) for(let b=0;b<n;b+=8) m.step(B.X.slice(b,b+8),B.Y.slice(b,b+8),i===2?.02:.05);
+      res[i][j]+=m.acc(T.X,T.Y)/2; done++; $('#xProg').textContent=`training ${done} / ${tot}`; await new Promise(r=>setTimeout(r,0)); } }
+  xp.res=res; xp.busy=false; $('#xRun').disabled=false; $('#xProg').textContent='done: 30 networks trained'; drawX(); }
+$('#xRun').onclick=runX; xPlot.onResize=drawX;
+const xa={size:0,sim:1}; const ADV=[[ 'Very different images, little data: fine-tune with a small learning rate; the early edge and texture filters still help, the later ones less so. Consider a backbone pre-trained on data closer to yours (for example a medical or satellite model) and heavy augmentation.','Similar images, little data: freeze the backbone and train only a new classifier (feature extraction). Fine-tuning everything would overfit a few hundred pictures.'],
+  ['Very different images, a moderate amount of data: fine-tune the whole network, top layers first, with a small learning rate.','Similar images, a moderate amount of data: fine-tune the top blocks (or all layers with a small learning rate); keep the first layers frozen at first.'],
+  ['Very different images, lots of data: fine-tune everything, or even train from scratch; pre-trained weights still usually speed up training.','Similar images, lots of data: fine-tune the whole network; it will beat both the frozen backbone and training from scratch for the same compute.']];
+const drawAdv=()=>{ $('#xAdvice').textContent=ADV[xa.size][xa.sim]; };
+ML.bindRange('xSize',v=>{ xa.size=v; drawAdv(); },v=>['hundreds of images','thousands','hundreds of thousands'][v]); ML.bindSeg('xSim',v=>{ xa.sim=+v; drawAdv(); });
+
+function all(){ drawTasks(); drawIoU(); drawGrid(); drawNMS(); drawMap(); drawUNet(); drawSeg(); drawX(); drawAdv(); }
+nInit(); nm.step=nRun.steps.length-1; all();
+let rw=innerWidth; window.addEventListener('resize',()=>{ if(Math.abs(innerWidth-rw)>4){ rw=innerWidth; all(); } }); ML.onTheme(all);
+})();
+</script>
+<script>NLP.nav('nlp','vision-tasks'); ML.renderMath(document.body);</script>
+</body>
+</html>

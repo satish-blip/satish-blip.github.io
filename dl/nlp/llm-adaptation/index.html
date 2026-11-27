@@ -1,0 +1,1657 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Adaptation Map</title>
+<meta name="description" content="An interactive map of how large language models are adapted: pre-training, fine-tuning, PEFT (LoRA, adapters), RAG and inference-time methods, with Q&amp;A, Python and Hugging Face code for each.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://satish-blip.github.io/dl/nlp/llm-adaptation/">
+
+<style>
+:root{
+  --bg:#f5f6fb; --card:#ffffff; --ink:#1d2133; --muted:#5d6378; --line:#e2e5ef; --code:#f3f4f9;
+  --frozen:#cfd4e2; --frozen-ink:#7b8197;
+  --F:#3d4bd6; --F-soft:#eceefe;
+  --A:#ef5a2a; --A-soft:#fff0e9;
+  --B:#7c3aed; --B-soft:#f3ecff;
+  --C:#0c9b8b; --C-soft:#e3f7f3;
+  --D:#2b6ff0; --D-soft:#e8f0ff;
+  --good:#16a34a; --bad:#dc2626;
+  --shadow:0 1px 2px rgba(20,24,40,.06),0 6px 18px rgba(20,24,40,.07);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1118; --card:#181b26; --ink:#e7e9f3; --muted:#a2a8bb; --line:#2a2e3d; --code:#202434;
+    --frozen:#3a3f52; --frozen-ink:#9097ad;
+    --F-soft:#1d2142; --A-soft:#33201a; --B-soft:#251c3d; --C-soft:#122c29; --D-soft:#16233f;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1118; --card:#181b26; --ink:#e7e9f3; --muted:#a2a8bb; --line:#2a2e3d; --code:#202434;
+  --frozen:#3a3f52; --frozen-ink:#9097ad;
+  --F-soft:#1d2142; --A-soft:#33201a; --B-soft:#251c3d; --C-soft:#122c29; --D-soft:#16233f;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{overflow-x:hidden}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button{font:inherit;color:inherit}
+code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.wrap{max-width:1320px;margin:0 auto;padding:0 16px}
+
+/* ---------- header ---------- */
+header.hero{background:linear-gradient(115deg,#3d4bd6 0%,#7c3aed 32%,#0c9b8b 66%,#ef5a2a 100%);color:#fff;padding:34px 0 26px}
+.hero h1{margin:0 0 6px;font-size:clamp(1.6rem,3.6vw,2.5rem);letter-spacing:-.01em}
+.hero p{margin:0;max-width:820px;opacity:.95}
+.hero .journey{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.hero .journey span{background:rgba(255,255,255,.17);border:1px solid rgba(255,255,255,.3);padding:5px 11px;border-radius:999px;font-size:13px;font-weight:600}
+nav.toc{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav.toc .wrap{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-top:8px;padding-bottom:8px}
+nav.toc a{color:var(--ink);text-decoration:none;font-weight:600;font-size:13px;padding:5px 10px;border-radius:8px}
+nav.toc a:hover{background:var(--card)}
+nav.toc .sp{flex:1}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:5px 10px;font-weight:600;font-size:13px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+section.block{margin:34px 0}
+section.block>h2{font-size:1.45rem;margin:0 0 4px;display:flex;gap:10px;align-items:center}
+section.block>.lead{color:var(--muted);margin:0 0 16px;max-width:900px}
+
+/* ---------- legend ---------- */
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:18px 0 6px}
+.lg{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:flex-start;box-shadow:var(--shadow)}
+.lg .sw{width:12px;align-self:stretch;border-radius:6px;flex:none}
+.lg b{display:block;font-size:14px}
+.lg small{color:var(--muted);font-size:12.5px}
+.types{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
+.tbadge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:999px;border:1.5px solid currentColor;white-space:nowrap}
+.tbadge.scratch{color:var(--A)} .tbadge.ft{color:var(--B)} .tbadge.retrieval{color:var(--C)} .tbadge.inference{color:var(--D)}
+.hint{font-size:13px;color:var(--muted);margin-top:8px}
+
+/* ---------- flowchart ---------- */
+.flow-outer{overflow-x:auto;border-radius:16px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);-webkit-overflow-scrolling:touch}
+.flow{position:relative;display:grid;grid-template-columns:200px 186px 1fr;column-gap:44px;row-gap:18px;padding:22px;min-width:1290px}
+.flow svg.wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+.wires path{fill:none;stroke-width:2.6;stroke-linecap:round;opacity:.75}
+.wires path.flowing{stroke-dasharray:7 7;animation:dash 1.1s linear infinite}
+body.noanim .wires path.flowing{animation:none}
+body.noanim .wires circle{display:none}
+@keyframes dash{to{stroke-dashoffset:-28}}
+.fm{grid-column:1;grid-row:1 / span 4;align-self:center;position:relative;z-index:1;background:linear-gradient(160deg,var(--F) 0%,#6b46e8 100%);color:#fff;border-radius:18px;padding:18px 16px;cursor:pointer;box-shadow:0 10px 28px rgba(61,75,214,.35);transition:transform .15s}
+.fm:hover{transform:translateY(-3px)}
+.fm .ic{font-size:34px;line-height:1}
+.fm h3{margin:8px 0 6px;font-size:18px}
+.fm p{margin:0 0 10px;font-size:13px;opacity:.95}
+.fm .models{display:flex;flex-wrap:wrap;gap:5px}
+.fm .models span{background:rgba(255,255,255,.2);padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}
+.fm .ntp{margin-top:10px;background:rgba(0,0,0,.18);border-radius:10px;padding:8px;font-size:12px}
+.fm .ntp .mono{font-size:12px}
+.fm .ntp .nx{display:inline-block;background:#fff;color:var(--F);border-radius:5px;padding:0 5px;font-weight:700;animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{50%{opacity:.25}}
+
+.cat{grid-column:2;align-self:center;position:relative;z-index:1;border-radius:16px;padding:14px;color:#fff;cursor:pointer;user-select:none;box-shadow:var(--shadow);transition:transform .15s}
+.cat:hover{transform:translateX(3px)}
+.cat .letter{font-size:11px;font-weight:800;letter-spacing:.12em;opacity:.85}
+.cat h3{margin:2px 0 4px;font-size:16.5px;display:flex;gap:6px;align-items:center}
+.cat small{display:block;font-size:12px;opacity:.92;line-height:1.35}
+.cat .tog{position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.25);display:grid;place-items:center;font-size:12px;transition:transform .2s}
+.cat.collapsed .tog{transform:rotate(-90deg)}
+
+.band{grid-column:3;position:relative;z-index:1;border-radius:16px;border:2px dashed var(--bc);background:var(--bs);padding:12px 14px 14px}
+.band .banner{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--bc);margin-bottom:10px}
+.band .banner.big{font-size:13.5px;background:var(--bc);color:#fff;padding:4px 10px;border-radius:8px}
+.band .rows{display:flex;flex-direction:column;gap:14px}
+.band.collapsed .rows{display:none}
+.band .stub{display:none;font-size:13px;color:var(--muted);font-weight:600}
+.band.collapsed .stub{display:block}
+.mrow{display:flex;align-items:stretch}
+.card{width:200px;flex:none;background:var(--card);border:1px solid var(--line);border-top:5px solid var(--bc);border-radius:13px;padding:11px 12px;cursor:pointer;box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s;position:relative}
+.card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(20,24,40,.15)}
+.card .top{display:flex;gap:8px;align-items:center}
+.card .ic{font-size:22px;line-height:1}
+.card h4{margin:0;font-size:15px;line-height:1.2}
+.card .tl{font-size:12.5px;color:var(--muted);margin:6px 0 7px;line-height:1.35}
+.card .mini{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;background:var(--code);border-radius:7px;padding:5px 7px;line-height:1.45;color:var(--ink)}
+.card .stat{display:inline-block;margin-top:7px;font-size:11.5px;font-weight:800;color:var(--bc);background:var(--bs);padding:2px 7px;border-radius:6px}
+.card .stats{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+.card .stats span{font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;color:#fff;background:var(--bc)}
+.card .libs{display:flex;flex-wrap:wrap;gap:3px;margin-top:7px}
+.card .libs span{font-size:10.5px;padding:1px 6px;border-radius:5px;background:var(--code);color:var(--muted);font-weight:600}
+.card .tb{margin-top:7px;display:flex;gap:4px;flex-wrap:wrap}
+.card .tb .tbadge{font-size:10px;padding:1px 6px}
+.link{flex:1;min-width:62px;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 4px;gap:4px}
+.link .ln{width:100%;height:3px;border-radius:2px;background:repeating-linear-gradient(90deg,var(--bc) 0 7px,transparent 7px 13px);background-size:26px 3px;animation:slide 1s linear infinite;position:relative}
+.link .ln::after{content:"";position:absolute;right:-2px;top:-4px;border-left:8px solid var(--bc);border-top:5.5px solid transparent;border-bottom:5.5px solid transparent}
+body.noanim .link .ln{animation:none}
+@keyframes slide{to{background-position:26px 0}}
+.link .lt{font-size:10.5px;font-weight:700;color:var(--bc);text-align:center;line-height:1.2}
+
+/* ---------- tooltip ---------- */
+#tip{position:fixed;z-index:100;max-width:320px;background:#161a2b;color:#f2f3f8;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.45;box-shadow:0 12px 30px rgba(0,0,0,.3);pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s}
+#tip.show{opacity:1;transform:none}
+#tip b{color:#fff}
+#tip .k{display:block;margin-top:6px;font-size:11.5px;color:#aab0c8}
+
+/* ---------- drawer ---------- */
+#scrim{position:fixed;inset:0;background:rgba(10,12,20,.45);z-index:60;opacity:0;pointer-events:none;transition:opacity .2s}
+#scrim.show{opacity:1;pointer-events:auto}
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(640px,100vw);background:var(--bg);z-index:70;transform:translateX(105%);transition:transform .28s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;box-shadow:-10px 0 40px rgba(0,0,0,.25)}
+#drawer.show{transform:none}
+#drawer .dh{padding:18px 18px 14px;color:#fff;position:relative}
+#drawer .dh .x{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;border:0;background:rgba(255,255,255,.22);color:#fff;cursor:pointer;font-size:16px}
+#drawer .dh .crumb{font-size:12px;font-weight:700;opacity:.85;letter-spacing:.04em}
+#drawer .dh h2{margin:4px 0 4px;font-size:24px;display:flex;align-items:center;gap:10px}
+#drawer .dh p{margin:0;opacity:.95;font-size:14px;max-width:540px}
+#drawer .dh .tb{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+#drawer .dh .tbadge{color:#fff;background:rgba(255,255,255,.14)}
+#drawer .db{overflow-y:auto;padding:16px 18px 30px;flex:1}
+#drawer .nav{display:flex;justify-content:space-between;gap:8px;padding:10px 18px;border-top:1px solid var(--line);background:var(--card)}
+.vis{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:var(--shadow)}
+.vis h5{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+details.q{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--qc);border-radius:12px;margin:10px 0;box-shadow:var(--shadow)}
+details.q summary{cursor:pointer;list-style:none;padding:10px 14px;font-weight:700;display:flex;align-items:center;gap:9px}
+details.q summary::-webkit-details-marker{display:none}
+details.q summary .n{width:22px;height:22px;border-radius:50%;background:var(--qc);color:#fff;display:grid;place-items:center;font-size:12px;flex:none}
+details.q summary::after{content:"▾";margin-left:auto;color:var(--muted);transition:transform .2s}
+details.q:not([open]) summary::after{transform:rotate(-90deg)}
+details.q .qb{padding:0 14px 12px 45px;font-size:14px}
+details.q ul{margin:0;padding-left:18px}
+details.q li{margin:3px 0}
+.pros li::marker{content:"✓  ";color:var(--good);font-weight:800}
+.cons li::marker{content:"✗  ";color:var(--bad);font-weight:800}
+.wm{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:13px;padding:4px 10px;border-radius:8px;margin-bottom:6px}
+.libchips{display:flex;flex-wrap:wrap;gap:6px}
+.lib{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;padding:4px 9px;border-radius:8px;background:var(--code);border:1px solid var(--line);cursor:help}
+.lib::before{content:"⬢";font-size:10px;color:var(--lc,var(--muted))}
+.oneliner{background:linear-gradient(120deg,var(--F-soft),var(--B-soft));border-radius:12px;padding:12px 14px;margin-top:14px;font-size:14px}
+.oneliner b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px}
+.related{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.related button{border:1.5px solid var(--rc);color:var(--rc);background:transparent;border-radius:999px;padding:3px 10px;font-weight:700;font-size:12.5px;cursor:pointer}
+.related button:hover{background:var(--rc);color:#fff}
+
+/* code */
+details.q .qb:has(.codebox){padding-left:14px}
+.codebox{position:relative;background:#141827;border-radius:11px;border:1px solid #2a2f45}
+.codebox pre{margin:0;padding:38px 14px 14px;overflow:auto;max-height:520px;font:12.5px/1.55 ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:#e4e7f5;tab-size:4}
+.codebox .copy{position:absolute;top:7px;right:8px;border:1px solid #3a4060;background:#232842;color:#dfe3f7;border-radius:7px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer}
+.codebox .copy:hover{background:#30375a}
+.codebox::before{content:"python";position:absolute;top:9px;left:14px;font:700 11px ui-monospace,Menlo,monospace;color:#8189ab;letter-spacing:.06em;text-transform:uppercase}
+.codebox .cm{color:#7f9f7f;font-style:italic}.codebox .kw{color:#c792ea}.codebox .st2{color:#f6c177}
+/* pipelines */
+.pipe{display:flex;flex-wrap:wrap;align-items:stretch;gap:6px 0}
+.pipe .st{flex:1 1 90px;min-width:84px;max-width:150px;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:7px 6px;text-align:center;animation:glow var(--dur) infinite;animation-delay:calc(var(--i) * .55s)}
+body.noanim .pipe .st{animation:none}
+.pipe .st .i{font-size:20px;line-height:1.1}
+.pipe .st b{display:block;font-size:12px;line-height:1.2;margin-top:2px}
+.pipe .st small{display:block;font-size:10.5px;color:var(--muted);line-height:1.25;margin-top:2px}
+.pipe .st .pl{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;margin-top:4px}
+.pipe .st .pl span{font-size:9.5px;font-weight:700;background:var(--card);border:1px solid var(--line);border-radius:4px;padding:0 4px;cursor:help}
+.pipe .ar{display:flex;align-items:center;padding:0 3px;color:var(--pc);font-weight:900}
+@keyframes glow{0%,100%{border-color:var(--line);box-shadow:none;transform:none}6%{border-color:var(--pc);box-shadow:0 0 0 3px color-mix(in srgb,var(--pc) 25%,transparent);transform:translateY(-2px)}16%{border-color:var(--line);box-shadow:none;transform:none}}
+.loopnote{margin-top:10px;font-size:13px;font-weight:600;color:var(--pc);display:flex;gap:6px;align-items:center}
+.loopnote .spin{display:inline-block;animation:spin 2.2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.callout{margin-top:12px;border-radius:10px;padding:10px 12px;font-weight:700;font-size:14px;display:flex;gap:8px;align-items:center}
+
+/* param grid */
+.pgrid{display:grid;grid-template-columns:repeat(40,1fr);gap:2px;max-width:420px}
+.pgrid i{aspect-ratio:1;border-radius:2px;background:var(--frozen)}
+.pgrid i.on{background:var(--pc);animation:pop .5s ease both}
+@keyframes pop{from{transform:scale(0)}to{transform:none}}
+.pmeta{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12.5px;color:var(--muted)}
+.pmeta .big{font-size:22px;font-weight:800;color:var(--pc)}
+
+/* memory bars */
+.mem{position:relative;padding-right:10px}
+.mem.gp{padding-top:16px}
+.mem .row small{grid-column:2;font-size:11.5px;color:var(--muted);margin-top:-3px}
+.mem .row{display:grid;grid-template-columns:70px 1fr;align-items:center;gap:8px;margin:7px 0}
+.mem .row b{font-size:13px}
+.mem .bar{height:26px;border-radius:7px;display:flex;align-items:center;padding:0 8px;color:#fff;font-weight:800;font-size:12px;white-space:nowrap;width:0;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+.mem .track{position:relative}
+.mem .gpu{position:absolute;top:-4px;bottom:-4px;border-left:2px dashed var(--good)}
+.mem .gpu span{position:absolute;top:-17px;left:-30px;font-size:10.5px;font-weight:700;color:var(--good);white-space:nowrap}
+
+/* prompt tabs */
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tabs button{border:1.5px solid var(--D);color:var(--D);background:transparent;border-radius:8px;padding:4px 10px;font-weight:700;font-size:13px;cursor:pointer}
+.tabs button.on{background:var(--D);color:#fff}
+.pbox{background:var(--code);border-radius:9px;padding:9px 11px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;white-space:pre-wrap;line-height:1.5}
+.pbox.out{background:color-mix(in srgb,var(--good) 12%,var(--card));margin-top:6px}
+.pbox .lbl{display:block;font-family:system-ui;font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
+
+/* layer stack */
+.stack{display:flex;flex-direction:column;gap:5px}
+.stack .lay{display:flex;gap:4px;align-items:center}
+.stack .lay .nm{width:84px;font-size:11.5px;font-weight:700;color:var(--muted);flex:none}
+.stack .tok{min-width:30px;padding:3px 6px;border-radius:5px;font-size:11px;font-weight:700;text-align:center;background:var(--frozen);color:var(--frozen-ink)}
+.stack .tok.p{background:var(--pc);color:#fff;animation:breathe 2.2s ease-in-out infinite}
+@keyframes breathe{50%{filter:brightness(1.25);transform:translateY(-1px)}}
+.adapt{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:center}
+.adapt .col{display:flex;flex-direction:column;gap:5px}
+.adapt .blk{border-radius:8px;padding:6px 8px;text-align:center;font-size:12px;font-weight:700;background:var(--frozen);color:var(--frozen-ink)}
+.adapt .blk.ad{background:var(--pc);color:#fff;animation:breathe 2.2s ease-in-out infinite}
+.adapt .blk.n{background:transparent;border:1.5px dashed var(--frozen);color:var(--muted)}
+
+/* ---------- relationship map ---------- */
+.mapbox{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:10px;overflow-x:auto}
+#relmap{display:block;width:100%;min-width:760px;height:auto}
+#relmap .e{fill:none;stroke-width:2.2;transition:opacity .2s,stroke-width .2s}
+#relmap .e.dashed{stroke-dasharray:6 5}
+#relmap .el{font-size:11px;font-weight:700;transition:opacity .2s}
+#relmap .n{cursor:pointer;transition:opacity .2s}
+#relmap .n rect{stroke-width:2}
+#relmap .n text{font-size:13px;font-weight:700;pointer-events:none}
+#relmap .cl{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+#relmap.focus .e:not(.hi),#relmap.focus .el:not(.hi),#relmap.focus .n:not(.hi){opacity:.13}
+#relmap .e.hi{stroke-width:3.5}
+.maplegend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted);margin:8px 6px 2px}
+
+/* ---------- decision helper ---------- */
+.dec{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px}
+@media (max-width:860px){.dec{grid-template-columns:1fr}}
+.dq{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+.dq .step{font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.dq h3{margin:6px 0 14px;font-size:19px}
+.dq .opts{display:flex;flex-direction:column;gap:8px}
+.dq .opts button{text-align:left;border:1.5px solid var(--line);background:var(--bg);border-radius:11px;padding:10px 12px;cursor:pointer;font-weight:600}
+.dq .opts button:hover{border-color:var(--F);background:var(--F-soft)}
+.dq .opts button small{display:block;font-weight:500;color:var(--muted);font-size:12.5px}
+.dpath{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.dpath span{font-size:12px;background:var(--code);border-radius:6px;padding:2px 8px}
+.dres{border-radius:16px;padding:18px;color:#fff;box-shadow:var(--shadow);min-height:100%}
+.dres h3{margin:4px 0 6px;font-size:22px}
+.dres p{margin:0 0 10px;opacity:.95}
+.dres .why{background:rgba(0,0,0,.16);border-radius:10px;padding:10px 12px;font-size:14px}
+.dres button{margin-top:12px;border:0;border-radius:9px;padding:7px 12px;font-weight:700;cursor:pointer;background:#fff;color:#1d2133}
+.dres.idle{background:var(--card);color:var(--ink);border:1px dashed var(--line)}
+.dres.idle p{color:var(--muted)}
+
+/* ---------- comparison ---------- */
+.filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;align-items:center}
+.fchip{border:1.5px solid var(--fc);color:var(--fc);background:transparent;border-radius:999px;padding:4px 11px;font-weight:700;font-size:12.5px;cursor:pointer}
+.fchip.on{background:var(--fc);color:#fff}
+.fchip.all{--fc:var(--ink)}
+.tablebox{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+table.cmp{border-collapse:collapse;width:100%;min-width:1000px;font-size:13.5px}
+table.cmp th{position:sticky;top:0;background:var(--card);text-align:left;padding:11px 12px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--line);white-space:nowrap}
+table.cmp th.s{cursor:pointer}
+table.cmp th.s:hover{color:var(--ink)}
+table.cmp th .arr{font-size:10px}
+table.cmp td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+table.cmp tr.r{cursor:pointer;transition:background .12s}
+table.cmp tr.r:hover{background:var(--bs)}
+table.cmp td.m{font-weight:800;white-space:nowrap;border-left:5px solid var(--bc)}
+table.cmp td.m small{display:block;font-weight:600;color:var(--muted);font-size:11.5px}
+.yes{color:var(--bad);font-weight:800}.no{color:var(--good);font-weight:800}.part{color:#d97706;font-weight:800}
+.dots{display:inline-flex;gap:3px;vertical-align:middle;margin-right:6px}
+.dots i{width:9px;height:9px;border-radius:50%;background:var(--frozen)}
+.dots i.on{background:var(--dc)}
+.cell small{display:block;color:var(--muted);font-size:12px;line-height:1.3}
+.tl2{display:flex;flex-wrap:wrap;gap:3px}
+.tl2 span{font-size:11px;font-weight:700;background:var(--code);border-radius:5px;padding:1px 6px}
+.note{font-size:12.5px;color:var(--muted);margin-top:8px}
+
+/* ---------- quick-fire ---------- */
+.qf{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.qf details{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:0;box-shadow:var(--shadow);border-top:4px solid var(--qc)}
+.qf summary{cursor:pointer;padding:12px 14px;font-weight:700;list-style:none}
+.qf summary::-webkit-details-marker{display:none}
+.qf summary::before{content:"Q ";color:var(--qc);font-weight:900}
+.qf .a{padding:0 14px 12px;font-size:14px;color:var(--ink)}
+.qf .a::before{content:"A  ";color:var(--good);font-weight:900}
+footer{color:var(--muted);font-size:12.5px;padding:24px 0 40px;text-align:center}
+@media (max-width:640px){
+  .hero{padding:24px 0 20px}
+  #drawer .dh h2{font-size:20px}
+}
+</style>
+</head>
+<body>
+<div id="siteBar" style="position:relative;z-index:50;display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--card);font:600 14px system-ui,sans-serif">
+<a href="../../../learn/#ml-nlp" style="color:var(--ink);text-decoration:none;font:500 18px Georgia,serif">&larr; Satish Thuwal</a>
+<a href="../rag/" style="color:var(--muted);text-decoration:none">RAG explained</a><a href="../" style="color:var(--muted);text-decoration:none">NLP series</a></div>
+<script>if(window.self!==window.top){document.getElementById('siteBar').style.display='none';}</script>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>🧭 Adapting, customising &amp; extending LLMs</h1>
+    <p>An interactive map of every major way to make a foundation model do <i>your</i> job: from building one from scratch, to nudging a tiny slice of its weights, to leaving the weights alone and wrapping it in retrieval, tools and agents.</p>
+    <div class="journey"><span>① Foundation model</span><span>② Pick a strategy (A–D)</span><span>③ Explore methods</span><span>④ See how they connect</span><span>⑤ Decide &amp; compare</span></div>
+  </div>
+</header>
+<nav class="toc"><div class="wrap">
+  <a href="#map">🗺️ Flowchart</a><a href="#rel">🔗 Relationships</a><a href="#decide">🧠 Which one?</a><a href="#compare">📊 Comparison</a><a href="#quick">🎯 Interview quick-fire</a>
+  <span class="sp"></span>
+  <button class="btn" id="expandAll">Expand all</button>
+  <button class="btn" id="collapseAll">Collapse all</button>
+  <button class="btn on" id="animBtn" title="Toggle data-flow animations">▶ Animation on</button>
+  <button class="btn" id="themeBtn" title="Toggle light / dark">◐</button>
+</div></nav>
+
+<main class="wrap">
+  <section class="block" id="map">
+    <h2>🗺️ The learning journey</h2>
+    <p class="lead">Read left to right. <b>Click</b> a category to expand or collapse it, <b>click</b> any card for the full breakdown (what, why, what changes, libraries, pros, cons, examples, sample Python code), and <b>hover</b> for a deeper one-paragraph explanation. Moving dashes show where data and gradients flow.</p>
+    <div class="legend" id="legend"></div>
+    <div class="types">
+      <span class="hint" style="margin:0 4px 0 0;font-weight:700">Type of technique:</span>
+      <span class="tbadge scratch">🏗️ Training from scratch</span>
+      <span class="tbadge ft">🎛️ Fine-tuning (weights change)</span>
+      <span class="tbadge retrieval">📚 Retrieval-based (weights frozen)</span>
+      <span class="tbadge inference">⚡ Inference-time (weights frozen)</span>
+    </div>
+    <p class="hint">↔ On a small screen, scroll the chart sideways.</p>
+    <div class="flow-outer"><div class="flow" id="flow"><svg class="wires" id="wires"></svg></div></div>
+  </section>
+
+  <section class="block" id="rel">
+    <h2>🔗 How the families relate</h2>
+    <p class="lead">PEFT methods, RAG methods and agent frameworks are not rivals; they stack. Hover a box to light up its connections, click it to open its card. Dashed lines mean "commonly combined with" (for example a QLoRA-tuned model used as the generator inside a RAG pipeline).</p>
+    <div class="mapbox"><svg id="relmap" viewBox="0 0 1000 585"></svg></div>
+    <div class="maplegend">
+      <span><b style="color:var(--B)">━</b> builds on / variant of</span>
+      <span><b style="color:var(--muted)">┅</b> commonly combined</span>
+      <span>Hubs = the libraries that tie a family together</span>
+    </div>
+  </section>
+
+  <section class="block" id="decide">
+    <h2>🧠 Which approach should I use?</h2>
+    <p class="lead">Answer a few questions the way an interviewer or tech lead would frame them. The rule of thumb: <b>prompt first, retrieve for knowledge, fine-tune for behaviour, agents for actions.</b></p>
+    <div class="dec">
+      <div class="dq" id="dq"></div>
+      <div class="dres idle" id="dres"><h3>Your recommendation appears here</h3><p>Work through the questions on the left.</p></div>
+    </div>
+  </section>
+
+  <section class="block" id="compare">
+    <h2>📊 Comparison dashboard</h2>
+    <p class="lead">Filter by family, sort by any meter column, and click a row to open that method's card. Dots run from 1 (low) to 5 (high).</p>
+    <div class="filters" id="filters"></div>
+    <div class="tablebox"><table class="cmp" id="cmp"></table></div>
+    <p class="note">GPU cost = cost to <i>build</i> the solution (training or indexing). Inference cost = cost per answer compared with calling the plain base model. Memory figures are rough estimates for a 7B-parameter model.</p>
+  </section>
+
+  <section class="block" id="quick">
+    <h2>🎯 Interview quick-fire</h2>
+    <p class="lead">Click a question to reveal a crisp answer.</p>
+    <div class="qf" id="qf"></div>
+  </section>
+</main>
+<footer>Study guide · Built for AI engineers preparing for interviews and practical LLM projects · Numbers are typical orders of magnitude, not guarantees.</footer>
+
+<div id="tip"></div>
+<div id="scrim"></div>
+<aside id="drawer" aria-hidden="true">
+  <div class="dh" id="dh"></div>
+  <div class="db" id="db"></div>
+  <div class="nav"><button class="btn" id="prevBtn">← Previous</button><button class="btn" id="nextBtn">Next →</button></div>
+</aside>
+
+<script>
+/* ===================== DATA ===================== */
+const CATS = {
+  A:{name:'Model Training', icon:'🏗️', v:'--A', vs:'--A-soft', short:'Build the weights from zero', banner:'Create brand-new weights',
+     tip:'Everything starts with weights learned by next-token prediction over trillions of tokens. Only a handful of organisations do this, but understanding the pipeline explains why every other technique exists: to avoid paying this bill again.'},
+  B:{name:'Model Adaptation', icon:'🎛️', v:'--B', vs:'--B-soft', short:'Change weights: all of them, or a tiny slice', banner:'Weights change · all or a small slice',
+     tip:'Fine-tuning teaches the model new behaviour: a tone, a format, a task, a domain dialect. Full fine-tuning moves every weight; Parameter-Efficient Fine-Tuning (PEFT) freezes the base model and trains a small add-on.'},
+  C:{name:'Knowledge Extension', icon:'📚', v:'--C', vs:'--C-soft', short:'Give the model facts it never saw', banner:'🚫 Do NOT modify model weights', big:true,
+     tip:'Retrieval keeps knowledge in an external store (vector DB or graph) and pastes the relevant pieces into the prompt at question time. Update a document and the answer updates instantly, with no retraining.'},
+  D:{name:'Inference Enhancement', icon:'⚡', v:'--D', vs:'--D-soft', short:'Get more out of the same model at run time', banner:'Weights frozen · change what happens at run time',
+     tip:'Better instructions, examples, reasoning steps, tool access and control loops. Zero training: everything happens in the prompt and in the code around the model.'}
+};
+const TYPES = {scratch:'🏗️ Training from scratch', ft:'🎛️ Fine-tuning', retrieval:'📚 Retrieval-based', inference:'⚡ Inference-time'};
+const WM = {
+  create:{t:'🆕 All weights created from random initialisation', c:'--A'},
+  all:{t:'🔓 Every weight is updated', c:'--B'},
+  small:{t:'🧩 Base frozen · a small set of new weights is trained', c:'--B'},
+  none:{t:'🔒 No weight changes at all', c:'--C'},
+  noneD:{t:'🔒 No weight changes at all', c:'--D'}
+};
+const LIBS = {
+  'PyTorch':'Core deep-learning framework (tensors + autograd). Nearly all open LLM code is written in it.',
+  'Transformers':'Hugging Face library: thousands of pretrained models and tokenizers behind one API (AutoModelForCausalLM, AutoTokenizer).',
+  'Tokenizers':'Hugging Face fast tokenizer library: train BPE / WordPiece / Unigram vocabularies on your corpus.',
+  'Trainer':'The high-level training loop inside Transformers: mixed precision, gradient accumulation, evaluation, checkpoints.',
+  'TRL':'Hugging Face library for SFT, DPO, PPO/RLHF trainers (SFTTrainer works with PEFT out of the box).',
+  'DeepSpeed':'Microsoft. ZeRO shards optimizer states, gradients and parameters across GPUs so huge models fit.',
+  'Megatron-LM':'NVIDIA. Tensor + pipeline parallelism for training transformers with hundreds of billions of parameters.',
+  'Accelerate':'Hugging Face. Run the same PyTorch loop on 1 GPU, many GPUs or TPUs; plugs in FSDP / DeepSpeed.',
+  'PEFT':'Hugging Face Parameter-Efficient Fine-Tuning: LoRA, prefix tuning, prompt tuning, IA³ and more via get_peft_model().',
+  'bitsandbytes':'8-bit and 4-bit (NF4) quantisation on GPU, plus paged optimizers. The engine under QLoRA.',
+  'Unsloth':'Memory-lean, faster LoRA / QLoRA fine-tuning kernels; popular for single-GPU work.',
+  'adapters':'AdapterHub library: bottleneck adapters, AdapterFusion and stacking adapters for multi-task setups.',
+  'LangChain':'Framework for composing LLM apps: prompts, retrievers, tools, memory, agents.',
+  'LlamaIndex':'Data framework for loading, chunking, indexing and querying documents; great RAG building blocks.',
+  'DSPy':'Stanford. Write LLM pipelines as modules and let an optimizer tune prompts / few-shot examples automatically.',
+  'SentenceTransformers':'Compute dense sentence embeddings with open models (all-MiniLM, e5, BGE) in a few lines.',
+  'OpenAI Embeddings':'Hosted embedding API (e.g. text-embedding-3-small / -large).',
+  'BGE Models':'BAAI open-source embedding models (bge-large-en, bge-m3) that rank highly on MTEB.',
+  'FAISS':'Meta library for fast nearest-neighbour search over vectors; in-memory, no server needed.',
+  'Chroma':'Lightweight open-source vector database; ideal for local prototypes.',
+  'Pinecone':'Fully managed cloud vector database; scales without ops work.',
+  'Weaviate':'Open-source vector database with built-in hybrid (keyword + vector) search.',
+  'Milvus':'Open-source distributed vector database built for billions of vectors.',
+  'Neo4j':'Graph database queried with Cypher; also has a vector index for hybrid graph + vector retrieval.',
+  'MS GraphRAG':'Microsoft reference implementation: extracts entities, builds communities, summarises them for global questions.',
+  'LangGraph':'Build agents as explicit state graphs with loops, branches, memory and human-in-the-loop checkpoints.',
+  'CrewAI':'Role-based multi-agent teams ("researcher", "writer", "reviewer") that hand work to each other.',
+  'AutoGen':'Microsoft framework where multiple agents converse with each other and with tools to solve tasks.',
+  'OpenAI SDK':'Official Python client: chat completions, structured outputs, tool calling, embeddings.',
+  'Anthropic SDK':'Official Python client for Claude models: messages, tool use, streaming.',
+  'MCP':'Model Context Protocol: an open standard for exposing tools and data sources to any LLM app through "servers".',
+  'vLLM':'High-throughput inference server with paged attention; can serve many LoRA adapters on one base model.',
+  'Unstructured':'Parses PDFs, HTML, Word and slides into clean text elements before chunking.',
+  'RAGAS':'Evaluation library for RAG: faithfulness, answer relevance, context precision / recall.'
+};
+
+const NODES = {
+foundation:{cat:'F', name:'Foundation Model', icon:'🧠', types:[], tagline:'Pretrained on massive text corpora using next-token prediction.',
+  tip:'A transformer with billions of parameters that has read a large slice of the internet, books and code. Its only training objective was "predict the next token", yet that alone produces grammar, facts, reasoning patterns and coding ability. Every technique on this page starts here.',
+  what:'A large transformer (GPT, Llama, Mistral, Gemma, Claude…) whose weights were learned by repeatedly predicting the next token over trillions of tokens of text and code.',
+  why:'Pretraining is the expensive part. Once done, the same model can be adapted, extended or prompted for thousands of downstream tasks.',
+  changes:'Nothing here: this is the starting point. Its weights encode general language skill plus a frozen snapshot of world knowledge up to a cut-off date.', wm:'none',
+  libs:['Transformers','PyTorch','vLLM','OpenAI SDK'],
+  pros:['General-purpose: one model, many tasks','Strong zero-shot ability','Open-weight options (Llama, Mistral, Gemma) can be self-hosted'],
+  cons:['Knowledge frozen at the training cut-off','Knows nothing about your private data','A raw base model completes text; it does not follow instructions until tuned'],
+  examples:['GPT-4-class models behind ChatGPT','Llama 3 (8B / 70B / 405B)','Mistral 7B, Mixtral 8×7B','Gemma 2 (Google)'],
+  interview:'A foundation model is a general next-token predictor; everything else on this map is about specialising it cheaply.',
+  related:['scratch','full','rag','prompteng']},
+
+scratch:{cat:'A', name:'Training From Scratch', icon:'🏗️', types:['scratch'], tagline:'Build your own foundation model end-to-end.',
+  mini:'Data → Tokenizer → Transformer\n→ Pretraining → Foundation Model', stats:['High Cost','Very Flexible','Requires Huge Data'],
+  tip:'You choose the data mix, the tokenizer vocabulary, the architecture (layers, heads, context length) and train with next-token prediction on trillions of tokens across thousands of GPUs for weeks. Compute grows roughly as 6 × parameters × tokens FLOPs.',
+  what:'Initialise a transformer with random weights and train it on a huge corpus with the next-token-prediction objective until it becomes a foundation model.',
+  why:'Full control: a new language or modality, a proprietary data mix, a custom tokenizer, a licence you own, or a model size no one publishes.',
+  changes:'Everything is created. Starting from random numbers, every one of the billions of weights is learned.', wm:'create',
+  libs:['PyTorch','Transformers','Tokenizers','DeepSpeed','Megatron-LM','Accelerate'],
+  pros:['Maximum flexibility over data, tokenizer and architecture','No inherited licence or bias from someone else’s model','Can target a niche language or domain deeply'],
+  cons:['Millions of dollars of compute for modern sizes','Needs trillions of curated, de-duplicated tokens','Distributed-training expertise (parallelism, stability, checkpointing)','Weeks to months of wall-clock time'],
+  examples:['Llama 3: ~15 trillion training tokens','GPT-3: 175B parameters on ~300B tokens','BloombergGPT: 50B model trained on finance + general text','Falcon, BLOOM, OLMo (fully open training runs)'],
+  interview:'Only train from scratch when no existing model can be adapted; the cost scales with parameters × tokens.',
+  related:['foundation','full']},
+
+full:{cat:'B', name:'Full Fine-Tuning', icon:'🔥', types:['ft'], tagline:'Continue training the whole model on your task data.',
+  mini:'Base Model → update ALL params\n→ Fine-Tuned Model', stat:'Trainable params = 100%', pct:100,
+  tip:'Same gradient descent as pretraining, but on a smaller, task-specific dataset (e.g. instruction–response pairs). Adam keeps two extra numbers per weight, so memory is roughly 16 bytes per parameter: about 112 GB for a 7B model before activations.',
+  what:'Take a pretrained model and keep training all of its parameters on a labelled, task-specific dataset.',
+  why:'When you need the biggest possible behaviour change (new domain, new task format, instruction following) and you have the GPUs and data.',
+  changes:'Every weight moves a little. You end up with a complete new copy of the model.', wm:'all',
+  libs:['Transformers','Trainer','Accelerate','TRL','DeepSpeed'],
+  pros:['Maximum flexibility and usually the highest task quality','Simple mental model: just keep training'],
+  cons:['Expensive: needs multi-GPU memory for weights + gradients + optimizer states','A full model copy per task (≈14 GB per 7B checkpoint in fp16)','Risk of catastrophic forgetting of general skills','Needs more data to avoid overfitting'],
+  examples:['Instruction tuning a base model into a chat model (SFT)','Code Llama: Llama 2 further trained on code','Domain models for medicine, law or finance'],
+  interview:'Full fine-tuning updates 100% of weights; PEFT exists because the optimizer memory and per-task copies are too expensive.',
+  related:['lora','qlora','scratch']},
+
+lora:{cat:'B', name:'LoRA', icon:'🧩', types:['ft'], tagline:'Freeze W, learn a low-rank update ΔW = B·A.',
+  mini:'W  →  W + ΔW\nΔW = B·A  (rank r ≪ d)', stat:'Trainable ≈ 0.1% – 2%', pct:0.5,
+  tip:'Weight updates during fine-tuning have low "intrinsic rank", so LoRA writes ΔW as the product of a tall thin matrix B (d×r) and a wide thin matrix A (r×k). For a 4096×4096 projection and r = 8 that is 65,536 trainable numbers instead of 16.8 million. B starts at zero, so training begins exactly at the base model.',
+  what:'Low-Rank Adaptation. The original weight matrix W is frozen; a small trainable pair of matrices B and A is added so the layer computes h = Wx + BAx.',
+  why:'Gets close to full fine-tuning quality while training a tiny fraction of the parameters, using far less GPU memory and storing each task as a few-MB adapter.',
+  changes:'Base weights stay frozen. New low-rank matrices are added to chosen layers (usually the attention q, k, v, o projections and sometimes the MLP). After training they can be merged: W′ = W + BA.', wm:'small',
+  libs:['PEFT','Transformers','TRL','Unsloth','vLLM'],
+  pros:['0.1–2% trainable parameters → much less memory','Adapters are megabytes, so you can keep one per customer or task','Merge into W for zero extra inference latency','Swap adapters on one base model at serve time'],
+  cons:['Can trail full fine-tuning on tasks far from pretraining','Hyper-parameters to tune: rank r, alpha, target modules','The base model must still fit in GPU memory in 16-bit'],
+  examples:['Thousands of community LoRA adapters on the Hugging Face Hub','Per-tenant style or tone adapters served with vLLM multi-LoRA','Stable Diffusion style / character LoRAs (same idea in image models)'],
+  interview:'LoRA freezes W and learns ΔW = BA with rank r ≪ d; B is zero-initialised and the adapter can be merged, so inference cost is unchanged.',
+  related:['full','qlora','adapter','rag']},
+
+qlora:{cat:'B', name:'QLoRA', icon:'🗜️', types:['ft'], tagline:'LoRA on top of a 4-bit quantised base model.',
+  mini:'4-bit frozen W (NF4)\n+ LoRA adapters (bf16)', stat:'Fine-tune 7B on ~6–10 GB', pct:0.5,
+  tip:'The frozen base weights are stored in 4-bit NormalFloat (NF4), with the quantisation constants themselves quantised (double quantisation) and optimizer pages spilled to CPU when memory spikes. Weights are de-quantised on the fly to bf16 for each matmul; gradients flow through them into the LoRA adapters only.',
+  what:'Quantised LoRA: load the base model in 4-bit precision, keep it frozen, and train LoRA adapters in higher precision on top.',
+  why:'Brings fine-tuning to a single consumer or cloud GPU. The original paper fine-tuned a 65B model on one 48 GB GPU.',
+  changes:'Base weights are frozen and compressed to 4 bits. Only the LoRA adapter weights are trained.', wm:'small',
+  libs:['PEFT','bitsandbytes','Transformers','TRL','Unsloth'],
+  pros:['Lowest GPU memory of any fine-tuning method','Best choice for consumer GPUs (e.g. 24 GB)','Quality usually close to 16-bit LoRA'],
+  cons:['Slower training: weights are de-quantised every step','Small quality loss is possible from 4-bit rounding','Merging adapters into a 4-bit model needs care'],
+  examples:['Guanaco (the QLoRA paper’s chatbot family)','Fine-tuning Llama / Mistral 7B on a free or cheap cloud GPU','Hobbyist and Kaggle fine-tunes with Unsloth'],
+  interview:'QLoRA = 4-bit NF4 frozen base + double quantisation + paged optimizers + LoRA adapters trained in bf16.',
+  related:['lora','full']},
+
+adapter:{cat:'B', name:'Adapter Tuning', icon:'🔌', types:['ft'], tagline:'Small trainable blocks inserted between layers.',
+  mini:'… → Attention → [Adapter] →\n  FFN → [Adapter] → …', stat:'Trainable ≈ 1% – 4%', pct:2,
+  tip:'Each adapter is a bottleneck: project the hidden state down (e.g. 4096 → 64), apply a non-linearity, project back up, and add the result to the input (residual). With the residual and near-zero init the network starts out unchanged. Because adapters sit in sequence, they add a little latency and cannot be merged away like LoRA.',
+  what:'Insert small bottleneck feed-forward modules inside every transformer layer (after attention and/or after the feed-forward block) and train only those.',
+  why:'Modular: one frozen backbone plus a library of task adapters you can swap, stack or fuse. The original PEFT idea (Houlsby et al., 2019).',
+  changes:'Base weights frozen. New layers are physically added inside each block and trained.', wm:'small',
+  libs:['PEFT','adapters','Transformers'],
+  pros:['Very modular: plug in per-task or per-language adapters','Strong results with ~1–4% trainable parameters','AdapterFusion can combine knowledge from several tasks'],
+  cons:['Extra sequential layers add inference latency','Cannot be merged into the base weights','Slightly more parameters than LoRA for similar quality'],
+  examples:['MAD-X: language adapters for cross-lingual transfer','Multi-task NLP systems sharing one BERT backbone','Per-client adapters in enterprise NLP platforms'],
+  interview:'Adapters add bottleneck layers in series (latency cost); LoRA adds a parallel low-rank path that can be merged (no latency cost).',
+  related:['lora','prefix']},
+
+prefix:{cat:'B', name:'Prefix Tuning', icon:'🧷', types:['ft'], tagline:'Learned vectors prepended at every layer.',
+  mini:'[P1][P2][P3] + input tokens\n… repeated in EVERY layer', stat:'Trainable ≈ 0.1%', pct:0.1,
+  tip:'Instead of words, you learn continuous "virtual token" vectors that are prepended to the keys and values of the attention in every layer. Real tokens can attend to them, so they steer the whole computation. Training directly is unstable, so the original paper re-parameterised the prefix through a small MLP.',
+  what:'Train a short sequence of continuous vectors (a "prefix") that is prepended to the attention keys and values in every transformer layer; the model stays frozen.',
+  why:'Steer a frozen model toward a task (especially generation, e.g. table-to-text or summarisation) while storing only a few hundred thousand numbers per task.',
+  changes:'No existing weight changes. New prefix vectors exist only for the attention layers and are learned.', wm:'small',
+  libs:['PEFT','Transformers'],
+  pros:['Tiny per-task storage','Base model shared across tasks','Good for generation tasks with small data'],
+  cons:['Harder to optimise than LoRA; sensitive to prefix length','Prefix tokens use up part of the context window','Largely superseded by LoRA in practice'],
+  examples:['Table-to-text generation (the original paper used GPT-2)','Summarisation with BART','Multi-task serving with one frozen model'],
+  interview:'Prefix tuning learns virtual key/value vectors in every layer; prompt tuning learns them only at the input embedding layer.',
+  related:['prompt','adapter','lora']},
+
+prompt:{cat:'B', name:'Prompt Tuning', icon:'💬', types:['ft'], tagline:'Soft prompts only: learn a few input embeddings.',
+  mini:'[soft1][soft2]…[soft20]\n+ "Classify this review…"', stat:'Trainable ≈ 0.01%', pct:0.01,
+  tip:'Think of it as learning the "perfect prompt" directly in embedding space instead of in words. Only the input layer gets these extra vectors (e.g. 20 virtual tokens × 4096 dims ≈ 82K numbers). Lester et al. (2021) showed it catches up with full fine-tuning once models exceed ~10B parameters.',
+  what:'Prepend a small set of trainable embedding vectors ("soft prompt") to the input. Everything else is frozen; only those vectors are learned by gradient descent.',
+  why:'The smallest possible fine-tune: one model, a few kilobytes per task, and batches can even mix different tasks.',
+  changes:'No model weights change. Only the soft-prompt vectors at the input layer are trained.', wm:'small',
+  libs:['PEFT','Transformers'],
+  pros:['Fewest trainable parameters of any method','Kilobyte-sized task files; mixed-task batching','Competitive with full tuning on very large models'],
+  cons:['Weak on small models','Soft prompts are not human-readable','Slow to converge; sensitive to initialisation'],
+  examples:['T5 / SuperGLUE experiments from the original paper','Multi-tenant classification services','P-Tuning v2 (a deeper variant close to prefix tuning)'],
+  interview:'Prompt tuning trains only soft input embeddings; it is the input-layer-only special case of prefix tuning.',
+  related:['prefix','prompteng']},
+
+rag:{cat:'C', name:'RAG', icon:'🔎', types:['retrieval'], tagline:'Retrieve relevant chunks, put them in the prompt.',
+  mini:'Docs → Chunk → Embed → VectorDB\n→ Retrieve → Prompt → LLM', stat:'Knowledge lives outside the weights',
+  tip:'Offline: split documents into chunks, embed each chunk into a vector, store vectors in a vector database. Online: embed the question, find the top-k most similar chunks (cosine similarity), paste them into the prompt with an instruction like "answer only from the context and cite sources", and let the LLM write the answer.',
+  what:'Retrieval-Augmented Generation: at question time, search an external knowledge store for relevant passages and give them to the LLM as context.',
+  why:'Fresh, private or fast-changing facts; answers with citations; fewer hallucinations; and no training run when the data changes.',
+  changes:'Nothing in the model. The prompt changes: it now carries retrieved evidence.', wm:'none',
+  libs:['LangChain','LlamaIndex','SentenceTransformers','FAISS','Chroma','Pinecone','DSPy','RAGAS'],
+  pros:['Update knowledge by re-indexing a document, instantly','Citations and traceability','Works with any LLM, including closed APIs','Access control per document is possible'],
+  cons:['Answer quality is capped by retrieval quality','Chunk size and embedding choice need tuning','Longer prompts → more tokens and latency','Weak at "summarise the whole corpus" or multi-hop questions'],
+  examples:['Customer-support bots over help-centre articles','Enterprise "chat with your documents" (HR policies, wikis)','Search-style answer engines that cite web sources','Coding assistants retrieving from your repo'],
+  interview:'Fine-tune for behaviour, RAG for knowledge: RAG keeps facts outside the weights so they stay fresh and citeable.',
+  related:['graphrag','agenticrag','lora','tooluse']},
+
+graphrag:{cat:'C', name:'Graph RAG', icon:'🕸️', types:['retrieval'], tagline:'Retrieve over a knowledge graph of entities and relations.',
+  mini:'Docs → Entity Extraction\n→ Knowledge Graph → Graph Retrieval → LLM', stat:'Best for multi-hop questions',
+  tip:'An LLM (or NER model) reads each document and extracts entities and relationships ("Acme —acquired→ Beta"). These form a graph. Questions are answered by finding relevant entities and walking their neighbourhood, or, in Microsoft GraphRAG, by reading pre-written summaries of graph "communities" for global questions.',
+  what:'A RAG variant where knowledge is stored as a graph of entities and relations, and retrieval follows graph links rather than (or in addition to) vector similarity.',
+  why:'Questions that need connecting facts across documents ("Which suppliers of our top client were affected by the recall?") or high-level themes across a whole corpus.',
+  changes:'Nothing in the model. A knowledge graph is built and queried outside it.', wm:'none',
+  libs:['Neo4j','LangChain','LlamaIndex','MS GraphRAG'],
+  pros:['Handles multi-hop and relationship questions','Explainable: you can show the path through the graph','Good at corpus-wide "what are the main themes" questions'],
+  cons:['Costly indexing: many LLM calls to extract entities','Extraction errors become graph errors','Graph schema and updates need maintenance'],
+  examples:['Investigative / intelligence analysis over many reports','Biomedical knowledge graphs (drug–gene–disease)','Enterprise knowledge graphs for org, product and supplier data'],
+  interview:'Vector RAG finds similar text; Graph RAG finds connected facts, so it wins on multi-hop and global questions.',
+  related:['rag','agenticrag']},
+
+agenticrag:{cat:'C', name:'Agentic RAG', icon:'🕵️', types:['retrieval','inference'], tagline:'An agent decides what, where and when to retrieve.',
+  mini:'Question → Planner → Tools\n→ Retrieve → Reason → Answer ↺', stat:'Plans, retrieves, re-checks',
+  tip:'Instead of one fixed retrieve-then-answer pass, an LLM agent breaks the question into sub-questions, picks a source for each (vector store, SQL, web search, graph), reads the results, judges whether the evidence is enough, and loops until it is. Patterns include query rewriting, routing, self-RAG and corrective RAG.',
+  what:'RAG driven by an agent loop: the LLM plans, chooses retrieval tools, evaluates what it got back and retrieves again if needed before answering.',
+  why:'Complex questions that need several lookups, several sources, or self-correction when the first retrieval misses.',
+  changes:'Nothing in the model. The control flow around it becomes dynamic.', wm:'none',
+  libs:['LangGraph','CrewAI','AutoGen','LangChain','LlamaIndex'],
+  pros:['Handles multi-step, multi-source questions','Self-corrects bad retrievals','Routes each sub-question to the right store'],
+  cons:['Several LLM calls → higher latency and cost','Harder to test and debug; less deterministic','Needs guardrails against loops'],
+  examples:['Research assistants that search, read and synthesise','Analyst copilots querying SQL + documents together','Support bots that check order DB and policy docs'],
+  interview:'Agentic RAG = RAG inside an agent loop: plan, route, retrieve, verify, repeat.',
+  related:['rag','graphrag','agents','tooluse']},
+
+prompteng:{cat:'D', name:'Prompt Engineering', icon:'✍️', types:['inference'], tagline:'Zero-shot, few-shot and chain-of-thought.',
+  mini:'Zero-shot  → just ask\nFew-shot   → show examples\nCoT        → think step by step', stat:'Zero training',
+  tip:'Large models are in-context learners: a clear instruction, a role, a few worked examples and an output format often deliver most of the gains you would get from fine-tuning. Chain-of-thought asks the model to write intermediate reasoning, which improves arithmetic and logic.',
+  what:'Designing the input text (instructions, examples, format, reasoning cues) to get better outputs from an unchanged model.',
+  why:'The fastest, cheapest lever. Always the first thing to try before fine-tuning or building retrieval.',
+  changes:'Nothing in the model. Only the text you send changes.', wm:'noneD',
+  libs:['OpenAI SDK','Anthropic SDK','LangChain','DSPy'],
+  pros:['Instant iteration, no GPUs','Works with closed API models','Few-shot and CoT give large gains on reasoning tasks'],
+  cons:['Long prompts cost tokens on every call','Brittle: small wording changes can shift results','Cannot add knowledge beyond the context window'],
+  examples:['System prompts that set role, tone and output JSON schema','Few-shot classification of support tickets','Chain-of-thought for maths and multi-step reasoning'],
+  interview:'Try prompting first; move to RAG when knowledge is missing and to fine-tuning when behaviour or format still will not stick.',
+  related:['tooluse','agents','prompt']},
+
+tooluse:{cat:'D', name:'Function Calling / Tool Use', icon:'🛠️', types:['inference'], tagline:'The LLM asks your code to run tools and APIs.',
+  mini:'LLM ⇄ Tools ⇄ APIs ⇄ Databases', stat:'Model acts, code executes',
+  tip:'You describe tools with a name, purpose and JSON schema. When useful, the model returns a structured call such as get_weather({"city":"Pune"}) instead of text. Your code runs it and sends the result back; the model then writes the final answer. The model never executes anything itself.',
+  what:'Giving the model a list of functions it can request. It outputs a structured call; your application executes it and returns the result.',
+  why:'Live data (prices, weather, orders), exact computation, and taking actions (send email, create ticket, run SQL) that text alone cannot do.',
+  changes:'Nothing in the model. The app gains a loop that executes the model’s requested calls.', wm:'noneD',
+  libs:['OpenAI SDK','Anthropic SDK','LangChain','MCP','AutoGen'],
+  pros:['Real-time, exact information','Lets the model act on external systems','Structured outputs are easy to validate'],
+  cons:['Security: validate arguments, limit permissions, beware prompt injection','Extra round-trips add latency','Model can pick the wrong tool or arguments'],
+  examples:['Weather / flight lookup assistants','Text-to-SQL analytics bots','MCP servers exposing GitHub, Slack, file systems to any assistant'],
+  interview:'In tool calling the model only proposes a JSON call; your code executes it, which is where security controls belong.',
+  related:['agents','agenticrag','prompteng']},
+
+agents:{cat:'D', name:'AI Agents', icon:'🤖', types:['inference'], tagline:'Plan, act with tools, remember, reflect, repeat.',
+  mini:'Planner → Tool User → Memory\n→ Reflection ↺ → Final Answer', stat:'Autonomous multi-step loops',
+  tip:'An agent wraps an LLM in a loop: decide the next step (plan), call a tool (act), store what happened (memory), critique progress (reflect), and repeat until a stop condition. The ReAct pattern interleaves Reasoning and Acting. Frameworks add state, retries, branching and human approval steps.',
+  what:'A system where the LLM drives a loop of planning, tool use, memory and self-reflection to complete a goal over many steps.',
+  why:'Open-ended goals that need many actions: research a topic, fix a bug across files, process a support case end to end.',
+  changes:'Nothing in the model. All the intelligence added is in the orchestration loop, tools and memory.', wm:'noneD',
+  libs:['LangGraph','CrewAI','AutoGen','LangChain'],
+  pros:['Solves multi-step tasks without hand-coding every step','Can combine RAG, tools and code execution','Multi-agent setups split work by role'],
+  cons:['Highest inference cost and latency (many calls)','Errors compound over long loops','Needs guardrails, budgets, evaluation and logging'],
+  examples:['Coding agents that edit, run tests and fix failures','Deep-research agents that browse and write reports','Operations agents triaging tickets across systems'],
+  interview:'Agent = LLM + tools + memory + a control loop; prefer a fixed workflow when the steps are known, an agent when they are not.',
+  related:['tooluse','agenticrag','prompteng']}
+};
+/* ===================== SAMPLE CODE ===================== */
+const CODE = {
+foundation: {note:'Load an open-weight model and look at its next-token probabilities.', src: String.raw`# pip install transformers torch
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+name = "gpt2"                       # tiny, runs on CPU; swap for Llama / Mistral / Gemma
+tok = AutoTokenizer.from_pretrained(name)
+model = AutoModelForCausalLM.from_pretrained(name)
+
+ids = tok("The cat sat on the", return_tensors="pt")
+with torch.no_grad():
+    logits = model(**ids).logits    # shape: [batch, seq_len, vocab_size]
+
+# Probabilities for the NEXT token = softmax over the last position
+probs = torch.softmax(logits[0, -1], dim=-1)
+top = torch.topk(probs, 5)
+for p, i in zip(top.values, top.indices):
+    print(f"{tok.decode(i)!r:>10}  {p.item():.1%}")
+
+# Generation = repeat "predict next token, append" in a loop
+out = model.generate(**ids, max_new_tokens=20, do_sample=True, temperature=0.8)
+print(tok.decode(out[0]))`},
+
+scratch: {note:'A miniature version of the full pipeline: train a tokenizer, define a transformer with random weights, pretrain it.', src: String.raw`# pip install transformers datasets tokenizers accelerate
+from datasets import load_dataset
+from tokenizers import ByteLevelBPETokenizer
+from transformers import (GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast,
+                          DataCollatorForLanguageModeling, Trainer, TrainingArguments)
+
+# 1) DATA
+ds = load_dataset("wikitext", "wikitext-2-raw-v1")
+
+# 2) TOKENIZER: learn a BPE vocabulary from YOUR corpus
+bpe = ByteLevelBPETokenizer()
+bpe.train_from_iterator(ds["train"]["text"], vocab_size=8000,
+                        special_tokens=["<pad>", "<eos>"])
+bpe.save("tok.json")
+tok = PreTrainedTokenizerFast(tokenizer_file="tok.json",
+                              pad_token="<pad>", eos_token="<eos>")
+
+# 3) TRANSFORMER ARCHITECTURE: random weights, you choose the size
+config = GPT2Config(vocab_size=tok.vocab_size, n_layer=6, n_head=8,
+                    n_embd=512, n_positions=256)
+model = GPT2LMHeadModel(config)                 # NOT from_pretrained
+print(f"{model.num_parameters()/1e6:.1f}M parameters, all random")
+
+# 4) PRETRAINING: next-token prediction (mlm=False = causal LM)
+data = ds.map(lambda b: tok(b["text"], truncation=True, max_length=256),
+              batched=True, remove_columns=["text"])
+trainer = Trainer(
+    model=model,
+    args=TrainingArguments("my-foundation-model", num_train_epochs=3,
+                           per_device_train_batch_size=32, learning_rate=5e-4,
+                           warmup_steps=500, fp16=True, logging_steps=100),
+    train_dataset=data["train"],
+    data_collator=DataCollatorForLanguageModeling(tok, mlm=False),
+)
+trainer.train()
+
+# 5) FOUNDATION MODEL
+trainer.save_model("my-foundation-model")
+# Real runs: same idea, but trillions of tokens on thousands of GPUs,
+# launched with accelerate / DeepSpeed (ZeRO) or Megatron-LM.`},
+
+full: {note:'Every parameter has requires_grad=True and gets updated.', src: String.raw`# pip install transformers datasets accelerate
+from datasets import load_dataset
+from transformers import (AutoTokenizer, AutoModelForCausalLM, Trainer,
+                          TrainingArguments, DataCollatorForLanguageModeling)
+
+name = "mistralai/Mistral-7B-v0.1"
+tok = AutoTokenizer.from_pretrained(name)
+tok.pad_token = tok.eos_token
+model = AutoModelForCausalLM.from_pretrained(name, torch_dtype="auto")
+
+trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f"Trainable: {trainable/1e9:.2f}B  (100% of the model)")
+
+# Instruction -> response pairs formatted as plain text
+ds = load_dataset("json", data_files="train.jsonl")["train"]
+def fmt(ex):
+    text = f"### Instruction:\n{ex['instruction']}\n\n### Response:\n{ex['output']}{tok.eos_token}"
+    return tok(text, truncation=True, max_length=1024)
+ds = ds.map(fmt, remove_columns=ds.column_names)
+
+trainer = Trainer(
+    model=model,
+    args=TrainingArguments(
+        "mistral-full-ft",
+        num_train_epochs=3,
+        per_device_train_batch_size=4, gradient_accumulation_steps=4,
+        learning_rate=2e-5,            # small LR: we are moving ALL the weights
+        bf16=True, gradient_checkpointing=True,
+        logging_steps=20, save_strategy="epoch"),
+    train_dataset=ds,
+    data_collator=DataCollatorForLanguageModeling(tok, mlm=False),
+)
+trainer.train()
+trainer.save_model("mistral-full-ft")   # a complete ~14 GB copy of the model`},
+
+lora: {note:'Wrap the frozen model with LoRA adapters; only B and A are trained.', src: String.raw`# pip install transformers peft datasets accelerate
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from peft import LoraConfig, get_peft_model, PeftModel
+
+name = "mistralai/Mistral-7B-v0.1"
+tok = AutoTokenizer.from_pretrained(name)
+model = AutoModelForCausalLM.from_pretrained(name, torch_dtype=torch.bfloat16,
+                                             device_map="auto")
+
+config = LoraConfig(
+    r=8,                       # rank of the update: dW = B @ A
+    lora_alpha=16,             # scaling = alpha / r
+    lora_dropout=0.05,
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],   # attention projections
+    task_type="CAUSAL_LM",
+)
+model = get_peft_model(model, config)    # freezes W, adds B (zeros) and A (random)
+model.print_trainable_parameters()
+# trainable params: ~6.8M || all params: ~7.2B || trainable%: ~0.09
+
+# ... train with Trainer / SFTTrainer exactly as in full fine-tuning,
+#     but with a higher learning rate (about 2e-4) ...
+
+model.save_pretrained("my-lora")         # only a few MB: just the adapter
+
+# Inference option 1: load the adapter on top of the base model
+base = AutoModelForCausalLM.from_pretrained(name, torch_dtype=torch.bfloat16)
+model = PeftModel.from_pretrained(base, "my-lora")
+
+# Inference option 2: merge W' = W + BA  ->  zero extra latency
+merged = model.merge_and_unload()
+merged.save_pretrained("mistral-merged")`},
+
+qlora: {note:'Same as LoRA, but the base model is loaded in 4-bit NF4 first.', src: String.raw`# pip install transformers peft bitsandbytes trl datasets accelerate
+import torch
+from datasets import load_dataset
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from peft import LoraConfig, prepare_model_for_kbit_training
+from trl import SFTTrainer, SFTConfig
+
+name = "mistralai/Mistral-7B-v0.1"
+
+bnb = BitsAndBytesConfig(
+    load_in_4bit=True,                       # 4-bit frozen base
+    bnb_4bit_quant_type="nf4",               # NormalFloat4
+    bnb_4bit_use_double_quant=True,          # quantise the quantisation constants
+    bnb_4bit_compute_dtype=torch.bfloat16,   # de-quantise to bf16 for the matmuls
+)
+tok = AutoTokenizer.from_pretrained(name)
+tok.pad_token = tok.eos_token
+model = AutoModelForCausalLM.from_pretrained(name, quantization_config=bnb,
+                                             device_map="auto")
+model = prepare_model_for_kbit_training(model)
+print(f"{model.get_memory_footprint()/1e9:.1f} GB")     # ~4 GB instead of ~14 GB
+
+lora = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, task_type="CAUSAL_LM",
+                  target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                                  "gate_proj", "up_proj", "down_proj"])
+
+ds = load_dataset("json", data_files="train.jsonl")["train"]   # needs a "text" column
+
+trainer = SFTTrainer(
+    model=model,
+    train_dataset=ds,
+    peft_config=lora,                        # adapters are added for you
+    args=SFTConfig(
+        output_dir="mistral-qlora",
+        num_train_epochs=3,
+        per_device_train_batch_size=4, gradient_accumulation_steps=4,
+        learning_rate=2e-4,
+        optim="paged_adamw_8bit",            # paged optimizer from the QLoRA paper
+        bf16=True, logging_steps=20),
+)
+trainer.train()
+trainer.save_model("mistral-qlora")          # adapter only (tens of MB)`},
+
+adapter: {note:'Bottleneck adapters with the AdapterHub "adapters" library, shown on a classification task.', src: String.raw`# pip install adapters transformers datasets
+from transformers import AutoTokenizer, TrainingArguments
+from adapters import AutoAdapterModel, AdapterTrainer, SeqBnConfig
+
+name = "roberta-base"
+tok = AutoTokenizer.from_pretrained(name)
+model = AutoAdapterModel.from_pretrained(name)
+
+# Bottleneck adapter after attention and feed-forward in every layer.
+# reduction_factor=16  ->  hidden 768 is squeezed to 48 and expanded back.
+config = SeqBnConfig(reduction_factor=16)
+model.add_adapter("sentiment", config=config)
+model.add_classification_head("sentiment", num_labels=2)
+
+model.train_adapter("sentiment")     # freezes the backbone, trains only the adapter
+print(model.adapter_summary())       # shows about 1-2% trainable parameters
+
+trainer = AdapterTrainer(
+    model=model,
+    args=TrainingArguments("out", learning_rate=1e-4, num_train_epochs=5,
+                           per_device_train_batch_size=32),
+    train_dataset=train_ds, eval_dataset=val_ds,     # tokenised datasets
+)
+trainer.train()
+
+model.save_adapter("sentiment-adapter", "sentiment")   # a few MB
+
+# Later: one frozen backbone, many swappable adapters
+model.load_adapter("sentiment-adapter")
+model.set_active_adapters("sentiment")`},
+
+prefix: {note:'Virtual tokens injected into the attention of every layer.', src: String.raw`# pip install transformers peft
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from peft import PrefixTuningConfig, TaskType, get_peft_model
+
+name = "google/flan-t5-large"
+tok = AutoTokenizer.from_pretrained(name)
+model = AutoModelForSeq2SeqLM.from_pretrained(name)
+
+config = PrefixTuningConfig(
+    task_type=TaskType.SEQ_2_SEQ_LM,
+    num_virtual_tokens=20,        # length of the learned prefix
+    prefix_projection=True,       # re-parameterise through an MLP for stable training
+)
+model = get_peft_model(model, config)
+model.print_trainable_parameters()   # roughly 0.1-1% of the model
+
+# The prefix is added as extra key/value vectors in EVERY layer's attention.
+# Train with Trainer / Seq2SeqTrainer as usual (learning rate around 1e-2 to 3e-2).
+
+model.save_pretrained("flan-prefix")   # stores only the prefix
+
+inputs = tok("summarize: " + article, return_tensors="pt")
+out = model.generate(**inputs, max_new_tokens=80)
+print(tok.decode(out[0], skip_special_tokens=True))`},
+
+prompt: {note:'Only a handful of input embeddings are trained.', src: String.raw`# pip install transformers peft
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from peft import PromptTuningConfig, PromptTuningInit, TaskType, get_peft_model
+
+name = "bigscience/bloomz-560m"
+tok = AutoTokenizer.from_pretrained(name)
+model = AutoModelForCausalLM.from_pretrained(name)
+
+config = PromptTuningConfig(
+    task_type=TaskType.CAUSAL_LM,
+    num_virtual_tokens=8,                               # the soft prompt length
+    prompt_tuning_init=PromptTuningInit.TEXT,           # start from real words...
+    prompt_tuning_init_text="Classify if the tweet is a complaint or not:",
+    tokenizer_name_or_path=name,
+)
+model = get_peft_model(model, config)
+model.print_trainable_parameters()
+# trainable params: 8,192 || all params: ~559M || trainable%: ~0.0015
+
+# What is trained: an [8 x hidden_size] embedding matrix, nothing else
+print(model.prompt_encoder["default"].embedding.weight.shape)
+
+# Train with a normal loop / Trainer (learning rate around 3e-2).
+# At inference PEFT prepends the 8 soft vectors to the input embeddings for you.
+model.save_pretrained("complaint-soft-prompt")          # a few KB`},
+
+rag: {note:'Every stage of the pipeline in plain Python so you can see what the frameworks do for you.', src: String.raw`# pip install sentence-transformers faiss-cpu openai langchain-text-splitters pypdf
+import faiss
+from pypdf import PdfReader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from sentence_transformers import SentenceTransformer
+from openai import OpenAI
+
+# ---------- INDEXING (once, offline) ----------
+# 1) Documents
+text = "\n".join(page.extract_text() for page in PdfReader("handbook.pdf").pages)
+
+# 2) Chunking
+splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+chunks = splitter.split_text(text)
+
+# 3) Embedding model
+embedder = SentenceTransformer("BAAI/bge-small-en-v1.5")
+vectors = embedder.encode(chunks, normalize_embeddings=True)
+
+# 4) Vector database (inner product on normalised vectors = cosine similarity)
+index = faiss.IndexFlatIP(vectors.shape[1])
+index.add(vectors)
+
+# ---------- QUERYING (every question) ----------
+def answer(question, k=4):
+    # 5) Retrieval
+    q = embedder.encode([question], normalize_embeddings=True)
+    scores, ids = index.search(q, k)
+    context = "\n\n".join(f"[{n+1}] {chunks[i]}" for n, i in enumerate(ids[0]))
+
+    # 6) Prompt construction
+    prompt = (f"Answer using ONLY the context. Cite sources like [1]. "
+              f"If the answer is not in the context, say you don't know.\n\n"
+              f"Context:\n{context}\n\nQuestion: {question}")
+
+    # 7) LLM  ->  8) Response
+    client = OpenAI()
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini", temperature=0,
+        messages=[{"role": "user", "content": prompt}])
+    return resp.choices[0].message.content
+
+print(answer("How many days of annual leave do new joiners get?"))`},
+
+graphrag: {note:'Extract triples with an LLM, store them in Neo4j, retrieve a subgraph for the question.', src: String.raw`# pip install neo4j openai
+import json
+from neo4j import GraphDatabase
+from openai import OpenAI
+
+client = OpenAI()
+driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+
+def llm(prompt):
+    r = client.chat.completions.create(model="gpt-4o-mini", temperature=0,
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"})
+    return json.loads(r.choices[0].message.content)
+
+# ---------- 1) ENTITY EXTRACTION + 2) KNOWLEDGE GRAPH ----------
+def index_document(text):
+    data = llm('Extract knowledge triples from the text. Return JSON: '
+               '{"triples": [{"head": "...", "relation": "...", "tail": "..."}]}\n\n' + text)
+    with driver.session() as s:
+        for t in data["triples"]:
+            s.run("""MERGE (a:Entity {name: $h})
+                     MERGE (b:Entity {name: $t})
+                     MERGE (a)-[:REL {type: $r}]->(b)""",
+                  h=t["head"], t=t["tail"], r=t["relation"])
+
+index_document("Acme Corp acquired Beta Ltd in 2023. Priya Rao is the CEO of Beta Ltd. "
+               "Beta Ltd was affected by Recall 42.")
+
+# ---------- 3) GRAPH RETRIEVAL ----------
+def retrieve(question, hops=2):
+    ents = llm('List the entities mentioned in the question. '
+               'Return JSON: {"entities": ["..."]}\n\n' + question)["entities"]
+    with driver.session() as s:
+        rows = s.run(f"""MATCH p = (e:Entity)-[:REL*1..{hops}]-(n)
+                         WHERE e.name IN $ents
+                         UNWIND relationships(p) AS r
+                         RETURN DISTINCT startNode(r).name AS h, r.type AS rel,
+                                         endNode(r).name AS t LIMIT 50""", ents=ents)
+        return [f"{x['h']} -[{x['rel']}]-> {x['t']}" for x in rows]
+
+# ---------- 4) LLM ----------
+question = "Who leads the company that Acme Corp acquired?"
+facts = "\n".join(retrieve(question))
+r = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user",
+    "content": f"Facts from the knowledge graph:\n{facts}\n\nQuestion: {question}"}])
+print(r.choices[0].message.content)     # -> Priya Rao (a 2-hop answer)`},
+
+agenticrag: {note:'A LangGraph loop: retrieve, grade the evidence, rewrite the query and retry if it is weak.', src: String.raw`# pip install langgraph langchain-openai langchain-community faiss-cpu
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+store = FAISS.from_texts(my_chunks, OpenAIEmbeddings())      # your chunked documents
+retriever = store.as_retriever(search_kwargs={"k": 4})
+
+class State(TypedDict):
+    question: str      # original question
+    query: str         # current search query (may be rewritten)
+    docs: list
+    tries: int
+    answer: str
+
+def retrieve(s):                                   # RETRIEVAL
+    docs = retriever.invoke(s["query"])
+    return {"docs": [d.page_content for d in docs], "tries": s["tries"] + 1}
+
+def grade(s):                                      # REASONING: is the evidence enough?
+    verdict = llm.invoke(f"Question: {s['question']}\nContext: {s['docs']}\n"
+                         "Can the question be answered from this context? Reply yes or no.")
+    ok = "yes" in verdict.content.lower()
+    return "generate" if ok or s["tries"] >= 3 else "rewrite"
+
+def rewrite(s):                                    # PLANNER: try a better query
+    q = llm.invoke(f"Rewrite this search query to find better evidence: {s['query']}")
+    return {"query": q.content}
+
+def generate(s):                                   # ANSWER
+    a = llm.invoke(f"Answer from the context only, with citations.\n"
+                   f"Context: {s['docs']}\nQuestion: {s['question']}")
+    return {"answer": a.content}
+
+g = StateGraph(State)
+g.add_node("retrieve", retrieve)
+g.add_node("rewrite", rewrite)
+g.add_node("generate", generate)
+g.add_edge(START, "retrieve")
+g.add_conditional_edges("retrieve", grade, {"generate": "generate", "rewrite": "rewrite"})
+g.add_edge("rewrite", "retrieve")                  # the loop
+g.add_edge("generate", END)
+app = g.compile()
+
+q = "Compare our 2024 and 2025 refund policies."
+print(app.invoke({"question": q, "query": q, "docs": [], "tries": 0, "answer": ""})["answer"])`},
+
+prompteng: {note:'The same task three ways. Nothing is trained; only the messages change.', src: String.raw`# pip install openai
+from openai import OpenAI
+client = OpenAI()
+
+def ask(messages):
+    r = client.chat.completions.create(model="gpt-4o-mini", temperature=0, messages=messages)
+    return r.choices[0].message.content
+
+review = "The battery died after two hours."
+
+# ---------- ZERO-SHOT: just an instruction ----------
+print(ask([
+    {"role": "system", "content": "Classify the review as Positive or Negative. Reply with one word."},
+    {"role": "user", "content": review},
+]))
+
+# ---------- FEW-SHOT: show worked examples first ----------
+print(ask([
+    {"role": "system", "content": "Classify the review as Positive or Negative. Reply with one word."},
+    {"role": "user", "content": "Loved it, works perfectly."},
+    {"role": "assistant", "content": "Positive"},
+    {"role": "user", "content": "Broke on day one."},
+    {"role": "assistant", "content": "Negative"},
+    {"role": "user", "content": review},
+]))
+
+# ---------- CHAIN OF THOUGHT: ask for the reasoning ----------
+print(ask([
+    {"role": "user", "content":
+        "A cafe had 23 apples. It used 20 for lunch and bought 6 more. "
+        "How many apples does it have now?\n"
+        "Think step by step, then give the final answer on a new line as 'Answer: <number>'."},
+]))`},
+
+tooluse: {note:'The model returns a JSON call; your code runs it and sends the result back.', src: String.raw`# pip install openai
+import json
+from openai import OpenAI
+client = OpenAI()
+
+# 1) Your real function
+def get_weather(city: str, unit: str = "celsius") -> dict:
+    return {"city": city, "temp": 29, "unit": unit, "sky": "sunny"}   # call a real API here
+
+# 2) Describe it to the model with a JSON schema
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "get_weather",
+        "description": "Get the current weather for a city",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "city": {"type": "string"},
+                "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+            },
+            "required": ["city"],
+        },
+    },
+}]
+
+messages = [{"role": "user", "content": "What's the weather in Pune right now?"}]
+resp = client.chat.completions.create(model="gpt-4o-mini", messages=messages, tools=tools)
+msg = resp.choices[0].message
+
+# 3) The model did not answer: it asked for a tool call
+if msg.tool_calls:
+    messages.append(msg)
+    for call in msg.tool_calls:
+        args = json.loads(call.function.arguments)     # {"city": "Pune"}
+        result = get_weather(**args)                   # YOUR code executes it
+        messages.append({"role": "tool", "tool_call_id": call.id,
+                         "content": json.dumps(result)})
+
+    # 4) Send the result back so the model can write the final answer
+    final = client.chat.completions.create(model="gpt-4o-mini", messages=messages, tools=tools)
+    print(final.choices[0].message.content)   # "It's 29 C and sunny in Pune."`},
+
+agents: {note:'A ReAct agent in LangGraph: it plans, calls tools in a loop and remembers the conversation.', src: String.raw`# pip install langgraph langchain-openai
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import MemorySaver
+
+@tool
+def search_orders(customer_email: str) -> str:
+    """Look up a customer's recent orders."""
+    return "Order 1042: headphones, delivered 3 Nov, price 4999"
+
+@tool
+def refund_policy(product: str) -> str:
+    """Return the refund policy for a product category."""
+    return "Electronics can be refunded within 10 days of delivery."
+
+@tool
+def create_ticket(summary: str) -> str:
+    """Open a support ticket and return its id."""
+    return "TICKET-7781"
+
+agent = create_react_agent(
+    model=ChatOpenAI(model="gpt-4o-mini", temperature=0),      # PLANNER / reasoning
+    tools=[search_orders, refund_policy, create_ticket],       # TOOL USER
+    checkpointer=MemorySaver(),                                # MEMORY across turns
+    prompt="You are a support agent. Check the facts with tools before answering. "
+           "Before the final answer, review whether the customer's request is fully handled.",  # REFLECTION
+)
+
+cfg = {"configurable": {"thread_id": "customer-42"}}
+result = agent.invoke(
+    {"messages": [("user", "I'm asha@example.com. Can I still return my headphones?")]}, cfg)
+
+for m in result["messages"]:          # watch the loop: think -> tool -> observe -> ...
+    m.pretty_print()
+
+# Same thread_id = the agent remembers the earlier turns
+agent.invoke({"messages": [("user", "Ok, please raise the return request.")]}, cfg)`}
+};
+function hl(src){
+  const KW = /\b(from|import|def|return|for|in|if|else|elif|with|as|class|while|print|lambda|not|and|or|None|True|False)\b/g;
+  return src.split('\n').map(line=>{
+    const m = line.match(/^(\s*)#(.*)$/);
+    if (m) return m[1] + '<span class="cm">#' + esc(m[2]) + '</span>';
+    let code = line, cm = '';
+    const i = line.search(/\s{2,}# /);
+    if (i > -1) { code = line.slice(0,i); cm = '<span class="cm">' + esc(line.slice(i)) + '</span>'; }
+    return esc(code).replace(/(&quot;.*?&quot;|'[^']*')/g, '<span class="st2">$1</span>')
+      .replace(/(<span class="st2">.*?<\/span>)|\b(from|import|def|return|for|in|if|else|elif|with|as|class|while|lambda|not|and|or|None|True|False)\b/g,
+               (a,s,k)=> s ? s : '<span class="kw">'+k+'</span>') + cm;
+  }).join('\n');
+}
+
+const ORDER = ['foundation','scratch','full','lora','qlora','adapter','prefix','prompt','rag','graphrag','agenticrag','prompteng','tooluse','agents'];
+const ROWS = {
+  A:[[['scratch']]],
+  B:[[['full'],'freeze W, learn low-rank ΔW',['lora'],'+ 4-bit base',['qlora']],
+     [['adapter'],'fewer params',['prefix'],'input layer only',['prompt']]],
+  C:[[['rag'],'chunks → entities & links',['graphrag'],'+ planner & tool loop',['agenticrag']]],
+  D:[[['prompteng'],'+ structured calls',['tooluse'],'+ loop, memory, reflection',['agents']]]
+};
+const catColor = c => c==='F' ? 'var(--F)' : `var(${CATS[c].v})`;
+const catSoft  = c => c==='F' ? 'var(--F-soft)' : `var(${CATS[c].vs})`;
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* ===================== FLOWCHART ===================== */
+const flow = document.getElementById('flow');
+function legend(){
+  const L = document.getElementById('legend');
+  L.innerHTML = `<div class="lg"><span class="sw" style="background:var(--F)"></span><div><b>🧠 Foundation model</b><small>The pretrained starting point</small></div></div>` +
+    Object.entries(CATS).map(([k,c])=>`<div class="lg"><span class="sw" style="background:var(${c.v})"></span><div><b>${k}. ${c.icon} ${c.name}</b><small>${c.short}</small></div></div>`).join('');
+}
+function cardHTML(id){
+  const n = NODES[id];
+  const stats = n.stats ? `<div class="stats">${n.stats.map(s=>`<span>${s}</span>`).join('')}</div>` : (n.stat ? `<span class="stat">${n.stat}</span>` : '');
+  return `<div class="card" data-node="${id}" data-tipnode="${id}" style="--bc:${catColor(n.cat)};--bs:${catSoft(n.cat)}">
+    <div class="top"><span class="ic">${n.icon}</span><h4>${n.name}</h4></div>
+    <div class="tl">${n.tagline}</div>
+    <div class="mini">${esc(n.mini).replace(/\n/g,'<br>')}</div>
+    ${stats}
+    <div class="libs">${n.libs.slice(0,4).map(l=>`<span>${l}</span>`).join('')}</div>
+    <div class="tb">${n.types.map(t=>`<span class="tbadge ${t}">${TYPES[t]}</span>`).join('')}</div>
+  </div>`;
+}
+function buildFlow(){
+  const f = NODES.foundation;
+  let h = `<div class="fm" data-node="foundation" data-tipnode="foundation" id="fm">
+    <div class="ic">🧠</div><h3>Foundation Model</h3><p>${f.tagline}</p>
+    <div class="models"><span>GPT</span><span>Llama</span><span>Mistral</span><span>Gemma</span></div>
+    <div class="ntp"><span class="mono">"The cat sat on the"</span> → <span class="nx">mat</span></div>
+  </div>`;
+  ['A','B','C','D'].forEach((k,i)=>{
+    const c = CATS[k];
+    const count = ROWS[k].flat().filter(x=>Array.isArray(x)).length;
+    h += `<div class="cat" id="cat-${k}" data-cat="${k}" data-tipcat="${k}" style="grid-row:${i+1};background:linear-gradient(150deg,var(${c.v}),color-mix(in srgb,var(${c.v}) 70%,#000))">
+      <span class="tog">▾</span><div class="letter">SECTION ${k}</div><h3>${c.icon} ${c.name}</h3><small>${c.short}</small></div>`;
+    h += `<div class="band" id="band-${k}" style="grid-row:${i+1};--bc:var(${c.v});--bs:var(${c.vs})">
+      <div class="banner ${c.big?'big':''}">${c.banner}</div>
+      <div class="stub">${count} method${count>1?'s':''} hidden · click “${c.name}” to expand</div>
+      <div class="rows">${ROWS[k].map(row=>`<div class="mrow">${row.map(x=>Array.isArray(x)?cardHTML(x[0]):`<div class="link"><div class="lt">${x}</div><div class="ln"></div></div>`).join('')}</div>`).join('')}</div>
+      ${k==='C'?`<div class="callout" style="background:var(--card);color:var(--C);border:1.5px solid var(--C);margin-top:12px">💡 Knowledge lives <u>outside</u> the model weights: update a document, not the model.</div>`:''}
+    </div>`;
+  });
+  flow.insertAdjacentHTML('beforeend', h);
+}
+function drawWires(){
+  const svg = document.getElementById('wires');
+  const base = flow.getBoundingClientRect();
+  const pt = (el,side) => { const r = el.getBoundingClientRect(); return {x:(side==='r'?r.right:r.left)-base.left, y:r.top-base.top+r.height/2}; };
+  const curve = (a,b) => { const dx = Math.max(30,(b.x-a.x)*.5); return `M${a.x},${a.y} C${a.x+dx},${a.y} ${b.x-dx},${b.y} ${b.x},${b.y}`; };
+  let out = '', id = 0;
+  const add = (a,b,col) => {
+    const pid = 'w'+(id++);
+    out += `<path id="${pid}" class="flowing" d="${curve(a,b)}" stroke="${col}"/>`+
+      `<circle r="4.5" fill="${col}"><animateMotion dur="${2.2+Math.random()*.8}s" repeatCount="indefinite"><mpath href="#${pid}"/></animateMotion></circle>`;
+  };
+  const fm = document.getElementById('fm');
+  ['A','B','C','D'].forEach(k=>{
+    const cat = document.getElementById('cat-'+k), band = document.getElementById('band-'+k), col = `var(${CATS[k].v})`;
+    add(pt(fm,'r'), pt(cat,'l'), col);
+    if (band.classList.contains('collapsed')) add(pt(cat,'r'), pt(band.querySelector('.stub'),'l'), col);
+    else band.querySelectorAll('.mrow').forEach(r=> add(pt(cat,'r'), pt(r.querySelector('.card'),'l'), col));
+  });
+  svg.innerHTML = out;
+}
+function toggleCat(k, force){
+  const band = document.getElementById('band-'+k), cat = document.getElementById('cat-'+k);
+  const col = force===undefined ? !band.classList.contains('collapsed') : force;
+  band.classList.toggle('collapsed', col); cat.classList.toggle('collapsed', col);
+  requestAnimationFrame(drawWires);
+}
+
+/* ===================== TOOLTIP ===================== */
+const tip = document.getElementById('tip');
+function showTip(html, e){ tip.innerHTML = html; tip.classList.add('show'); moveTip(e); }
+function moveTip(e){
+  const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  if (x + w > innerWidth - 8) x = e.clientX - w - pad;
+  if (y + h > innerHeight - 8) y = e.clientY - h - pad;
+  tip.style.left = Math.max(8,x)+'px'; tip.style.top = Math.max(8,y)+'px';
+}
+document.addEventListener('mouseover', e=>{
+  const t = e.target.closest('[data-tipnode],[data-tipcat],[data-lib]');
+  if (!t) { tip.classList.remove('show'); return; }
+  if (t.dataset.lib){ const d = LIBS[t.dataset.lib]; if (d) showTip(`<b>${t.dataset.lib}</b><br>${d}`, e); return; }
+  if (t.dataset.tipcat){ const c = CATS[t.dataset.tipcat]; showTip(`<b>${c.icon} ${c.name}</b><br>${c.tip}<span class="k">Click to expand / collapse</span>`, e); return; }
+  const n = NODES[t.dataset.tipnode]; showTip(`<b>${n.icon} ${n.name}: going deeper</b><br>${n.tip}<span class="k">Click for the full card</span>`, e);
+});
+document.addEventListener('mousemove', e=>{ if (tip.classList.contains('show')) moveTip(e); });
+
+/* ===================== VISUALS ===================== */
+function pipeline(steps, color, extra=''){
+  const dur = (steps.length*.55+1.2).toFixed(2)+'s';
+  return `<div class="pipe" style="--pc:${color};--dur:${dur}">${steps.map((s,i)=>
+    `${i?'<div class="ar">→</div>':''}<div class="st" style="--i:${i}"><div class="i">${s[0]}</div><b>${s[1]}</b>${s[2]?`<small>${s[2]}</small>`:''}${s[3]?`<div class="pl">${s[3].map(l=>`<span data-lib="${l}">${l}</span>`).join('')}</div>`:''}</div>`).join('')}</div>${extra}`;
+}
+function paramGrid(pct, color, label){
+  const cells = 400, on = pct>=100 ? cells : Math.max(1, Math.round(pct/0.25));
+  let g = ''; for (let i=0;i<cells;i++) g += `<i class="${i<on?'on':''}" style="${i<on&&on<cells?'':''}${i<on?`animation-delay:${Math.min(i,120)*4}ms`:''}"></i>`;
+  return `<div style="--pc:${color}"><div class="pgrid">${g}</div>
+    <div class="pmeta"><span class="big">${label}</span><span>trainable</span><span>· each square = 0.25% of weights · <b style="color:${color}">coloured</b> = trained, grey = frozen${pct<0.25?' · (real share is smaller than one square)':''}</span></div></div>`;
+}
+function vis(title, body){ return `<div class="vis"><h5>${title}</h5>${body}</div>`; }
+const V = {
+foundation: c => vis('Next-token prediction, the only pretraining objective', `
+  <div class="pbox">"The cat sat on the ___"</div>
+  <div class="mem" style="margin-top:10px">${[['mat',62],['floor',18],['sofa',9],['roof',4]].map(([w,p])=>
+   `<div class="row"><b class="mono">${w}</b><div class="track"><div class="bar" data-w="${p}" style="background:${c}">${p}%</div></div></div>`).join('')}</div>
+  <p class="note">The model outputs a probability for every token in its vocabulary, picks one, appends it and repeats. Trillions of these predictions teach grammar, facts and reasoning patterns.</p>`),
+scratch: c => vis('The pretraining pipeline', pipeline([
+  ['🗂️','Data','web, books, code; filter + dedupe',['Unstructured']],
+  ['🔤','Tokenizer','train BPE vocab (~32K–128K)',['Tokenizers']],
+  ['🏛️','Transformer','layers, heads, context length',['PyTorch','Transformers']],
+  ['⚙️','Pretraining','next-token loss on 1000s of GPUs',['DeepSpeed','Megatron-LM','Accelerate']],
+  ['🧠','Foundation Model','general-purpose weights',[]]], c,
+  `<div class="callout" style="background:var(--A-soft);color:var(--A)">🧮 Rule of thumb: training compute ≈ 6 × parameters × tokens FLOPs. A 7B model on 2T tokens ≈ 8.4 × 10²² FLOPs.</div>`)),
+full: c => vis('What gets trained', pipeline([['🧠','Base Model','pretrained weights'],['🔥','Update ALL parameters','gradients for every weight'],['🎯','Fine-Tuned Model','new full copy']], c) + '<div style="height:12px"></div>' + paramGrid(100, c, '100%')),
+lora: c => vis('W becomes W + ΔW, where ΔW = B·A is low-rank', `
+<svg viewBox="0 0 560 210" style="width:100%;height:auto;font-family:system-ui">
+  <rect x="10" y="30" width="130" height="130" rx="8" fill="var(--frozen)"/>
+  <text x="75" y="92" text-anchor="middle" font-weight="800" font-size="22" fill="var(--frozen-ink)">W</text>
+  <text x="75" y="114" text-anchor="middle" font-size="12" fill="var(--frozen-ink)">frozen · d×k</text>
+  <text x="75" y="185" text-anchor="middle" font-size="12" fill="var(--muted)">🔒 16.8M params</text>
+  <text x="165" y="102" text-anchor="middle" font-size="28" font-weight="800" fill="var(--ink)">+</text>
+  <rect x="190" y="30" width="22" height="130" rx="5" fill="${c}"><animate attributeName="opacity" values="1;.55;1" dur="2s" repeatCount="indefinite"/></rect>
+  <text x="201" y="185" text-anchor="middle" font-size="12" font-weight="800" fill="${c}">B · d×r</text>
+  <text x="232" y="102" text-anchor="middle" font-size="22" font-weight="800" fill="var(--ink)">×</text>
+  <rect x="250" y="84" width="130" height="22" rx="5" fill="${c}"><animate attributeName="opacity" values=".55;1;.55" dur="2s" repeatCount="indefinite"/></rect>
+  <text x="315" y="130" text-anchor="middle" font-size="12" font-weight="800" fill="${c}">A · r×k</text>
+  <text x="403" y="102" text-anchor="middle" font-size="24" font-weight="800" fill="var(--ink)">=</text>
+  <rect x="425" y="30" width="130" height="130" rx="8" fill="${c}" opacity=".18" stroke="${c}" stroke-width="2" stroke-dasharray="5 4"/>
+  <text x="490" y="92" text-anchor="middle" font-weight="800" font-size="22" fill="${c}">ΔW</text>
+  <text x="490" y="114" text-anchor="middle" font-size="12" fill="${c}">rank r only</text>
+  <text x="315" y="185" text-anchor="middle" font-size="12" fill="var(--muted)">🔓 trainable: 65,536 (0.39%)</text>
+</svg>
+<div class="pbox">h = W·x + (α/r)·B·A·x        d = k = 4096, r = 8
+B starts at 0  →  ΔW = 0  →  training starts at the base model
+After training: merge W′ = W + BA  →  no extra inference cost</div>`) + vis('What gets trained', paramGrid(0.5, c, '≈ 0.5%')),
+qlora: c => vis('GPU memory to fine-tune a 7B model (approx.)', `
+<div class="mem gp">
+  ${[['Full FT',120,'var(--A)','~120 GB','weights + gradients + Adam states (≈16 bytes / param), multi-GPU'],['LoRA',18,c,'~18 GB','16-bit frozen base + tiny adapters'],['QLoRA',8,'var(--C)','~8 GB','4-bit frozen base + tiny adapters']].map(([n,v,col,l,d])=>
+  `<div class="row"><b>${n}</b><div class="track"><div class="bar" data-w="${Math.max(v/120*100,14)}" style="background:${col}">${l}</div>${n==='Full FT'?`<div class="gpu" style="left:${24/120*100}%"><span>24 GB GPU</span></div>`:''}</div><small>${d}</small></div>`).join('')}
+</div>
+<p class="note">Bars to the left of the green dashed line fit on a single 24 GB card (e.g. RTX 4090). The QLoRA paper fine-tuned a 65B model on one 48 GB GPU.</p>`) +
+ vis('The recipe', pipeline([['🗜️','4-bit NF4 base','frozen, double-quantised'],['🔁','De-quantise on the fly','bf16 matmul per layer'],['🧩','LoRA adapters','only these get gradients'],['📟','Paged optimizer','spills to CPU on spikes']], c)),
+adapter: c => vis('Where adapters sit inside one transformer layer', `
+<div class="adapt" style="--pc:${c}">
+  <div class="col">
+    <div class="blk">Input hidden state</div><div class="blk">Multi-head attention 🔒</div><div class="blk ad">Adapter 🔓</div><div class="blk">Add &amp; Norm</div>
+    <div class="blk">Feed-forward 🔒</div><div class="blk ad">Adapter 🔓</div><div class="blk">Add &amp; Norm</div>
+  </div>
+  <div class="col">
+    <div class="blk n">Inside one adapter</div>
+    <div class="blk">h (4096)</div><div class="blk ad">Down-project → 64</div><div class="blk ad">ReLU / GELU</div><div class="blk ad">Up-project → 4096</div>
+    <div class="blk" style="background:var(--good);color:#fff">+ residual (h)</div>
+  </div>
+</div>`) + vis('What gets trained', paramGrid(2, c, '≈ 2%')),
+prefix: c => vis('Learned vectors prepended in EVERY layer', layerStack(c, true)) + vis('What gets trained', paramGrid(0.1, c, '≈ 0.1%')),
+prompt: c => vis('Soft prompts only: input layer only', layerStack(c, false)) + vis('What gets trained', paramGrid(0.01, c, '≈ 0.01%')),
+rag: c => vis('The RAG pipeline (hover a library for what it does)', pipeline([
+  ['📄','Documents','PDFs, wikis, tickets',['Unstructured','LlamaIndex']],
+  ['✂️','Chunking','300–1000 tokens + overlap',['LangChain','LlamaIndex']],
+  ['🔢','Embedding Model','text → vector',['SentenceTransformers','OpenAI Embeddings','BGE Models']],
+  ['🗄️','Vector Database','store + index vectors',['FAISS','Chroma','Pinecone','Weaviate','Milvus']],
+  ['🎯','Retrieval','top-k by cosine similarity',['LangChain','LlamaIndex']],
+  ['🧱','Prompt Construction','question + context + rules',['LangChain','LlamaIndex','DSPy']],
+  ['🧠','LLM','frozen model',['OpenAI SDK','Transformers','vLLM']],
+  ['✅','Response','grounded, with citations',['RAGAS']]], c,
+  `<div class="callout" style="background:var(--C-soft);color:var(--C)">💡 Knowledge lives outside model weights.</div>
+   <p class="note">Indexing (Documents → Vector DB) happens once, offline. Retrieval → Response runs for every question. Common upgrades: hybrid keyword + vector search, a re-ranker, query rewriting.</p>`)),
+graphrag: c => vis('Pipeline', pipeline([['📄','Documents',''],['🏷️','Entity Extraction','LLM / NER finds entities + relations',['LangChain','LlamaIndex']],['🕸️','Knowledge Graph','nodes + edges',['Neo4j']],['🧭','Graph Retrieval','walk neighbourhoods / communities',['Neo4j','MS GraphRAG']],['🧠','LLM','answers from subgraph']], c)) +
+ vis('A tiny knowledge graph', `<svg viewBox="0 0 560 190" style="width:100%;height:auto;font-family:system-ui">
+  ${[['Acme Corp',90,50],['Beta Ltd',300,40],['Priya Rao',480,110],['Recall #42',300,150],['Gamma Inc',90,150]].map(([t,x,y])=>`<g><circle cx="${x}" cy="${y}" r="30" fill="${c}" opacity=".16" stroke="${c}" stroke-width="2"/><text x="${x}" y="${y+4}" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">${t}</text></g>`).join('')}
+  ${[[120,48,270,42,'acquired'],[330,55,452,100,'CEO'],[300,70,300,120,'affected by'],[120,150,270,150,'supplies'],[90,80,90,120,'partner']].map(([x1,y1,x2,y2,l])=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="2" stroke-dasharray="6 5"><animate attributeName="stroke-dashoffset" from="22" to="0" dur="1s" repeatCount="indefinite"/></line><text x="${(x1+x2)/2+4}" y="${(y1+y2)/2-5}" font-size="10.5" font-weight="700" fill="${c}">${l}</text>`).join('')}
+ </svg><p class="note">“Which partner of Acme supplies a company hit by Recall #42?” needs three hops. Vector search would struggle; a graph walk answers it directly.</p>`),
+agenticrag: c => vis('Pipeline with a feedback loop', pipeline([['❓','Question',''],['🗺️','Planner','split into sub-questions'],['🧰','Tool Selection','vector DB? SQL? web?'],['🔎','Retrieval','run chosen tools'],['🤔','Reasoning','is evidence enough?'],['✅','Answer','cited, verified']], c,
+ `<div class="loopnote" style="--pc:${c}"><span class="spin">↺</span> Not enough evidence? Reasoning sends control back to the Planner to rewrite the query or try another source.</div>`)),
+prompteng: c => vis('Three core styles (click a tab)', `
+<div class="tabs" data-tabs>
+ <button class="on" data-t="0">Zero-shot</button><button data-t="1">Few-shot</button><button data-t="2">Chain of Thought</button>
+</div>
+<div data-pane="0"><div class="pbox"><span class="lbl">Prompt</span>Classify the sentiment as Positive or Negative.
+Review: "The battery died after two hours."</div><div class="pbox out"><span class="lbl">Output</span>Negative</div><p class="note">Just an instruction. Works for common tasks on capable models.</p></div>
+<div data-pane="1" hidden><div class="pbox"><span class="lbl">Prompt</span>Review: "Loved it, works perfectly." → Positive
+Review: "Broke on day one." → Negative
+Review: "The battery died after two hours." →</div><div class="pbox out"><span class="lbl">Output</span>Negative</div><p class="note">A few worked examples show the format and the decision boundary (in-context learning).</p></div>
+<div data-pane="2" hidden><div class="pbox"><span class="lbl">Prompt</span>A café had 23 apples. It used 20 for lunch and bought 6 more.
+How many apples does it have? Let's think step by step.</div><div class="pbox out"><span class="lbl">Output</span>Start with 23. After lunch: 23 − 20 = 3.
+After buying: 3 + 6 = 9.  Answer: 9</div><p class="note">Asking for intermediate reasoning improves maths and logic, especially on larger models.</p></div>`),
+tooluse: c => vis('LLM ⇄ Tools ⇄ APIs ⇄ Databases', `
+<svg viewBox="0 0 560 230" style="width:100%;height:auto;font-family:system-ui">
+ ${[['🔧 Tools','calculator, code',90,50],['🌐 APIs','weather, payments',470,50],['🗄️ Databases','SQL, CRM',90,185],['📨 Actions','email, tickets',470,185]].map(([t,s,x,y],i)=>{
+   const p=`M280,115 L${x},${y}`; return `<path id="tu${i}" d="${p}" stroke="${c}" stroke-width="2" stroke-dasharray="6 5" fill="none" opacity=".6"/>
+   <circle r="5" fill="${c}"><animateMotion dur="2s" begin="${i*.4}s" repeatCount="indefinite" keyPoints="0;1;0" keyTimes="0;.5;1" calcMode="linear"><mpath href="#tu${i}"/></animateMotion></circle>
+   <rect x="${x-62}" y="${y-22}" width="124" height="44" rx="10" fill="var(--card)" stroke="${c}" stroke-width="2"/>
+   <text x="${x}" y="${y-2}" text-anchor="middle" font-size="13" font-weight="800" fill="var(--ink)">${t}</text><text x="${x}" y="${y+14}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${s}</text>`}).join('')}
+ <circle cx="280" cy="115" r="42" fill="${c}"/><text x="280" y="112" text-anchor="middle" font-size="15" font-weight="800" fill="#fff">LLM</text><text x="280" y="129" text-anchor="middle" font-size="10.5" fill="#fff">decides calls</text>
+</svg>`) + vis('One round-trip', pipeline([['🙋','User asks','“Weather in Pune?”'],['🧠','LLM emits call','JSON, not text'],['⚙️','Your code runs it','calls the API'],['📦','Result returned','{"temp":29}'],['💬','LLM answers','“29 °C and sunny”']], c,
+ `<div class="pbox" style="margin-top:10px"><span class="lbl">What the model actually returns</span>{"name": "get_weather", "arguments": {"city": "Pune", "unit": "celsius"}}</div>`)),
+agents: c => vis('The agent loop', `
+<svg viewBox="0 0 560 250" style="width:100%;height:auto;font-family:system-ui">
+ <circle id="aloop" cx="200" cy="125" r="88" fill="none" stroke="${c}" stroke-width="2.5" stroke-dasharray="7 6" opacity=".55"/>
+ <path id="aring" d="M200,37 a88,88 0 1,1 -0.1,0" fill="none"/>
+ <circle r="7" fill="${c}"><animateMotion dur="4s" repeatCount="indefinite"><mpath href="#aring"/></animateMotion></circle>
+ ${[['🗺️ Planner',200,37],['🛠️ Tool User',288,125],['🧠 Memory',200,213],['🪞 Reflection',112,125]].map(([t,x,y])=>`<rect x="${x-56}" y="${y-17}" width="112" height="34" rx="9" fill="var(--card)" stroke="${c}" stroke-width="2"/><text x="${x}" y="${y+5}" text-anchor="middle" font-size="13" font-weight="800" fill="var(--ink)">${t}</text>`).join('')}
+ <path d="M345,125 L420,125" stroke="var(--good)" stroke-width="3" marker-end="url(#ah)"/>
+ <defs><marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--good)"/></marker></defs>
+ <text x="382" y="112" text-anchor="middle" font-size="11" font-weight="700" fill="var(--good)">goal met</text>
+ <rect x="425" y="104" width="125" height="42" rx="10" fill="var(--good)"/><text x="487" y="130" text-anchor="middle" font-size="13.5" font-weight="800" fill="#fff">✅ Final Answer</text>
+ <text x="200" y="158" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--muted)">↻ repeat</text><text x="200" y="173" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--muted)">until done</text>
+</svg>
+<p class="note">Planner picks the next step · Tool User calls APIs / RAG / code · Memory stores results and history · Reflection critiques progress and may re-plan.</p>`)
+};
+function layerStack(c, every){
+  const words = ['Summarise','this','article'];
+  const rows = ['Layer N','…','Layer 2','Layer 1','Input embeds'];
+  return `<div class="stack" style="--pc:${c}">${rows.map((r,i)=>{
+    const isInput = i===rows.length-1, showP = every ? r!=='…' : isInput;
+    if (r==='…') return `<div class="lay"><span class="nm">⋮</span></div>`;
+    return `<div class="lay"><span class="nm">${r}</span>${showP?['P1','P2','P3'].map(p=>`<span class="tok p">${p}</span>`).join(''):['','',''].map(()=>`<span class="tok" style="opacity:.25">·</span>`).join('')}${words.map(w=>`<span class="tok">${w}</span>`).join('')}</div>`;}).join('')}</div>
+  <p class="note">${every ? 'Coloured P-vectors are trainable and injected as extra keys/values into every layer’s attention. Grey real tokens and all model weights are frozen.' : 'Only the input layer gets trainable soft-prompt vectors. Deeper layers see their effect only through normal attention. Everything else is frozen.'}</p>`;
+}
+
+/* ===================== DRAWER ===================== */
+const drawer = document.getElementById('drawer'), scrim = document.getElementById('scrim');
+let current = null;
+function openNode(id){
+  const n = NODES[id]; if (!n) return; current = id;
+  const c = catColor(n.cat);
+  const crumb = n.cat==='F' ? 'STARTING NODE' : `SECTION ${n.cat} · ${CATS[n.cat].name.toUpperCase()}`;
+  document.getElementById('dh').style.background = `linear-gradient(135deg,${c},color-mix(in srgb,${c} 65%,#000))`;
+  document.getElementById('dh').innerHTML = `<button class="x" aria-label="Close" onclick="closeNode()">✕</button>
+    <div class="crumb">${crumb}</div><h2>${n.icon} ${n.name}</h2><p>${n.tagline}</p>
+    <div class="tb">${n.types.map(t=>`<span class="tbadge">${TYPES[t]}</span>`).join('')}${n.stat?`<span class="tbadge">${n.stat}</span>`:''}${(n.stats||[]).map(s=>`<span class="tbadge">${s}</span>`).join('')}</div>`;
+  const wm = WM[n.wm];
+  const q = (i,title,body,open=true) => `<details class="q" ${open?'open':''} style="--qc:${c}"><summary><span class="n">${i}</span>${title}</summary><div class="qb">${body}</div></details>`;
+  document.getElementById('db').innerHTML =
+    (V[id] ? V[id](c) : '') +
+    q(1,'What is it?', n.what) +
+    q(2,'Why is it used?', n.why) +
+    q(3,'What changes in the model?', `<div class="wm" style="background:color-mix(in srgb,var(${wm.c}) 14%,transparent);color:var(${wm.c})">${wm.t}</div><div>${n.changes}</div>`) +
+    q(4,'Typical Python libraries', `<div class="libchips">${n.libs.map(l=>`<span class="lib" data-lib="${l}" style="--lc:${c}" title="${esc(LIBS[l]||'')}">${l}</span>`).join('')}</div><p class="note">Hover (or long-press) a library to see what it does.</p>`) +
+    q(5,'Advantages', `<ul class="pros">${n.pros.map(x=>`<li>${x}</li>`).join('')}</ul>`) +
+    q(6,'Limitations', `<ul class="cons">${n.cons.map(x=>`<li>${x}</li>`).join('')}</ul>`) +
+    q(7,'Real-world examples', `<ul>${n.examples.map(x=>`<li>${x}</li>`).join('')}</ul>`) +
+    (CODE[id] ? q(8,'Sample Python code', `<p class="note" style="margin:0 0 8px">${CODE[id].note}</p><div class="codebox"><button class="copy" data-copy="${id}">📋 Copy</button><pre><code>${hl(CODE[id].src)}</code></pre></div><p class="note">Illustrative starter code: swap in your own model name, data and API keys. Library APIs change between versions, so check the docs if an import fails.</p>`) : '') +
+    `<div class="oneliner"><b>🎤 Interview one-liner</b>${n.interview}</div>` +
+    `<div class="related"><span class="hint" style="margin:3px 4px 0 0">Related:</span>${n.related.map(r=>`<button style="--rc:${catColor(NODES[r].cat)}" data-open="${r}">${NODES[r].icon} ${NODES[r].name}</button>`).join('')}</div>`;
+  document.getElementById('db').scrollTop = 0;
+  drawer.classList.add('show'); scrim.classList.add('show'); drawer.setAttribute('aria-hidden','false');
+  tip.classList.remove('show');
+  setTimeout(()=>document.querySelectorAll('#db .bar[data-w]').forEach(b=>b.style.width=Math.max(b.dataset.w,9)+'%'), 60);
+  const i = ORDER.indexOf(id);
+  document.getElementById('prevBtn').disabled = i<=0; document.getElementById('nextBtn').disabled = i>=ORDER.length-1;
+}
+function fallbackCopy(t,done){ const a=document.createElement('textarea'); a.value=t; document.body.appendChild(a); a.select(); try{document.execCommand('copy'); done();}catch(e){} a.remove(); }
+function closeNode(){ drawer.classList.remove('show'); scrim.classList.remove('show'); drawer.setAttribute('aria-hidden','true'); current=null; }
+scrim.onclick = closeNode;
+document.addEventListener('keydown', e=>{
+  if (!current) return;
+  if (e.key==='Escape') closeNode();
+  if (e.key==='ArrowRight') step(1);
+  if (e.key==='ArrowLeft') step(-1);
+});
+function step(d){ const i = ORDER.indexOf(current)+d; if (i>=0 && i<ORDER.length) openNode(ORDER[i]); }
+document.getElementById('prevBtn').onclick = ()=>step(-1);
+document.getElementById('nextBtn').onclick = ()=>step(1);
+document.addEventListener('click', e=>{
+  const tabBtn = e.target.closest('[data-tabs] button');
+  if (tabBtn){
+    const box = tabBtn.closest('.vis');
+    box.querySelectorAll('[data-tabs] button').forEach(b=>b.classList.toggle('on', b===tabBtn));
+    box.querySelectorAll('[data-pane]').forEach(p=>p.hidden = p.dataset.pane!==tabBtn.dataset.t);
+    return;
+  }
+  const cp = e.target.closest('[data-copy]');
+  if (cp){
+    const txt = CODE[cp.dataset.copy].src, done = ()=>{ cp.textContent='✓ Copied'; setTimeout(()=>cp.textContent='📋 Copy',1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, ()=>fallbackCopy(txt,done)); else fallbackCopy(txt,done);
+    return;
+  }
+  const o = e.target.closest('[data-open]'); if (o){ openNode(o.dataset.open); return; }
+  const nd = e.target.closest('[data-node]'); if (nd){ openNode(nd.dataset.node); return; }
+  const ct = e.target.closest('[data-cat]'); if (ct){ toggleCat(ct.dataset.cat); return; }
+});
+
+/* ===================== RELATIONSHIP MAP ===================== */
+function buildRel(){
+  const svg = document.getElementById('relmap');
+  const N = {
+    full:{x:85,y:100,t:'🔥 Full FT',c:'--B',open:'full'},
+    peft:{x:270,y:100,t:'🤗 PEFT library',hub:1,c:'--B'},
+    lora:{x:85,y:280,t:'🧩 LoRA',c:'--B',open:'lora'},
+    qlora:{x:85,y:385,t:'🗜️ QLoRA',c:'--B',open:'qlora'},
+    adapter:{x:280,y:200,t:'🔌 Adapters',c:'--B',open:'adapter'},
+    prefix:{x:280,y:310,t:'🧷 Prefix',c:'--B',open:'prefix'},
+    prompt:{x:280,y:420,t:'💬 Prompt Tuning',c:'--B',open:'prompt'},
+    rhub:{x:515,y:100,t:'🦜 LangChain · LlamaIndex',hub:1,c:'--C'},
+    rag:{x:515,y:200,t:'🔎 RAG',c:'--C',open:'rag'},
+    graphrag:{x:440,y:310,t:'🕸️ Graph RAG',c:'--C',open:'graphrag'},
+    agenticrag:{x:592,y:310,t:'🕵️ Agentic RAG',c:'--C',open:'agenticrag'},
+    vdb:{x:515,y:430,t:'🗄️ Vector DBs',hub:1,c:'--C'},
+    ahub:{x:830,y:100,t:'🧰 LangGraph · CrewAI · AutoGen',hub:1,c:'--D'},
+    tooluse:{x:745,y:200,t:'🛠️ Tool Use / MCP',c:'--D',open:'tooluse'},
+    agents:{x:910,y:310,t:'🤖 Agents',c:'--D',open:'agents'},
+    prompteng:{x:745,y:420,t:'✍️ Prompt Eng.',c:'--D',open:'prompteng'},
+    fm:{x:515,y:556,t:'🧠 Foundation Model',c:'--F',open:'foundation'},
+    pA:{x:190,y:490,anchor:1},pC:{x:515,y:490,anchor:1},pD:{x:828,y:490,anchor:1}
+  };
+  const E = [
+    ['full','lora','low-rank ΔW',0,{lx:85,ly:195}],['peft','lora','implements'],['peft','adapter','implements'],
+    ['lora','qlora','+ 4-bit base'],['adapter','prefix','fewer params'],['prefix','prompt','input layer only'],
+    ['rhub','rag','orchestrates'],['rag','graphrag','+ graph'],['rag','agenticrag','+ agent loop'],['vdb','rag','stores the vectors',0,{lx:515,ly:392}],
+    ['ahub','agents','runs agents'],['ahub','tooluse','tool wrappers'],['tooluse','agents','+ loop & memory'],['tooluse','agenticrag','retriever = a tool'],
+    ['prompteng','tooluse','+ structured calls',0,{lx:745,ly:358}],['prompteng','agents','CoT / ReAct'],
+    ['agenticrag','agents','RAG as a skill',1,{lx:745,ly:303}],['qlora','rag','',1],
+    ['fm','pA','fine-tune it',1],['fm','pC','ground it',1],['fm','pD','orchestrate it',1]
+  ];
+  const W = n => n.hub ? Math.max(150, n.t.length*7.4) : Math.max(118, n.t.length*8);
+  let h = `<text class="cl" x="190" y="32" text-anchor="middle" fill="var(--B)">PEFT &amp; fine-tuning</text>
+    <text class="cl" x="515" y="32" text-anchor="middle" fill="var(--C)">Retrieval (RAG family)</text>
+    <text class="cl" x="828" y="32" text-anchor="middle" fill="var(--D)">Agents &amp; tools</text>
+    <rect x="15" y="45" width="350" height="445" rx="18" fill="var(--B-soft)" opacity=".6"/>
+    <rect x="375" y="45" width="280" height="445" rx="18" fill="var(--C-soft)" opacity=".6"/>
+    <rect x="665" y="45" width="325" height="445" rx="18" fill="var(--D-soft)" opacity=".6"/>`;
+  E.forEach(([a,b,l,dash,pos])=>{
+    const A=N[a],B=N[b]; const col = dash ? 'var(--muted)' : `var(${B.c||A.c})`;
+    let d = `M${A.x},${A.y} L${B.x},${B.y}`;
+    if (a==='qlora'&&b==='rag') d = `M${A.x+60},${A.y+8} C${A.x+170},${A.y+90} ${B.x-210},${B.y+40} ${B.x-30},${B.y+18}`;
+    h += `<path class="e ${dash?'dashed':''}" data-a="${a}" data-b="${b}" d="${d}" stroke="${col}"/>`;
+    if (l){ const mx = pos ? pos.lx : (A.x+B.x)/2, my = pos ? pos.ly : (A.y+B.y)/2;
+      h += `<text class="el" data-a="${a}" data-b="${b}" x="${mx}" y="${my+4}" text-anchor="middle" fill="${col}" paint-order="stroke" stroke="var(--card)" stroke-width="5">${l}</text>`; }
+  });
+  Object.entries(N).forEach(([k,n])=>{
+    if (n.anchor) return;
+    const w=W(n), col=`var(${n.c})`;
+    h += `<g class="n" data-k="${k}" ${n.open?`data-open="${n.open}"`:''}>
+      <rect x="${n.x-w/2}" y="${n.y-18}" width="${w}" height="36" rx="${n.hub?18:9}" fill="${n.hub?col:'var(--card)'}" stroke="${col}"/>
+      <text x="${n.x}" y="${n.y+5}" text-anchor="middle" fill="${n.hub?'#fff':'var(--ink)'}">${n.t}</text></g>`;
+  });
+  svg.innerHTML = h;
+  svg.querySelectorAll('.n').forEach(g=>{
+    g.addEventListener('mouseenter',()=>{
+      const k=g.dataset.k; svg.classList.add('focus'); const keep=new Set([k]);
+      svg.querySelectorAll('.e,.el').forEach(e=>{ if(e.dataset.a===k||e.dataset.b===k){ e.classList.add('hi'); keep.add(e.dataset.a); keep.add(e.dataset.b);} });
+      svg.querySelectorAll('.n').forEach(x=>x.classList.toggle('hi', keep.has(x.dataset.k)));
+    });
+    g.addEventListener('mouseleave',()=>{ svg.classList.remove('focus'); svg.querySelectorAll('.hi').forEach(x=>x.classList.remove('hi')); });
+  });
+  // put edges under nodes
+}
+
+/* ===================== DECISION HELPER ===================== */
+const DQ = {
+  start:{q:'Does the model lack knowledge it needs (private, recent or fast-changing facts)?', o:[
+    ['Yes, it needs our documents / fresh facts','Knowledge problem','kn'],
+    ['No, it needs to take actions or use live systems','Action problem','act'],
+    ['No, the facts are fine but the behaviour, format or style is wrong','Behaviour problem','beh']]},
+  kn:{q:'What do the questions look like?', o:[
+    ['Mostly “find the relevant passage and answer”','Single lookup',{r:'rag'}],
+    ['Connecting entities across many documents (multi-hop, themes)','Relationships',{r:'graphrag'}],
+    ['Multi-step: several sources, sub-questions, may need re-searching','Complex research',{r:'agenticrag'}]]},
+  act:{q:'How many steps does the task need?', o:[
+    ['One or two well-defined calls (look up, compute, write to a system)','Single action',{r:'tooluse'}],
+    ['Open-ended: plan, act, check, repeat until a goal is reached','Multi-step goal',{r:'agents'}]]},
+  beh:{q:'Have you tried strong prompting (clear instructions, few-shot, CoT)?', o:[
+    ['Not yet','Start cheap',{r:'prompteng'}],
+    ['Yes, and it still is not good enough','Need training','train']]},
+  train:{q:'What is your compute budget and data situation?', o:[
+    ['One consumer / small cloud GPU (≤ 24 GB)','Tight budget',{r:'qlora'}],
+    ['A decent GPU (40–80 GB) and hundreds–thousands of examples','Moderate',{r:'lora'}],
+    ['A multi-GPU cluster, lots of data, maximum quality needed','Large',{r:'full'}],
+    ['No suitable model exists (new language / modality) and a huge budget','Extreme',{r:'scratch'}]]}
+};
+const WHY = {
+  rag:'Your problem is missing knowledge. Index the documents and retrieve at question time: facts stay fresh and citeable, and no training is needed.',
+  graphrag:'Relationship-heavy, multi-hop questions are where plain vector similarity breaks down. A knowledge graph lets you follow the links.',
+  agenticrag:'One retrieval pass is not enough. Let an agent plan sub-questions, route them to the right sources and verify before answering.',
+  tooluse:'A fixed tool call is simpler, cheaper and more predictable than a full agent. Describe the function and let the model fill in the arguments.',
+  agents:'The steps are not known in advance, so you need a loop that plans, acts, remembers and reflects. Add budgets and guardrails.',
+  prompteng:'Prompting is free and instant. Many “we need fine-tuning” problems disappear with a clear system prompt, examples and an output schema.',
+  qlora:'QLoRA gives you fine-tuning on a single small GPU by freezing a 4-bit base and training only LoRA adapters.',
+  lora:'LoRA gets close to full fine-tuning quality at a fraction of the memory, and the adapter can be merged for free inference.',
+  full:'With the budget and data to support it, updating every weight gives the most flexibility and usually the best task quality.',
+  scratch:'Only when nothing existing can be adapted. Expect trillions of tokens and serious distributed-training engineering.'
+};
+let dpath = [];
+function renderDQ(key){
+  const s = DQ[key], el = document.getElementById('dq');
+  el.innerHTML = `<div class="step">Question ${dpath.length+1}</div><h3>${s.q}</h3><div class="opts">${s.o.map((o,i)=>`<button data-di="${i}">${o[0]}<small>${o[1]}</small></button>`).join('')}</div>
+    <div class="dpath">${dpath.map(p=>`<span>${p}</span>`).join('')}${dpath.length?`<button class="btn" id="dreset" style="padding:2px 8px">↺ restart</button>`:''}</div>`;
+  el.querySelectorAll('[data-di]').forEach(b=>b.onclick=()=>{
+    const o = s.o[+b.dataset.di]; dpath.push(o[1]);
+    if (typeof o[2]==='string') renderDQ(o[2]); else { showRes(o[2].r); renderDone(); }
+  });
+  const r = document.getElementById('dreset'); if (r) r.onclick = resetDQ;
+}
+function renderDone(){
+  document.getElementById('dq').innerHTML = `<div class="step">Done</div><h3>Path taken</h3><div class="dpath">${dpath.map(p=>`<span>${p}</span>`).join('<span style="background:none">→</span>')}</div><div style="margin-top:14px"><button class="btn" id="dreset">↺ Start again</button></div>`;
+  document.getElementById('dreset').onclick = resetDQ;
+}
+function showRes(id){
+  const n = NODES[id], c = catColor(n.cat), d = document.getElementById('dres');
+  d.className = 'dres'; d.style.background = `linear-gradient(140deg,${c},color-mix(in srgb,${c} 62%,#000))`;
+  d.innerHTML = `<div class="step" style="opacity:.85;font-size:12px;font-weight:800;letter-spacing:.06em">RECOMMENDED</div><h3>${n.icon} ${n.name}</h3><p>${n.tagline}</p>
+   <div class="why">${WHY[id]}</div><button data-open="${id}">Open the full card →</button>`;
+}
+function resetDQ(){ dpath=[]; const d=document.getElementById('dres'); d.className='dres idle'; d.style.background=''; d.innerHTML='<h3>Your recommendation appears here</h3><p>Work through the questions on the left.</p>'; renderDQ('start'); }
+
+/* ===================== COMPARISON ===================== */
+const CMP = [
+  {id:'scratch', w:['yes','Creates 100%'], gpu:5, data:'Trillions of tokens of raw text', inf:[2,'Depends on size you build'], fresh:[1,'Frozen at training'], libs:['PyTorch','DeepSpeed','Megatron-LM'], extra:1},
+  {id:'full', w:['yes','100% of weights'], gpu:5, data:'Labelled task data (thousands+)', inf:[2,'Same as base; full copy per task'], fresh:[1,'Frozen at training'], libs:['Transformers','Trainer','Accelerate']},
+  {id:'lora', w:['part','~0.1–2% (adapter)'], gpu:3, data:'Labelled examples (hundreds–thousands)', inf:[2,'Same as base once merged'], fresh:[1,'Frozen at training'], libs:['PEFT','Transformers']},
+  {id:'qlora', w:['part','LoRA on 4-bit base'], gpu:2, data:'Labelled examples (hundreds–thousands)', inf:[2,'≈ base; 4-bit can be slower'], fresh:[1,'Frozen at training'], libs:['PEFT','bitsandbytes','Transformers']},
+  {id:'prefix', w:['part','~0.1% prefix vectors'], gpu:2, data:'Labelled examples', inf:[2,'Prefix eats some context'], fresh:[1,'Frozen at training'], libs:['PEFT'], extra:1},
+  {id:'prompt', w:['part','<0.01% soft prompt'], gpu:2, data:'Labelled examples', inf:[2,'+ a few virtual tokens'], fresh:[1,'Frozen at training'], libs:['PEFT']},
+  {id:'adapter', w:['part','~1–4% inserted layers'], gpu:3, data:'Labelled examples', inf:[3,'Extra layers add latency'], fresh:[1,'Frozen at training'], libs:['PEFT','adapters']},
+  {id:'rag', w:['no','None'], gpu:1, data:'Your documents (no labels)', inf:[3,'Retrieval + longer prompts'], fresh:[5,'Real-time: re-index a doc'], libs:['LangChain','LlamaIndex','FAISS','Chroma']},
+  {id:'graphrag', w:['no','None'], gpu:2, data:'Documents → knowledge graph', inf:[3,'Graph queries + context'], fresh:[4,'Update graph (re-extract)'], libs:['Neo4j','LangChain','LlamaIndex']},
+  {id:'agenticrag', w:['no','None'], gpu:1, data:'Documents + tool access', inf:[4,'Several LLM calls per answer'], fresh:[5,'Real-time, multi-source'], libs:['LangGraph','CrewAI','AutoGen','LangChain']},
+  {id:'prompteng', w:['no','None'], gpu:1, data:'A few examples in the prompt', inf:[2,'Longer prompts cost tokens'], fresh:[1,'Only what you paste in'], libs:['OpenAI SDK','LangChain'], extra:1},
+  {id:'tooluse', w:['no','None'], gpu:1, data:'Tool / API definitions', inf:[3,'Extra round-trips'], fresh:[5,'Live via APIs'], libs:['OpenAI SDK','LangChain','MCP']},
+  {id:'agents', w:['no','None'], gpu:1, data:'Tools, APIs, memory store', inf:[5,'Many loops & calls'], fresh:[5,'Live via tools'], libs:['LangGraph','CrewAI','AutoGen']}
+];
+let cmpFilter = new Set(['A','B','C','D']), cmpSort = null, cmpDir = -1, showExtra = true;
+function dots(n,col){ return `<span class="dots" style="--dc:${col}">${[1,2,3,4,5].map(i=>`<i class="${i<=n?'on':''}"></i>`).join('')}</span>`; }
+function buildFilters(){
+  const F = document.getElementById('filters');
+  F.innerHTML = `<span class="hint" style="margin:0 4px 0 0;font-weight:700">Show:</span>` + Object.entries(CATS).map(([k,c])=>`<button class="fchip on" data-f="${k}" style="--fc:var(${c.v})">${c.icon} ${c.name}</button>`).join('') +
+    `<button class="fchip all on" id="extraBtn">＋ Extra rows (scratch, prefix, prompting)</button>`;
+  F.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{ const k=b.dataset.f; cmpFilter.has(k)?cmpFilter.delete(k):cmpFilter.add(k); b.classList.toggle('on'); buildTable(); });
+  document.getElementById('extraBtn').onclick = e=>{ showExtra=!showExtra; e.currentTarget.classList.toggle('on'); buildTable(); };
+}
+function buildTable(){
+  const cols = [['Method',null],['Weight updates?',null],['GPU cost','gpu'],['Additional data?',null],['Inference cost','inf'],['Knowledge freshness','fresh'],['Typical libraries',null]];
+  let rows = CMP.filter(r=>cmpFilter.has(NODES[r.id].cat) && (showExtra || !r.extra));
+  if (cmpSort){ const v = r => cmpSort==='gpu' ? r.gpu : r[cmpSort][0]; rows = rows.slice().sort((a,b)=>(v(a)-v(b))*cmpDir); }
+  const T = document.getElementById('cmp');
+  T.innerHTML = `<thead><tr>${cols.map(([t,k])=>`<th class="${k?'s':''}" ${k?`data-s="${k}"`:''}>${t}${k?` <span class="arr">${cmpSort===k?(cmpDir>0?'▲':'▼'):'⇅'}</span>`:''}</th>`).join('')}</tr></thead><tbody>` +
+    rows.map(r=>{ const n=NODES[r.id], c=catColor(n.cat);
+      const wl = {yes:'Yes',part:'Partial',no:'No'}[r.w[0]];
+      return `<tr class="r" data-open="${r.id}" style="--bc:${c};--bs:${catSoft(n.cat)}">
+        <td class="m">${n.icon} ${n.name}<small>${CATS[n.cat].name}</small></td>
+        <td class="cell"><span class="${r.w[0]}">${wl}</span><small>${r.w[1]}</small></td>
+        <td class="cell">${dots(r.gpu,'var(--A)')}<small>${['','Near zero','Low','Medium','High','Very high'][r.gpu]}</small></td>
+        <td class="cell">${r.data}</td>
+        <td class="cell">${dots(r.inf[0],'var(--D)')}<small>${r.inf[1]}</small></td>
+        <td class="cell">${dots(r.fresh[0],'var(--C)')}<small>${r.fresh[1]}</small></td>
+        <td><div class="tl2">${r.libs.map(l=>`<span data-lib="${l}">${l}</span>`).join('')}</div></td></tr>`; }).join('') + `</tbody>`;
+  T.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const k=th.dataset.s; if (cmpSort===k) cmpDir*=-1; else { cmpSort=k; cmpDir=-1; } buildTable(); });
+}
+
+/* ===================== QUICK-FIRE ===================== */
+const QF = [
+  ['B','When would you choose LoRA over full fine-tuning?','Almost always when GPU memory, storage or number of tasks matter. LoRA reaches near-full quality with ~0.1–2% trainable weights and a few-MB adapter per task. Choose full fine-tuning only when the task is far from pretraining data and you have the compute.'],
+  ['B','Why is matrix B initialised to zero in LoRA?','So ΔW = BA = 0 at step 0. The model starts exactly as the pretrained base and training only moves it as far as the data demands. A is random so gradients can flow.'],
+  ['B','Does LoRA add inference latency? Do adapters?','LoRA: no, once merged (W′ = W + BA) the architecture is unchanged. Bottleneck adapters: yes, they are extra sequential layers that cannot be merged.'],
+  ['B','What exactly does QLoRA quantise?','Only the frozen base weights, to 4-bit NF4, with double quantisation of the scaling constants. Computation happens in bf16 after on-the-fly de-quantisation, LoRA adapters stay in 16-bit, and paged optimizers handle memory spikes.'],
+  ['B','Prefix tuning vs prompt tuning?','Both learn continuous virtual tokens with a frozen model. Prefix tuning injects them into the keys/values of every layer; prompt tuning only at the input embeddings, so it has far fewer parameters and needs large models to work well.'],
+  ['C','RAG or fine-tuning to add company knowledge?','RAG. Fine-tuning is good at teaching behaviour and format but poor at reliably storing facts, and it goes stale. RAG keeps facts outside the weights, updatable and citeable. Many production systems combine both.'],
+  ['C','How do you evaluate a RAG system?','Separately evaluate retrieval (recall@k, MRR, context precision / recall) and generation (faithfulness to the context, answer relevance). Tools like RAGAS automate this; also keep a labelled question set.'],
+  ['C','What is the trade-off in chunk size?','Small chunks give precise matches but lose surrounding context; large chunks keep context but dilute the embedding and waste prompt tokens. Use overlap, try 300–1000 tokens, and consider parent-document or hierarchical retrieval.'],
+  ['C','When is Graph RAG worth its cost?','When questions need multi-hop reasoning over entities and relations, or corpus-wide summaries ("main themes across 10,000 reports"). For simple lookup questions, vector RAG is cheaper and enough.'],
+  ['D','Workflow or agent?','If you can write the steps down in advance, build a fixed workflow: cheaper, faster, testable. Use an agent when the next step depends on what was just observed and cannot be scripted.'],
+  ['D','What is MCP?','The Model Context Protocol: an open standard where tools and data sources are exposed as servers, so any MCP-aware assistant can use them without bespoke integration code.'],
+  ['D','How do you reduce hallucinations?','Ground answers with RAG and require citations, lower temperature for factual tasks, ask the model to say "I don’t know" when the context lacks the answer, validate tool outputs, and evaluate faithfulness continuously.']
+];
+function buildQF(){ document.getElementById('qf').innerHTML = QF.map(([c,q,a])=>`<details style="--qc:var(${CATS[c].v})"><summary>${q}</summary><div class="a">${a}</div></details>`).join(''); }
+
+/* ===================== INIT ===================== */
+legend(); buildFlow(); buildRel(); buildFilters(); buildTable(); buildQF(); renderDQ('start');
+drawWires();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawWires);
+new ResizeObserver(()=>drawWires()).observe(flow);
+addEventListener('resize', drawWires);
+document.getElementById('expandAll').onclick = ()=>['A','B','C','D'].forEach(k=>toggleCat(k,false));
+document.getElementById('collapseAll').onclick = ()=>['A','B','C','D'].forEach(k=>toggleCat(k,true));
+document.getElementById('animBtn').onclick = e=>{ const off = document.body.classList.toggle('noanim'); e.currentTarget.classList.toggle('on',!off); e.currentTarget.textContent = off?'⏸ Animation off':'▶ Animation on'; };
+document.getElementById('themeBtn').onclick = ()=>{
+  const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme==='dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme = dark ? 'light' : 'dark';
+};
+</script>
+<script src="../../../site.js"></script>
+</body>
+</html>

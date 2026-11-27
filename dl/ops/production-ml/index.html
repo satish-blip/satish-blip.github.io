@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Production ML systems: serving, feature stores, drift detection and safe deployment, explained interactively</title>
+<meta name="description" content="What happens after the notebook: the ML system lifecycle, batch versus real-time serving with a dynamic-batching latency simulator, feature stores and point-in-time correct joins, data and concept drift detection with PSI and KS tests, shadow and canary deployments with automatic rollback, and CI/CD for machine learning.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-ops">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Step 10 &middot; MLOps, production &amp; responsible AI</p>
+  <h1>Production ML: <span class="grad">a model is not a product</span></h1>
+  <p class="lede">A trained model in a notebook is perhaps 5% of a working ML system. The rest is getting data in reliably, computing features the same way in training and in production, answering requests fast enough, noticing when the world changes, and replacing the model without breaking anything. This page walks through each part with small simulations you can push until they fail.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#lifecycle">1 · The lifecycle</a><a href="#serving">2 · Serving</a><a href="#features">3 · Feature stores</a><a href="#drift">4 · Drift</a><a href="#rollout">5 · Safe rollout</a><a href="#cicd">6 · CI/CD for ML</a><a href="#py">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is MLOps, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3>
+      <p>Models that score well offline often fail in production, quietly. The data pipeline changes a unit, a feature is computed slightly differently at serving time, customers start behaving differently, or a new model version is worse on a slice nobody tested. Unlike a crash, a wrong prediction raises no error.</p>
+      <h3>The idea</h3>
+      <p><a class="term" data-t="mlops">MLOps</a> applies software-engineering discipline (automation, testing, versioning, monitoring) to the whole life of a model: data, features, training, deployment and the feedback loop that triggers retraining. Every step is reproducible, every change is tested, and every model in production is watched.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Version data, code and configuration; train in a pipeline, not by hand.</li><li>Compute features once, in a <a class="term" data-t="feature-store">feature store</a>, for both training and serving.</li><li>Register each model with its metrics and lineage; roll it out gradually (<a class="term" data-t="shadow-deployment">shadow</a>, then <a class="term" data-t="canary-release">canary</a>).</li><li>Monitor inputs, outputs and outcomes for <a class="term" data-t="data-drift">drift</a>; retrain or roll back when they move.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>A restaurant. The recipe (the model) matters, but so do reliable suppliers (data pipelines), a prep station that cuts ingredients the same way every day (features), a kitchen that serves the lunch rush on time (serving), tasting before a new dish goes on the menu (canary), and noticing when customers' tastes change (drift).</p>
+      <div class="pc"><div class="pro"><b>Buys you</b><ul><li>Models that keep working after launch</li><li>Fast, safe iteration: many small releases instead of risky big ones</li><li>Audit trails: which data and code produced this prediction?</li></ul></div><div class="con"><b>Costs you</b><ul><li>Infrastructure and process before the first model ships</li><li>Monitoring needs ground-truth labels, which often arrive late</li><li>Easy to over-engineer for a model that runs once a month</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="mlops">MLOps</a><a class="term" data-t="batch-inference">Batch inference</a><a class="term" data-t="online-inference">Online inference</a><a class="term" data-t="tail-latency">p99 latency</a><a class="term" data-t="dynamic-batching">Dynamic batching</a><a class="term" data-t="feature-store">Feature store</a><a class="term" data-t="training-serving-skew">Training–serving skew</a><a class="term" data-t="point-in-time-join">Point-in-time join</a><a class="term" data-t="data-drift">Data drift</a><a class="term" data-t="concept-drift">Concept drift</a><a class="term" data-t="psi">PSI</a><a class="term" data-t="ks-test">KS test</a><a class="term" data-t="shadow-deployment">Shadow deployment</a><a class="term" data-t="canary-release">Canary release</a><a class="term" data-t="model-registry">Model registry</a><a class="term" data-t="ci-cd-ml">CI/CD/CT</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="lifecycle" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>The ML system lifecycle</h2>
+    <p class="sub">Click a stage to see what happens there, what typically goes wrong, and common tools. The dashed arrow is the feedback loop.</p>
+    <div class="plot wide" id="pLC"></div>
+    <div class="lcdet" id="lcDet" style="min-height:11.5em;padding:12px 14px;border:1px solid var(--line);border-radius:12px;margin-top:10px;background:var(--card)"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Sculley et al. (2015) drew the now-famous picture of a production ML system as a small "ML code" box surrounded by much larger boxes: data collection, verification, feature extraction, configuration, serving infrastructure, monitoring. They called the gap <b>hidden technical debt</b>: ML systems have all the maintenance problems of ordinary code, plus new ones, because their behaviour is set by data rather than written down.</p>
+      <p>Three kinds of debt to watch:</p>
+      <ul>
+        <li><b>Entanglement</b> ("changing anything changes everything"): add one feature and the weights of all the others shift.</li>
+        <li><b>Hidden feedback loops</b>: a recommender changes what users click, which becomes next month's training data.</li>
+        <li><b>Pipeline jungles and glue code</b>: scripts that turn raw data into features in five slightly different ways.</li>
+      </ul>
+      <p>The lifecycle on the left is the antidote: a single, automated path from raw data to a monitored prediction, with a loop back. Each later section zooms into one arrow.</p>
+      <p>Who does what: data engineers own ingestion and the feature pipelines, ML engineers own training pipelines, serving and monitoring, and data scientists own the modelling and evaluation choices. In small teams these are the same people, which is why automation matters even more.</p>
+    </div>
+  </div>
+</section>
+
+<section id="serving" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Serving: batch, real-time and dynamic batching</h2>
+    <p class="sub">A simulated GPU server. Requests arrive at random; the server waits up to "max wait" to collect up to "max batch" requests, then runs them together. Curves: median and 99th-percentile latency for every max batch size.</p>
+    <div class="plot wide" id="pSv"></div>
+    <div class="ctl"><label for="sL"><span>Traffic (requests per second)</span><output id="sLOut"></output></label><input type="range" id="sL" min="20" max="900" step="10" value="300"></div>
+    <div class="ctl"><label for="sB"><span>Max batch size</span><output id="sBOut"></output></label><input type="range" id="sB" min="1" max="64" step="1" value="8"></div>
+    <div class="ctl"><label for="sW"><span>Max wait to fill a batch</span><output id="sWOut"></output></label><input type="range" id="sW" min="0" max="50" step="1" value="10"></div>
+    <div class="stats" id="sStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>There are three ways to get predictions to users:</p>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th></th><th>When predictions are made</th><th>Good for</th></tr>
+        <tr><td><a class="term" data-t="batch-inference">Batch</a></td><td>On a schedule, for everyone, stored in a table</td><td>Nightly churn scores, weekly pricing, email campaigns</td></tr>
+        <tr><td><a class="term" data-t="online-inference">Online</a></td><td>On request, behind an API, in milliseconds</td><td>Fraud checks at payment, search ranking, chatbots</td></tr>
+        <tr><td>Streaming</td><td>As events arrive, with features from a stream</td><td>Real-time anomaly detection, live recommendations</td></tr>
+      </table></div>
+      <p>Batch is cheaper and simpler but the prediction can be up to a day old and is computed even for users who never come back. Online is fresh but every millisecond counts, and users notice the slowest requests, not the average. That is why services are judged by <a class="term" data-t="tail-latency">tail latency</a>, the 99th percentile (p99).</p>
+      <p>Accelerators are much more efficient on a batch: running 32 inputs together may cost only a little more than running one. <a class="term" data-t="dynamic-batching">Dynamic batching</a> trades a little waiting for that efficiency. The simulator charges 8 ms per batch plus 0.6 ms per request. Each server has a capacity limit: with batch size \(b\), at most \(b/(8+0.6b)\) requests per millisecond. Push the traffic to 600 per second with max batch 1: the queue grows without bound and p99 explodes. Raise the max batch and the same hardware copes. Then raise the max wait and watch the median latency pay for it at low traffic.</p>
+      <details class="deeper"><summary>Going deeper: why queues blow up near capacity</summary><div>
+        <p>Queueing theory gives the shape. For the simplest queue (random arrivals at rate \(\lambda\), random service times with rate \(\mu\)), the mean time in the system is \(1/(\mu-\lambda)\): with utilisation \(\rho=\lambda/\mu\), latency scales like \(1/(1-\rho)\). At 50% utilisation you wait twice the service time; at 90%, ten times; at 99%, a hundred times. Servers are therefore run well below capacity, and autoscaling adds replicas before \(\rho\) gets close to 1. The tail is worse than the mean, which is why p99 targets drive capacity planning.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="features" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Feature stores and the point-in-time join</h2>
+    <p class="sub">Six customers. Dots: daily snapshots of "logins in the last 7 days". Vertical bar: the day we must predict churn. Ring: the snapshot each join attaches to that training example.</p>
+    <div class="ctl"><span class="lbl">Join</span><div class="seg" id="fSeg"><button data-v="naive">Latest value (naive)</button><button data-v="pit" class="on">Point-in-time correct</button></div></div>
+    <div class="plot wide" id="pF"></div>
+    <div class="stats" id="fStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A model can only be as good in production as its features are identical in production. <a class="term" data-t="training-serving-skew">Training–serving skew</a> is any difference between the features the model trained on and the ones it receives live: a different code path (SQL offline, Java online), a different time window, a missing-value default, or, most sneakily, information from the future.</p>
+      <p>A <a class="term" data-t="feature-store">feature store</a> attacks skew by defining each feature once and serving it two ways: an <b>offline store</b> keeps the full history of every feature value with timestamps, for building training sets; an <b>online store</b> keeps only the latest value of each feature, in a fast key-value database, for serving.</p>
+      <p>Building a training set then needs a <a class="term" data-t="point-in-time-join">point-in-time join</a>: for each label event at time \(t\), attach the most recent feature value with timestamp \(\le t\), exactly what the online store would have returned at that moment. Switch to the naive join, which takes the latest value in the table. Customers who churned stopped logging in after the decision day, so their latest snapshot says 0 logins. The model learns "0 logins means churn", scores brilliantly offline, and is useless live, where nobody's future is visible yet. This is <a class="term" data-t="data-leakage">leakage</a> through time.</p>
+      <p>Popular feature stores include Feast (open source), Tecton, and the ones built into Databricks, SageMaker and Vertex AI.</p>
+    </div>
+  </div>
+</section>
+
+<section id="drift" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Detecting data drift and concept drift</h2>
+    <p class="sub">90 days of a deployed credit model. Upper chart: PSI of the main input feature against the training data, per day (alarm above 0.2). Lower chart: the model's accuracy, known only after the label delay.</p>
+    <div class="ctl"><span class="lbl">What changes on day 40</span><div class="seg" id="dSeg"><button data-v="cov" class="on">The inputs (covariate shift)</button><button data-v="con">The relationship (concept drift)</button><button data-v="none">Nothing</button></div></div>
+    <div class="plot short" id="pDp"></div>
+    <div class="plot short" id="pDa" style="margin-top:8px"></div>
+    <div class="ctl"><label for="dM"><span>Size of the change</span><output id="dMOut"></output></label><input type="range" id="dM" min="0" max="2" step="0.05" value="0.8"></div>
+    <div class="ctl"><label for="dD"><span>Label delay (days)</span><output id="dDOut"></output></label><input type="range" id="dD" min="0" max="30" step="1" value="14"></div>
+    <div class="stats" id="dStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A model learns \(p(y\mid x)\) from data drawn from \(p(x)\). Either can move after deployment (see <a href="../../../ml/datasets/#shift">distribution shift</a>):</p>
+      <ul>
+        <li><b><a class="term" data-t="data-drift">Data drift</a></b> (covariate shift): \(p(x)\) changes, \(p(y\mid x)\) does not. New customer segments, a new app version, a sensor recalibrated. You can see it immediately, from inputs alone.</li>
+        <li><b><a class="term" data-t="concept-drift">Concept drift</a></b>: \(p(y\mid x)\) changes. An interest-rate shock changes who defaults at the same income; fraudsters adapt. Inputs may look identical, so only outcomes reveal it, and outcomes arrive late.</li>
+      </ul>
+      <p>Two standard tests for one feature, comparing a reference window (training data) to a live window:</p>
+      <div class="mathbox c1">$$\text{PSI}=\sum_{b=1}^{B}(p_b-q_b)\ln\frac{p_b}{q_b},\qquad D_{\text{KS}}=\sup_x\big|F_{\text{live}}(x)-F_{\text{ref}}(x)\big|.$$</div>
+      <p>The <a class="term" data-t="psi">population stability index</a> bins the feature (\(q_b\): reference share, \(p_b\): live share); a common rule of thumb reads under 0.1 as stable, 0.1 to 0.2 as moderate and over 0.2 as a significant shift. The <a class="term" data-t="ks-test">Kolmogorov–Smirnov</a> statistic is the largest gap between the two cumulative distributions, with a p-value. Beware: with large samples every tiny shift is "significant", so alert on effect sizes, not p-values.</p>
+      <p>Compare the two scenarios. Covariate shift trips the PSI alarm on day 40; accuracy may or may not suffer. Concept drift leaves PSI flat, and you learn about it only when labels arrive, a label delay later. Hence the usual stack: monitor inputs and prediction distributions (fast, label-free), monitor performance as labels land (slow, definitive), and retrain on a schedule or when either alarm fires.</p>
+      <div class="algo" data-anim="drift"><h5 class="algo-h">Algorithm: daily drift monitor for one feature</h5><ol>
+        <li><span class="kw">input</span> reference sample \(R\) (training data), bins \(b_1..b_B\) from quantiles of \(R\), threshold τ</li>
+        <li>\(q_b\leftarrow\) share of \(R\) in each bin <span class="cm">add a tiny ε to avoid log 0</span></li>
+        <li><span class="kw">each day</span></li>
+        <li class="i1">collect the live window \(L\) of inputs</li>
+        <li class="i1">\(p_b\leftarrow\) share of \(L\) in each bin</li>
+        <li class="i1">\(\text{PSI}\leftarrow\sum_b(p_b-q_b)\ln(p_b/q_b)\)</li>
+        <li class="i1"><span class="kw">if</span> PSI \(&gt;\) τ: raise an alert, investigate, consider retraining</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="rollout" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Shadow, canary and automatic rollback</h2>
+    <p class="sub">A canary sends a share of live traffic to the new model for 48 hours. Lines: running error rates with 95% bands. The release is rolled back as soon as the canary is significantly worse.</p>
+    <div class="plot wide" id="pR"></div>
+    <div class="ctl"><label for="rE"><span>New model's true error rate</span><output id="rEOut"></output></label><input type="range" id="rE" min="0.03" max="0.09" step="0.002" value="0.062"></div>
+    <div class="ctl"><label for="rS"><span>Canary traffic share</span><output id="rSOut"></output></label><input type="range" id="rS" min="0.01" max="0.5" step="0.01" value="0.05"></div>
+    <div class="ctl"><button class="btn" id="rN">Run again with new random traffic</button></div>
+    <div class="stats" id="rStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Offline metrics are estimates; production is the test. Release strategies limit the damage a bad model can do:</p>
+      <ul>
+        <li><b><a class="term" data-t="shadow-deployment">Shadow deployment</a></b>: the new model receives a copy of live traffic and its predictions are logged, never used. Zero user risk; it catches crashes, latency problems and skew, and lets you compare predictions. It cannot measure effects on behaviour (clicks, purchases), because users never see its output.</li>
+        <li><b><a class="term" data-t="canary-release">Canary</a></b>: a small share of real traffic goes to the new model; if guard-rail metrics hold, the share is stepped up (1% → 5% → 25% → 100%).</li>
+        <li><b>A/B test</b>: a fixed division of traffic, run long enough to measure the business metric with a pre-planned sample size and significance test.</li>
+        <li><b>Blue–green</b>: two full environments, switch the router, keep the old one warm for an instant rollback.</li>
+      </ul>
+      <p>The lab's baseline makes 5% errors. Every hour it compares the canary's error rate to the baseline's with a one-sided two-proportion z-test, rolling back if \(z&gt;3\) (a strict bar, because we look 48 times). With a 5% share, a model at 6.2% error is often caught within a day or two; at 1% share the evidence arrives too slowly. A larger canary detects problems sooner but exposes more users: that is the trade-off you are choosing.</p>
+      <div class="algo" data-anim="canary"><h5 class="algo-h">Algorithm: canary release with automatic rollback</h5><ol>
+        <li><span class="kw">input</span> baseline model \(M_0\), candidate \(M_1\), traffic share \(s\), threshold \(z^*\)</li>
+        <li><span class="kw">for each</span> hour \(h=1,\dots,H\)</li>
+        <li class="i1">route each request to \(M_1\) with probability \(s\), else \(M_0\)</li>
+        <li class="i1">update error counts \(e_0,n_0\) and \(e_1,n_1\)</li>
+        <li class="i1">\(z\leftarrow(\hat p_1-\hat p_0)/\sqrt{\hat p(1-\hat p)(1/n_0+1/n_1)}\) <span class="cm">pooled \(\hat p\)</span></li>
+        <li class="i1"><span class="kw">if</span> \(z&gt;z^*\): <span class="kw">roll back</span> to \(M_0\) and stop</li>
+        <li><span class="kw">promote</span> \(M_1\) (raise \(s\) in stages)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="cicd" class="card">
+  <h2><span class="num">6</span>CI/CD for ML: test the data, the model and the code</h2>
+  <div class="grid2 prose">
+    <div>
+      <p>Classic software has <b>continuous integration</b> (every change is built and tested) and <b>continuous delivery</b> (every passing build can be released). <a class="term" data-t="ci-cd-ml">ML adds continuous training</a>: the pipeline itself is the product, and it retrains on new data automatically. Google's MLOps maturity levels describe the path: level 0, manual notebooks; level 1, an automated training pipeline with continuous training; level 2, CI/CD that tests and deploys the pipeline itself.</p>
+      <p>A <a class="term" data-t="model-registry">model registry</a> (MLflow, SageMaker, Vertex AI) stores every model version with its lineage (data snapshot, code commit, hyperparameters, metrics) and its stage (staging, production, archived). A model card records what it is for, how it was evaluated, and where it should not be used.</p>
+      <p>Reproducibility needs four things pinned: the data version (DVC, lakeFS, table snapshots), the code commit, the environment (container image), and random seeds.</p>
+    </div>
+    <div>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Test</th><th>Examples</th></tr>
+        <tr><td>Data validation</td><td>Schema and types; ranges; null rates; category sets; row counts; freshness (Great Expectations, TFDV, pandera)</td></tr>
+        <tr><td>Feature tests</td><td>Same value offline and online for sampled keys; no future timestamps</td></tr>
+        <tr><td>Model quality gate</td><td>Beats the production model on a fixed holdout by a set amount; no slice worse by more than \(x\)%; calibration holds</td></tr>
+        <tr><td>Behavioural tests</td><td>Invariance (changing a name does not change a sentiment score); directional expectations; minimum functionality (CheckList)</td></tr>
+        <tr><td>Infrastructure</td><td>Model loads; latency and memory under budget; same predictions in serving container as in training</td></tr>
+        <tr><td>Monitoring</td><td>Drift, prediction distribution, error rates, data freshness, with alerts and owners</td></tr>
+      </table></div>
+      <p class="note">The ML Test Score (Breck et al., 2017) turns 28 such checks into a readiness rubric.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">7</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> scipy.stats <span class="k">import</span> ks_2samp
+
+<span class="c"># population stability index with quantile bins from the reference data</span>
+<span class="k">def</span> psi(ref, live, bins=<span class="s">10</span>, eps=<span class="s">1e-6</span>):
+    edges = np.quantile(ref, np.linspace(<span class="s">0</span>, <span class="s">1</span>, bins + <span class="s">1</span>)); edges[<span class="s">0</span>], edges[-<span class="s">1</span>] = -np.inf, np.inf
+    q = np.histogram(ref, edges)[<span class="s">0</span>] / len(ref) + eps
+    p = np.histogram(live, edges)[<span class="s">0</span>] / len(live) + eps
+    <span class="k">return</span> float(np.sum((p - q) * np.log(p / q)))
+
+stat, p_value = ks_2samp(train_df[<span class="s">"income"</span>], today_df[<span class="s">"income"</span>])
+
+<span class="c"># point-in-time correct join with pandas: last feature value at or before each label time</span>
+<span class="k">import</span> pandas <span class="k">as</span> pd
+train = pd.merge_asof(labels.sort_values(<span class="s">"ts"</span>), features.sort_values(<span class="s">"ts"</span>),
+                      on=<span class="s">"ts"</span>, by=<span class="s">"customer_id"</span>, direction=<span class="s">"backward"</span>)
+
+<span class="c"># track, register and serve a model with MLflow</span>
+<span class="k">import</span> mlflow, mlflow.sklearn
+<span class="k">with</span> mlflow.start_run():
+    model.fit(X_train, y_train)
+    mlflow.log_params(model.get_params()); mlflow.log_metric(<span class="s">"auc"</span>, auc)
+    mlflow.sklearn.log_model(model, <span class="s">"model"</span>, registered_model_name=<span class="s">"churn"</span>)
+<span class="c"># shell: mlflow models serve -m "models:/churn/1" --port 5000</span></pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">8</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page was written for this site with its own simulations and code. Further reading: Chip Huyen, <i>Designing Machine Learning Systems</i> (O'Reilly, 2022); Google Cloud, <a href="https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning" target="_blank" rel="noopener">MLOps: continuous delivery and automation pipelines in machine learning</a>. Papers: Sculley et al. 2015 (hidden technical debt in ML systems); Breck et al. 2017 (the ML Test Score); Polyzotis et al. 2019 (data validation for ML); Rabanser, Günnemann and Lipton 2019 (failing loudly: detecting dataset shift); Ribeiro et al. 2020 (CheckList); Mitchell et al. 2019 (model cards).</p>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"Why does a point-in-time join matter when building a training set from a feature store?","o":["It makes joins faster","It attaches only feature values that existed at the label's timestamp, so no information from the future leaks into training","It removes duplicate rows","It is required by SQL"],"a":1,"e":"At serving time only past values exist. Joining the latest value can encode the outcome itself (a churned customer's activity drops to zero), giving great offline scores and a useless model."},
+{"q":"Inputs look exactly as they did in training, but accuracy is falling. What is the most likely kind of drift?","o":["Covariate shift","Concept drift: the relationship \\(p(y\\mid x)\\) has changed","A bigger batch size","No drift; it is noise"],"a":1,"e":"Input-only monitors such as PSI and KS cannot see concept drift. Only outcomes reveal it, which is why label delay matters."},
+{"q":"What does a PSI above about 0.2 usually indicate?","o":["The model is overfitting","A significant shift in the feature's distribution compared with the reference data","The feature is perfectly stable","The labels are wrong"],"a":1,"e":"Common rule of thumb: under 0.1 stable, 0.1 to 0.2 moderate, above 0.2 significant. It is a heuristic for alerting, not a statistical test."},
+{"q":"What can a shadow deployment NOT tell you?","o":["Whether the new model crashes on real inputs","Its latency under real traffic","How users would react to its predictions, since they never see them","Whether its predictions differ from the old model's"],"a":2,"e":"Shadow traffic is logged, never acted on, so behavioural metrics (clicks, conversions) need a canary or A/B test."},
+{"q":"Why does dynamic batching raise throughput on a GPU?","o":["It skips requests","Running many inputs together costs little more than running one, so the fixed per-batch overhead is shared","It lowers the model's accuracy","It uses less memory per request"],"a":1,"e":"With a fixed cost per batch plus a small cost per item, larger batches serve more requests per second, at the price of some waiting to fill the batch."}
+]</script>
+<p class="foot">Part of the <a href="../">MLOps &amp; responsible AI</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/evo.js"></script>
+<script>
+(function(){
+const {$}=ML; const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+if(window.EVO) EVO.render('#evoSlot','ops');
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+/* ---------- 1 lifecycle ---------- */
+const ST=[
+ ['Data','Collect and store raw events, logs and tables; version snapshots.','Silent upstream changes: a renamed column, a unit change, a broken join that halves the rows.','Kafka, Airflow, dbt, Delta Lake, DVC'],
+ ['Validate','Check schema, ranges, null rates and freshness before anything trains.','Skipping it: bad data trains a bad model that passes every model test.','Great Expectations, TFDV, pandera'],
+ ['Features','Compute features once; store history offline and latest values online.','Training–serving skew; leakage from the future (section 3).','Feast, Tecton, Spark, Flink'],
+ ['Train','Run the training pipeline with pinned data, code, environment and seeds; tune.','Irreproducible "it worked on my laptop" models; tuning on the test set.','scikit-learn, PyTorch, XGBoost, Ray, Kubeflow'],
+ ['Evaluate','Compare with the production model on fixed holdouts and on slices; behavioural tests.','Only checking the average: the new model may be worse for a small group.','MLflow, Evidently, CheckList'],
+ ['Register','Store the model with lineage, metrics, model card and an approval stage.','Nobody knows which data or code produced the model in production.','MLflow registry, SageMaker, Vertex AI'],
+ ['Deploy','Package (container), then shadow → canary → full rollout with automatic rollback.','Big-bang releases; no fast way back.','Docker, Kubernetes, KServe, BentoML, Triton'],
+ ['Serve','Batch jobs or an online API; autoscale; meet latency targets.','p99 latency blow-ups near capacity; cold starts.','FastAPI, Triton, vLLM, Ray Serve'],
+ ['Monitor','Track inputs, predictions, latency, errors and, when labels arrive, accuracy.','Monitoring only uptime: the service is "healthy" while predicting nonsense.','Prometheus, Grafana, Evidently, WhyLabs'],
+];
+const pLC=new ML.Plot('#pLC',{equal:false}); let lcSel=2, lcBox=[];
+function drawLC(){ const P=ML.palette(), c=pLC.ctx; pLC.clear(); const W=pLC.w, H=pLC.h, n=ST.length, cx=W/2, cy=H/2+4, rx=W*.38, ry=H*.36, bw=Math.min(118,W*.2), bh=Math.min(40,H*.12); lcBox=[];
+  ST.forEach((s,i)=>{ const a=-Math.PI/2+i*2*Math.PI/n, x=cx+rx*Math.cos(a), y=cy+ry*Math.sin(a); lcBox.push([x-bw/2,y-bh/2,bw,bh]); });
+  c.save(); c.strokeStyle=P.muted; c.lineWidth=1.6; lcBox.forEach((b,i)=>{ const nb=lcBox[(i+1)%n], x1=b[0]+bw/2, y1=b[1]+bh/2, x2=nb[0]+bw/2, y2=nb[1]+bh/2, L=Math.hypot(x2-x1,y2-y1), ux=(x2-x1)/L, uy=(y2-y1)/L, sh=Math.min(bw,bh)*.75;
+    if(i===n-1){ c.setLineDash([6,4]); c.strokeStyle=P.c4; } c.beginPath(); c.moveTo(x1+ux*sh,y1+uy*sh); c.lineTo(x2-ux*sh,y2-uy*sh); c.stroke(); c.setLineDash([]); c.fillStyle=i===n-1?P.c4:P.muted; const ex=x2-ux*sh, ey=y2-uy*sh; c.beginPath(); c.moveTo(ex,ey); c.lineTo(ex-ux*8-uy*4,ey-uy*8+ux*4); c.lineTo(ex-ux*8+uy*4,ey-uy*8-ux*4); c.closePath(); c.fill(); c.strokeStyle=P.muted; }); c.restore();
+  lcBox.forEach((b,i)=>{ c.fillStyle=i===lcSel?P.c1:P.card; c.strokeStyle=i===lcSel?P.c1:P.line; c.lineWidth=1.5; c.beginPath(); c.roundRect?c.roundRect(b[0],b[1],b[2],b[3],9):c.rect(b[0],b[1],b[2],b[3]); c.fill(); c.stroke();
+    c.fillStyle=i===lcSel?'#fff':P.ink; c.font=`600 ${Math.max(10,Math.min(13,bw/8))}px Inter,system-ui`; c.textAlign='center'; c.textBaseline='middle'; c.fillText((i+1)+' · '+ST[i][0],b[0]+b[2]/2,b[1]+b[3]/2); });
+  c.fillStyle=P.c4; c.font='600 11px Inter,system-ui'; c.textAlign='center'; c.fillText('retrain when monitoring fires',cx,cy-ry*.18); c.fillStyle=P.muted; c.fillText('ML code is one box of nine',cx,cy+ry*.12);
+  const s=ST[lcSel]; $('#lcDet').innerHTML=`<b style="color:var(--c1)">${lcSel+1} · ${esc(s[0])}</b><p style="margin:.35em 0"><b>What happens:</b> ${esc(s[1])}</p><p style="margin:.35em 0"><b>What goes wrong:</b> ${esc(s[2])}</p><p style="margin:.35em 0;color:var(--muted)"><b>Common tools:</b> ${esc(s[3])}</p>`; }
+pLC.cv.addEventListener('click',e=>{ const r=pLC.cv.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top; const i=lcBox.findIndex(b=>x>=b[0]&&x<=b[0]+b[2]&&y>=b[1]&&y<=b[1]+b[3]); if(i>=0){ lcSel=i; drawLC(); } }); pLC.cv.style.cursor='pointer'; pLC.onResize=drawLC; drawLC();
+
+/* ---------- 2 serving simulator ---------- */
+const pSv=new ML.Plot('#pSv',{equal:false}); let sL=300, sB=8, sW=10; const OV=8, PER=.6;
+function simulate(lam,B,wait,seed=3){ const r=ML.rng(seed), n=3000, arr=[]; let t=0; for(let i=0;i<n;i++){ t+=-Math.log(1-r())/(lam/1000); arr.push(t); }
+  const lat=new Array(n); let free=0, i=0;
+  while(i<n){ const startEarliest=Math.max(free,arr[i]); let j=i; while(j<n&&j-i<B&&arr[j]<=startEarliest) j++;
+    let start=startEarliest; if(j-i<B){ const deadline=Math.max(free,arr[i]+wait); while(j<n&&j-i<B&&arr[j]<=deadline) j++; start=Math.max(free,Math.min(deadline,j-i>=B?arr[j-1]:deadline)); if(j-i>=B) start=Math.max(free,arr[j-1]); }
+    const end=start+OV+PER*(j-i); for(let k=i;k<j;k++) lat[k]=end-arr[k]; free=end; i=j; }
+  const s=lat.slice(500).sort((a,b)=>a-b), q=p=>s[Math.min(s.length-1,Math.floor(p*s.length))]; return {p50:q(.5),p99:q(.99),thr:(n-500)/((arr[n-1]-arr[500])/1000)}; }
+function drawSv(){ const P=ML.palette(), bs=[1,2,3,4,6,8,12,16,24,32,48,64], res=bs.map(b=>simulate(sL,b,sW)), cap=v=>Math.min(v,500);
+  const fr=ML.chart(pSv,[{pts:bs.map((b,k)=>[b,cap(res[k].p50)]),color:P.c3,width:2.5,dots:true},{pts:bs.map((b,k)=>[b,cap(res[k].p99)]),color:P.c2,width:2.5,dots:true}],{x0:1,x1:64,y0:0,y1:Math.min(500,Math.max(40,...res.map(r=>cap(r.p99)))*1.1),xl:'max batch size',yfmt:v=>v+' ms',vline:sB}), c=pSv.ctx;
+  c.save(); c.font='600 12px Inter,system-ui'; c.fillStyle=P.c3; c.fillText('median latency',54,24); c.fillStyle=P.c2; c.fillText('p99 latency (capped at 500 ms)',54,42); c.restore();
+  const cur=simulate(sL,sB,sW), capB=1000*sB/(OV+PER*sB), u=sL/capB;
+  $('#sStats').innerHTML=stat('c3',cur.p50.toFixed(1)+' ms','median latency')+stat(cur.p99>200?'c2':'c5',cur.p99>5000?'> 5 s':cur.p99.toFixed(1)+' ms','p99 latency')+stat(u>=1?'c2':u>.8?'c4':'c1',(100*u).toFixed(0)+'%','utilisation at full batches'+(u>=1?': overloaded':''))+stat('c6',capB.toFixed(0)+'/s','capacity with batch '+sB); }
+ML.bindRange('sL',v=>{sL=v;drawSv();},v=>v+'/s'); ML.bindRange('sB',v=>{sB=v;drawSv();}); ML.bindRange('sW',v=>{sW=v;drawSv();},v=>v+' ms'); pSv.onResize=drawSv; drawSv();
+
+/* ---------- 3 point-in-time join ---------- */
+const pF=new ML.Plot('#pF',{equal:false}); let fMode='pit';
+const DAYS=30, rF=ML.rng(21), CUST=[...Array(400)].map((_,k)=>{ const prop=rF(), churn=rF()<.15+.5*prop, tL=12+Math.floor(rF()*12), base=Math.max(0,Math.round(9-6*prop+rF.gauss()*2.2));
+  const snaps=[...Array(DAYS)].map((_,d)=>d<=tL||!churn?Math.max(0,Math.round(base+rF.gauss()*1.3)):0); return {churn,tL,snaps}; });
+function accuracy(sel){ let best=0; for(let th=0;th<=14;th++){ let ok=0; CUST.forEach(c=>{ ok+=((sel(c)<=th)===c.churn)?1:0; }); best=Math.max(best,ok/CUST.length); } return best; }
+const naiveV=c=>c.snaps[DAYS-1], pitV=c=>c.snaps[c.tL];
+/* threshold chosen on the naive training set, then applied to what serving actually sees (PIT values) */
+function online(){ let bt=0, bo=0; for(let th=0;th<=14;th++){ let ok=0; CUST.forEach(c=>{ ok+=((naiveV(c)<=th)===c.churn)?1:0; }); if(ok>bo){ bo=ok; bt=th; } } let ok=0; CUST.forEach(c=>{ ok+=((pitV(c)<=bt)===c.churn)?1:0; }); return ok/CUST.length; }
+const ACC={naive:accuracy(naiveV),pit:accuracy(pitV),liveNaive:online()};
+function drawF(){ const P=ML.palette(), c=pF.ctx; pF.clear(); const show=[0,1,2,3,4,5].map(k=>CUST.filter(c=>c.churn)[k]&&k%2===0?CUST.filter(c=>c.churn)[k>>1]:CUST.filter(c=>!c.churn)[k]).map((c,k)=>k%2===0?CUST.filter(x=>x.churn)[k/2]:CUST.filter(x=>!x.churn)[(k-1)/2]);
+  const W=pF.w, H=pF.h, L=92, R=12, T=14, B=26, rh=(H-T-B)/6, fx=d=>L+(d+.5)/DAYS*(W-L-R);
+  c.font='11px Inter,system-ui'; c.textBaseline='middle';
+  show.forEach((cu,k)=>{ const y0=T+k*rh, mx=Math.max(10,...cu.snaps), fy=v=>y0+rh*.85-(v/mx)*rh*.65;
+    c.fillStyle=k%2?P.bg:P.card; c.fillRect(L,y0,W-L-R,rh-2); c.fillStyle=cu.churn?P.c2:P.c5; c.textAlign='right'; c.fillText((cu.churn?'churned':'stayed')+' · #'+(k+1),L-8,y0+rh/2);
+    c.fillStyle=P.c1; c.globalAlpha=.2; c.fillRect(fx(cu.tL)-3,y0,6,rh-2); c.globalAlpha=1;
+    cu.snaps.forEach((v,d)=>{ c.fillStyle=d>cu.tL?P.muted:P.c3; c.globalAlpha=d>cu.tL?.6:1; c.beginPath(); c.arc(fx(d),fy(v),2.6,0,7); c.fill(); }); c.globalAlpha=1;
+    const d=fMode==='pit'?cu.tL:DAYS-1, leak=fMode==='naive'&&d>cu.tL; c.strokeStyle=leak?P.c2:P.c1; c.lineWidth=2.5; c.beginPath(); c.arc(fx(d),fy(cu.snaps[d]),7,0,7); c.stroke();
+    c.fillStyle=leak?P.c2:P.c1; c.textAlign='left'; c.font='600 11px Inter,system-ui'; c.fillText((leak?'leak: ':'')+cu.snaps[d],Math.min(fx(d)+10,W-R-40),fy(cu.snaps[d])); c.font='11px Inter,system-ui'; });
+  c.fillStyle=P.muted; c.textAlign='center'; c.fillText('day →  (grey dots: after the prediction day)',L+(W-L-R)/2,H-9);
+  $('#fStats').innerHTML=fMode==='pit'?stat('c1',(100*ACC.pit).toFixed(0)+'%','offline accuracy (honest)')+stat('c5',(100*ACC.pit).toFixed(0)+'%','live accuracy: the same, as it should be')+stat('c3','0','examples using future data')
+    :stat('c2',(100*ACC.naive).toFixed(0)+'%','offline accuracy (inflated)')+stat('c4',(100*ACC.liveNaive).toFixed(0)+'%','live accuracy of the leaky model')+stat('c2',CUST.filter(c=>c.churn).length,'examples using future data'); }
+ML.bindSeg('fSeg',v=>{fMode=v;drawF();}); pF.onResize=drawF; drawF();
+
+/* ---------- 4 drift ---------- */
+const pDp=new ML.Plot('#pDp',{equal:false}), pDa=new ML.Plot('#pDa',{equal:false}); let dMode='cov', dM=.8, dDel=14; const DD=90, START=40;
+function driftSim(){ const r=ML.rng(77), ref=[...Array(4000)].map(()=>r.gauss()), qs=[...Array(9)].map((_,k)=>{ const s=ref.slice().sort((a,b)=>a-b); return s[Math.floor((k+1)/10*s.length)]; }), bin=x=>{ let b=0; while(b<9&&x>qs[b]) b++; return b; };
+  const out=[]; for(let d=0;d<DD;d++){ const on=d>=START&&dMode!=='none', sh=on&&dMode==='cov'?dM:0, n=600, h=new Array(10).fill(0); let ok=0;
+    for(let i=0;i<n;i++){ const x=r.gauss()+sh; h[bin(x)]++; const slope=on&&dMode==='con'?Math.max(.15,1.5-1.25*dM):1.5, pr=1/(1+Math.exp(-(slope*x-(on&&dMode==='con'?.6*dM:0)))), y=r()<pr?1:0, yhat=x>0?1:0; ok+=y===yhat?1:0; }
+    const psi=h.reduce((s,c)=>{ const p=c/n+1e-6, q=.1; return s+(p-q)*Math.log(p/q); },0); out.push({psi,acc:ok/n}); } return out; }
+let DS=driftSim();
+function drawD(){ const P=ML.palette(), psiPts=DS.map((o,d)=>[d,o.psi]), ym=Math.max(.3,...DS.map(o=>o.psi))*1.1;
+  const f1=ML.chart(pDp,[{pts:psiPts,color:P.c1,width:2.2}],{x0:0,x1:DD,y0:0,y1:ym,xl:'day'}), c=pDp.ctx; c.save(); c.setLineDash([5,4]); c.strokeStyle=P.c2; c.beginPath(); c.moveTo(f1.fx(0),f1.fy(.2)); c.lineTo(f1.fx(DD),f1.fy(.2)); c.stroke(); c.setLineDash([]); c.fillStyle=P.c2; c.font='11px Inter,system-ui'; c.fillText('alarm 0.2',f1.fx(1),f1.fy(.2)-5); c.fillStyle=P.c1; c.font='600 12px Inter,system-ui'; c.fillText('PSI vs training data',54,24); c.restore();
+  const today=DD-1, known=DS.map((o,d)=>[d,o.acc]).filter(([d])=>d<=today-dDel), unk=DS.map((o,d)=>[d,o.acc]).filter(([d])=>d>today-dDel);
+  const f2=ML.chart(pDa,[{pts:known,color:P.c5,width:2.2},{pts:unk,color:P.muted,width:1.2,dash:[3,4]}],{x0:0,x1:DD,y0:.4,y1:1,xl:'day (dashed: labels not in yet)'}), c2=pDa.ctx;
+  [[pDp,f1],[pDa,f2]].forEach(([pl,f])=>{ const cc=pl.ctx; cc.save(); cc.strokeStyle=P.c4; cc.setLineDash([2,3]); cc.beginPath(); cc.moveTo(f.fx(START),8); cc.lineTo(f.fx(START),pl.h-28); cc.stroke(); cc.restore(); });
+  c2.save(); c2.fillStyle=P.c5; c2.font='600 12px Inter,system-ui'; c2.fillText('accuracy (once labels arrive)',54,24); c2.restore();
+  const first=DS.findIndex(o=>o.psi>.2), base=DS.slice(0,START).reduce((s,o)=>s+o.acc,0)/START, accDrop=DS.findIndex((o,d)=>d>=START&&o.acc<base-.05);
+  $('#dStats').innerHTML=stat(first>=0?'c2':'c5',first>=0?'day '+first:'never','PSI alarm fires')+stat('c4',accDrop>=0?'day '+(accDrop+dDel):'never','accuracy drop becomes visible')+stat('c3',(100*base).toFixed(0)+'% → '+(100*DS.slice(-10).reduce((s,o)=>s+o.acc,0)/10).toFixed(0)+'%','accuracy before → after (true)'); }
+ML.bindSeg('dSeg',v=>{dMode=v;DS=driftSim();drawD();}); ML.bindRange('dM',v=>{dM=v;DS=driftSim();drawD();},v=>v.toFixed(2)); ML.bindRange('dD',v=>{dDel=v;drawD();}); pDp.onResize=drawD; pDa.onResize=drawD; drawD();
+
+/* ---------- 5 canary ---------- */
+const pR=new ML.Plot('#pR',{equal:false}); let rE=.062, rS=.05, rSeed=1; const E0=.05, HRS=48, RPH=2000;
+function canary(){ const r=ML.rng(rSeed*131+7); let e0=0,n0=0,e1=0,n1=0, stop=-1; const tr=[];
+  const binom=(n,p)=>{ const m=n*p, sd=Math.sqrt(n*p*(1-p)); return Math.max(0,Math.round(m+sd*r.gauss())); };
+  for(let h=1;h<=HRS;h++){ const k1=binom(RPH,rS), k0=RPH-k1; n0+=k0; n1+=k1; e0+=binom(k0,E0); e1+=binom(k1,rE); const p0=e0/n0, p1=n1?e1/n1:0, pp=(e0+e1)/(n0+n1), z=n1?(p1-p0)/Math.sqrt(pp*(1-pp)*(1/n0+1/n1)):0;
+    tr.push({h,p0,p1,b0:1.96*Math.sqrt(p0*(1-p0)/n0),b1:n1?1.96*Math.sqrt(Math.max(p1*(1-p1),1e-4)/n1):0,z}); if(z>3&&stop<0){ stop=h; break; } }
+  return {tr,stop,n1}; }
+function drawR(){ const P=ML.palette(), R_=canary(), tr=R_.tr, band=(k,s)=>tr.map(o=>[o.h,o[k]+s*o[k==='p0'?'b0':'b1']]);
+  const fr=ML.chart(pR,[{pts:band('p1',1),color:P.c4,width:1,dash:[3,3]},{pts:band('p1',-1),color:P.c4,width:1,dash:[3,3]},{pts:band('p0',1),color:P.c3,width:1,dash:[3,3]},{pts:band('p0',-1),color:P.c3,width:1,dash:[3,3]},{pts:tr.map(o=>[o.h,o.p0]),color:P.c3,width:2.5},{pts:tr.map(o=>[o.h,o.p1]),color:P.c4,width:2.5}],{x0:0,x1:HRS,y0:0,y1:.12,xl:'hour',yfmt:v=>(100*v).toFixed(0)+'%'}), c=pR.ctx;
+  if(R_.stop>0){ c.save(); c.strokeStyle=P.c2; c.lineWidth=2; c.beginPath(); c.moveTo(fr.fx(R_.stop),12); c.lineTo(fr.fx(R_.stop),pR.h-28); c.stroke(); c.fillStyle=P.c2; c.font='600 12px Inter,system-ui'; c.textAlign='right'; c.fillText('rolled back',fr.fx(R_.stop)-5,30); c.restore(); }
+  c.save(); c.font='600 12px Inter,system-ui'; c.fillStyle=P.c3; c.fillText('baseline (true 5.0%)',54,24); c.fillStyle=P.c4; c.fillText('canary (true '+(100*rE).toFixed(1)+'%)',54,42); c.restore();
+  const extra=Math.round(R_.n1*(rE-E0)); $('#rStats').innerHTML=stat(R_.stop>0?'c2':'c5',R_.stop>0?'hour '+R_.stop:'promoted',R_.stop>0?'automatic rollback':'no significant harm found in 48 h')+stat('c1',R_.n1.toLocaleString(),'requests served by the canary')+stat(extra>0?'c4':'c5',(extra>0?'+':'')+extra,'extra errors caused (expected)')+stat('c3',tr[tr.length-1].z.toFixed(2),'final z'); }
+ML.bindRange('rE',v=>{rE=v;drawR();},v=>(100*v).toFixed(1)+'%'); ML.bindRange('rS',v=>{rS=v;drawR();},v=>(100*v).toFixed(0)+'%'); $('#rN').addEventListener('click',()=>{ rSeed++; drawR(); }); pR.onResize=drawR; drawR();
+ML.onTheme&&ML.onTheme(()=>{ drawLC(); drawSv(); drawF(); drawD(); drawR(); });
+})();
+</script>
+<script>NLP.nav('ops','production-ml'); ML.renderMath(document.body);</script>
+</body>
+</html>

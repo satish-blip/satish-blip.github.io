@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Generative models: autoencoders, VAEs, GANs and diffusion, trained in your browser</title>
+<meta name="description" content="How a network learns to make new data: an autoencoder squeezing data through a bottleneck, a VAE with its ELBO and reparameterisation trick, a GAN and its discriminator, and a diffusion model that learns to remove noise, with classifier-free guidance. All four train live on 2-D data so you can watch them work and fail.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<style>
+.src{font-size:12.5px;color:var(--muted);margin:10px 0 0;border-left:3px solid var(--line);padding-left:10px}
+.src a{color:inherit;text-decoration:underline;text-decoration-color:var(--line)}
+.gn-sq{aspect-ratio:1/1;max-width:460px}
+.gn-key{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted);margin:6px 0}
+.gn-key i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+</style>
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Vision &amp; multimodal &middot; Generative models</p>
+  <h1>Generative models: <span class="grad">learning to make new data</span></h1>
+  <p class="lede">A classifier learns \(p(y\mid x)\): given a picture, which label? A generative model learns \(p(x)\) itself, well enough to draw new samples that look like the training data. Four ideas got us from blurry digits to photorealistic images: the autoencoder, the variational autoencoder, the generative adversarial network and the diffusion model. Each one trains live below on two-dimensional data, where you can see every sample, every failure and every trick, because the maths is identical to the image case, only the number of dimensions changes.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#ae">1 · Autoencoder</a><a href="#vae">2 · VAE</a><a href="#gan">3 · GAN</a><a href="#diff">4 · Diffusion</a><a href="#cfg">5 · Guidance &amp; latent diffusion</a><a href="#py">6 · Python</a><a href="#credits">7 · Sources &amp; credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a generative model, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>Real data, such as faces, lie in a tiny, curved region of a huge space: almost every possible grid of pixel values is static, not a face. To generate, a model must learn where that region is and how probable each part of it is, from examples alone, with no labels saying what a good face is.</p>
+      <h3>The idea</h3><p>Start from something easy to sample, random noise \(z\sim\mathcal N(0,I)\), and learn a network that turns it into data. The four families differ in how that network is trained: by reconstructing data through a bottleneck (<a class="term" data-t="autoencoder">autoencoder</a>, <a class="term" data-t="vae">VAE</a>), by fooling a critic (<a class="term" data-t="gan">GAN</a>), or by learning to undo noise one small step at a time (<a class="term" data-t="diffusion-model">diffusion</a>).</p>
+      <h3>How it works</h3><ol class="steps2"><li>Pick a simple distribution to start from: Gaussian noise.</li><li>Pick a network that maps noise to data, in one step or many.</li><li>Pick a training signal: reconstruction, an adversary, or denoising.</li><li>Train on examples; sample by drawing noise and running the network.</li><li>Steer it with a condition (a class, a text prompt) and <a class="term" data-t="cfg">guidance</a>.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>An art forger and an inspector (GAN): the forger improves until the inspector cannot tell. A sketch artist who must describe each face in five numbers and redraw it from them (autoencoder). A restorer who has seen thousands of photographs slowly fade into grain and learns to reverse each tiny step of fading, so that, given pure grain, they can “restore” a photograph that never existed (diffusion).</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Images, audio, molecules and text from noise or a prompt</li><li>Learning compact representations without labels</li><li>Filling in missing data, super-resolution, editing</li></ul></div><div class="con"><b>Watch out for</b><ul><li>GANs are unstable and can collapse to a few outputs</li><li>VAEs blur; diffusion is slow to sample without tricks</li><li>Memorised training data, bias and misuse (deepfakes)</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="generative-model">Generative model</a><a class="term" data-t="autoencoder">Autoencoder</a><a class="term" data-t="latent-space">Latent space</a><a class="term" data-t="vae">VAE</a><a class="term" data-t="elbo">ELBO</a><a class="term" data-t="reparameterisation">Reparameterisation</a><a class="term" data-t="kl-divergence">KL divergence</a><a class="term" data-t="gan">GAN</a><a class="term" data-t="mode-collapse">Mode collapse</a><a class="term" data-t="diffusion-model">Diffusion model</a><a class="term" data-t="noise-schedule">Noise schedule</a><a class="term" data-t="cfg">Classifier-free guidance</a><a class="term" data-t="latent-diffusion">Latent diffusion</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. The labs train small networks with Adam on your device; each starts when you scroll to it, and the button retrains it.</p>
+    </div>
+  </div>
+</section>
+
+<section id="ae" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Autoencoder: squeeze through a bottleneck</h2>
+    <p class="sub">A wavy curve in 2-D goes through an encoder to a code \(z\), and a decoder tries to rebuild it. The line shows everything the decoder can draw as \(z\) sweeps its range.</p>
+    <div class="plot gn-sq" id="aePlot"></div>
+    <div class="gn-key"><span><i style="background:var(--muted)"></i>data</span><span><i style="background:var(--c1)"></i>reconstruction</span><span><i style="background:var(--c5)"></i>decoder output as z sweeps</span></div>
+    <div class="ctl"><div class="seg" id="aeZ"><button data-v="1" class="on">Code size 1</button><button data-v="2">Code size 2</button></div></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="aeGo">Retrain</button></div>
+    <div class="stats" id="aeStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>An <a class="term" data-t="autoencoder">autoencoder</a> is two networks trained together: an encoder \(f_\phi\) that compresses \(x\) into a short code \(z=f_\phi(x)\), and a decoder \(g_\theta\) that rebuilds \(\hat x=g_\theta(z)\). The only training signal is reconstruction error,</p>
+      <div class="mathbox c1">$$\mathcal L(\phi,\theta)=\frac1n\sum_{i=1}^n\big\lVert x_i-g_\theta(f_\phi(x_i))\big\rVert^2 .$$</div>
+      <p>With a code as large as the input, the network can learn the identity and nothing interesting happens. The <b>bottleneck</b> forces it to keep only what matters. The wave is a one-dimensional curve drawn in two dimensions, so a code of size 1 is enough: the encoder learns roughly “how far along the curve”, and the decoder's sweep traces the curve itself. (On a tightly wound curve such as a swiss roll the same network often gets stuck folding the curve onto itself: a bottleneck forces a choice, not always a good one.) That code is a coordinate system on the data, a <a class="term" data-t="latent-space">latent space</a>. A linear autoencoder with squared error learns the same subspace as <a href="../../../ml/pca/">PCA</a>; non-linear layers let it follow curves.</p>
+      <p>Can we generate with it? Only partly. The codes of training points occupy some region of \(z\), but nothing makes that region tidy or tells us how to sample it, and decoding a code outside it gives nonsense (watch where the sweep line leaves the data at its ends). The VAE fixes exactly this.</p>
+      <details class="deeper"><summary>Going deeper: denoising and sparse autoencoders</summary><div>
+        <p>A <b>denoising autoencoder</b> (Vincent et al., 2008) is fed a corrupted \(\tilde x\) and must output the clean \(x\); it cannot copy, so it learns the data's structure even without a narrow bottleneck. This idea, learning to remove noise, returns as the heart of diffusion models. A <b>sparse autoencoder</b> uses a wide code with a penalty that keeps most units at zero; they are used today to find interpretable features inside language models. Masked autoencoders for images are covered in <a href="../self-supervised/">self-supervised learning</a>.</p>
+      </div></details>
+      <p class="src">Adapted from: Hinton and Salakhutdinov, <a href="https://www.science.org/doi/10.1126/science.1127647" target="_blank" rel="noopener">Reducing the dimensionality of data with neural networks</a> (Science, 2006); Goodfellow, Bengio and Courville, <a href="https://www.deeplearningbook.org/contents/autoencoders.html" target="_blank" rel="noopener"><i>Deep Learning</i>, ch. 14</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="vae" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Variational autoencoder: a latent space you can sample</h2>
+    <p class="sub">Eight clusters in 2-D, a 2-D latent space. Red points are brand-new samples: draw \(z\sim\mathcal N(0,I)\), decode. Turn β up and the latent space gets tidier while the samples get blurrier.</p>
+    <div class="plot gn-sq" id="vaePlot"></div>
+    <div class="gn-key"><span><i style="background:var(--muted)"></i>data</span><span><i style="background:var(--c2)"></i>new samples from the prior</span></div>
+    <div class="plot gn-sq" id="vaeLat" style="max-width:300px"></div>
+    <p class="hint">Above: where each training point's code μ(x) lands in latent space, coloured by its cluster, with the unit circle of the prior.</p>
+    <div class="ctl"><label for="vaeB"><span>KL weight β</span><output id="vaeBOut"></output></label><input type="range" id="vaeB" min="0.05" max="3" step="0.05" value="1"></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="vaeGo">Retrain</button></div>
+    <div class="stats" id="vaeStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A <a class="term" data-t="vae">variational autoencoder</a> makes the latent space a probability model. The decoder defines \(p_\theta(x\mid z)\) and the prior is \(p(z)=\mathcal N(0,I)\), so sampling is easy: draw \(z\), decode. Training should maximise \(\log p_\theta(x)\), which is intractable, so the encoder outputs a Gaussian guess \(q_\phi(z\mid x)=\mathcal N(\mu_\phi(x),\sigma^2_\phi(x))\) for which codes could have produced \(x\), and we maximise the <a class="term" data-t="elbo">evidence lower bound</a>:</p>
+      <div class="mathbox c1">$$\log p_\theta(x)\ \ge\ \underbrace{\mathbb E_{q_\phi(z\mid x)}\big[\log p_\theta(x\mid z)\big]}_{\text{reconstruct}}-\beta\,\underbrace{\mathrm{KL}\big(q_\phi(z\mid x)\,\Vert\,\mathcal N(0,I)\big)}_{\text{stay near the prior}}.$$</div>
+      <p>The first term is reconstruction, as before. The second, a <a class="term" data-t="kl-divergence">KL divergence</a> with a closed form for Gaussians, \(\tfrac12\sum_j(\mu_j^2+\sigma_j^2-\log\sigma_j^2-1)\), pulls every code distribution towards the prior, so the codes fill the region we will sample from, without gaps.</p>
+      <p>The <a class="term" data-t="reparameterisation">reparameterisation trick</a> makes this trainable: instead of sampling \(z\) (which has no gradient), write \(z=\mu+\sigma\odot\varepsilon\) with \(\varepsilon\sim\mathcal N(0,I)\), so gradients flow through \(\mu\) and \(\sigma\). In the lab, the red samples cover the clusters but also fall <i>between</i> them: the decoder must map a smooth Gaussian onto eight separate blobs, and the regions between codes decode to in-between points. That is the 2-D version of the VAE's famous blurriness. Lower β sharpens samples but leaves holes in the latent space; higher β smooths the space and blurs everything.</p>
+      <details class="deeper"><summary>Going deeper: why the bound holds, and VQ-VAE</summary><div>
+        <p>For any \(q\), \(\log p(x)=\text{ELBO}+\mathrm{KL}\big(q(z\mid x)\,\Vert\,p(z\mid x)\big)\), and a KL is never negative, so the ELBO is a lower bound, tight when \(q\) equals the true posterior. Training the encoder pushes \(q\) towards the posterior; training the decoder raises the likelihood.</p>
+        <p>The <b>VQ-VAE</b> (van den Oord et al., 2017) replaces the Gaussian code with the nearest vector from a learnt codebook, giving discrete tokens. Those tokens, and VAE encoders in general, are what latent diffusion and many image and audio generators work in (section 5).</p>
+      </div></details>
+      <p class="src">Adapted from: Kingma and Welling, <a href="https://arxiv.org/abs/1312.6114" target="_blank" rel="noopener">Auto-Encoding Variational Bayes</a> (2013); Higgins et al., β-VAE (ICLR 2017); Kingma and Welling, <a href="https://arxiv.org/abs/1906.02691" target="_blank" rel="noopener">An Introduction to Variational Autoencoders</a> (2019).</p>
+    </div>
+  </div>
+</section>
+
+<section id="gan" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>GAN: a forger and an inspector</h2>
+    <p class="sub">The generator turns noise into points; the discriminator (background: bright where it thinks “real”) tries to tell them from the data. Watch them chase each other, and watch for clusters the generator never finds.</p>
+    <div class="plot gn-sq" id="ganPlot"></div>
+    <div class="gn-key"><span><i style="background:var(--muted)"></i>data</span><span><i style="background:var(--c2)"></i>generated</span></div>
+    <div class="ctl"><div class="seg" id="ganD"><button data-v="gauss8" class="on">8 clusters</button><button data-v="moons">Two moons</button><button data-v="ring">Ring</button></div></div>
+    <div class="ctl"><label for="ganLr"><span>Learning rate</span><output id="ganLrOut"></output></label><input type="range" id="ganLr" min="-4" max="-2" step="0.25" value="-3"></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="ganGo">Retrain</button></div>
+    <div class="plot wide" id="ganLoss" style="aspect-ratio:16/6"></div>
+    <div class="stats" id="ganStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A <a class="term" data-t="gan">generative adversarial network</a> drops the encoder and the likelihood altogether. A generator \(G\) maps noise to samples; a discriminator \(D\) outputs the probability that its input is real. They play a minimax game:</p>
+      <div class="mathbox c1">$$\min_G\max_D\ \ \mathbb E_{x\sim p_{\text{data}}}\big[\log D(x)\big]+\mathbb E_{z\sim\mathcal N(0,I)}\big[\log\big(1-D(G(z))\big)\big].$$</div>
+      <p>For a fixed \(G\) the best discriminator is \(D^*(x)=p_{\text{data}}(x)/(p_{\text{data}}(x)+p_G(x))\), and plugging it in shows the generator is minimising the Jensen–Shannon divergence between the data and its own distribution, which is zero only when they match. In practice the generator maximises \(\log D(G(z))\) instead (the “non-saturating” loss), which gives strong gradients early on when \(D\) easily rejects its samples. The only information \(G\) ever receives is the gradient of \(D\)'s opinion, back-propagated through \(D\) into its samples.</p>
+      <div class="algo" data-anim="gantrain"><h5 class="algo-h">Algorithm: one GAN training step</h5><ol>
+        <li><span class="kw">input</span> data batch \(\{x_i\}\), noise batch \(\{z_i\}\), networks \(G, D\)</li>
+        <li>\(\tilde x_i\leftarrow G(z_i)\) <span class="cm">fakes</span></li>
+        <li>update \(D\) to raise \(\log D(x_i)+\log(1-D(\tilde x_i))\) <span class="cm">G frozen</span></li>
+        <li>new noise; \(\tilde x_i\leftarrow G(z_i)\)</li>
+        <li>update \(G\) to raise \(\log D(\tilde x_i)\), gradients flowing through \(D\) <span class="cm">D frozen</span></li>
+        <li><span class="kw">repeat</span> until samples look right (there is no loss that says when)</li>
+      </ol></div>
+      <p>GANs give the sharpest samples of the classic models, but training is a balancing act. <a class="term" data-t="mode-collapse">Mode collapse</a> is the classic failure: the generator finds a few outputs that fool the discriminator and stops exploring, so some clusters never appear. Raise the learning rate in the lab and the two networks start to oscillate instead of converging.</p>
+      <details class="deeper"><summary>Going deeper: Wasserstein GANs and StyleGAN</summary><div>
+        <p>When the data and generator distributions do not overlap, the Jensen–Shannon divergence is constant and gives no useful gradient. The <b>Wasserstein GAN</b> (Arjovsky et al., 2017) replaces it with the earth-mover distance, estimated by a critic kept smooth by a gradient penalty (Gulrajani et al., 2017), which gives more stable training and a loss that tracks quality. <b>StyleGAN</b> (Karras et al., 2019) feeds the noise through a mapping network and injects it at every resolution, producing the photorealistic faces that made GANs famous. Diffusion models have since overtaken GANs for most image generation, but GAN-style adversarial losses survive inside them, for example to sharpen the VAE decoder of latent diffusion.</p>
+      </div></details>
+      <p class="src">Adapted from: Goodfellow et al., <a href="https://arxiv.org/abs/1406.2661" target="_blank" rel="noopener">Generative Adversarial Nets</a> (2014); Arjovsky, Chintala and Bottou, <a href="https://arxiv.org/abs/1701.07875" target="_blank" rel="noopener">Wasserstein GAN</a> (2017); Metz et al., Unrolled GANs (2017) for the eight-Gaussian test.</p>
+    </div>
+  </div>
+</section>
+
+<section id="diff" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Diffusion: learn to remove noise</h2>
+    <p class="sub">Two moons, each moon a class. The forward process buries the data in noise over T = 40 steps (slide t). A network learns to predict the added noise; running it backwards from pure noise draws new moons.</p>
+    <div class="plot gn-sq" id="dfPlot"></div>
+    <div class="gn-key"><span><i style="background:var(--c1)"></i>moon A</span><span><i style="background:var(--c4)"></i>moon B</span><span><i style="background:var(--c2)"></i>generated samples</span></div>
+    <div class="ctl"><div class="seg" id="dfV"><button data-v="fwd">Forward: add noise</button><button data-v="gen" class="on">Reverse: generate</button></div></div>
+    <div class="ctl"><label for="dfT"><span>Step t (forward view)</span><output id="dfTOut"></output></label><input type="range" id="dfT" min="0" max="40" step="1" value="20"></div>
+    <div class="plot wide" id="dfLoss" style="aspect-ratio:16/6"></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="dfGo">Retrain</button><button class="btn" id="dfS">Draw new samples</button></div>
+    <div class="stats" id="dfStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A <a class="term" data-t="diffusion-model">diffusion model</a> turns generation into many small denoising problems. The <b>forward process</b> is fixed, not learnt: at each step add a little Gaussian noise, with variances \(\beta_1,\dots,\beta_T\) set by a <a class="term" data-t="noise-schedule">noise schedule</a>. With \(\alpha_t=1-\beta_t\) and \(\bar\alpha_t=\prod_{s\le t}\alpha_s\), we can jump straight to any step:</p>
+      <div class="mathbox c1">$$x_t=\sqrt{\bar\alpha_t}\,x_0+\sqrt{1-\bar\alpha_t}\,\varepsilon,\qquad \varepsilon\sim\mathcal N(0,I).$$</div>
+      <p>By \(t=T\) the data is indistinguishable from pure noise. The <b>reverse process</b> is learnt. A network \(\varepsilon_\theta(x_t,t)\) is trained to predict the noise that was added, a plain regression:</p>
+      <div class="mathbox c1">$$\mathcal L(\theta)=\mathbb E_{x_0,\,t,\,\varepsilon}\Big[\big\lVert\varepsilon-\varepsilon_\theta\big(\sqrt{\bar\alpha_t}x_0+\sqrt{1-\bar\alpha_t}\,\varepsilon,\ t\big)\big\rVert^2\Big].$$</div>
+      <p>To generate, start from \(x_T\sim\mathcal N(0,I)\) and step backwards, each time removing the predicted noise and adding a little fresh noise:</p>
+      <div class="mathbox c1">$$x_{t-1}=\frac{1}{\sqrt{\alpha_t}}\Big(x_t-\frac{\beta_t}{\sqrt{1-\bar\alpha_t}}\,\varepsilon_\theta(x_t,t)\Big)+\sqrt{\beta_t}\,z .$$</div>
+      <div class="algo" data-anim="ddpm"><h5 class="algo-h">Algorithm: DDPM training and sampling</h5><ol>
+        <li><span class="kw">train:</span> pick \(x_0\) from the data, \(t\sim\{1..T\}\), \(\varepsilon\sim\mathcal N(0,I)\)</li>
+        <li class="i1">\(x_t\leftarrow\sqrt{\bar\alpha_t}x_0+\sqrt{1-\bar\alpha_t}\,\varepsilon\)</li>
+        <li class="i1">gradient step on \(\lVert\varepsilon-\varepsilon_\theta(x_t,t)\rVert^2\)</li>
+        <li><span class="kw">sample:</span> \(x_T\sim\mathcal N(0,I)\)</li>
+        <li><span class="kw">for</span> \(t=T,\dots,1\): \(x_{t-1}\leftarrow\frac{1}{\sqrt{\alpha_t}}\big(x_t-\frac{\beta_t}{\sqrt{1-\bar\alpha_t}}\varepsilon_\theta(x_t,t)\big)+\sqrt{\beta_t}\,z\)</li>
+        <li><span class="kw">return</span> \(x_0\)</li>
+      </ol></div>
+      <p>Why does this work so well? Each step only has to undo a little noise, which is an easy, stable regression problem: no adversary, no posterior to approximate, and no mode collapse, because every training point is a target. Predicting the noise is equivalent to estimating the <b>score</b> \(\nabla_x\log p_t(x)\), the direction towards higher data density at noise level \(t\); sampling follows those arrows downhill in noise.</p>
+      <details class="deeper"><summary>Going deeper: faster sampling, score matching and flow matching</summary><div>
+        <p>Hundreds of network calls per sample is slow. <b>DDIM</b> (Song et al., 2021) takes deterministic, larger steps with the same trained network, giving good samples in 20–50 steps. The continuous-time view (Song et al., 2021) writes the forward process as a stochastic differential equation whose reverse depends only on the score, which unifies diffusion with score matching. <b>Flow matching</b> and rectified flows (Lipman et al., 2023; Liu et al., 2023) learn a velocity field along straight paths from noise to data, used in recent image models; consistency and distillation methods cut sampling to a handful of steps.</p>
+      </div></details>
+      <p class="src">Adapted from: Sohl-Dickstein et al., <a href="https://arxiv.org/abs/1503.03585" target="_blank" rel="noopener">Deep Unsupervised Learning using Nonequilibrium Thermodynamics</a> (2015); Ho, Jain and Abbeel, <a href="https://arxiv.org/abs/2006.11239" target="_blank" rel="noopener">Denoising Diffusion Probabilistic Models</a> (2020), algorithms 1 and 2.</p>
+    </div>
+  </div>
+</section>
+
+<section id="cfg" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Classifier-free guidance</h2>
+    <p class="sub">The same diffusion model was trained with its class label, and with the label hidden 20% of the time. Ask for one moon and turn up the guidance weight w.</p>
+    <div class="plot gn-sq" id="cgPlot"></div>
+    <div class="ctl"><div class="seg" id="cgC"><button data-v="0" class="on">Moon A</button><button data-v="1">Moon B</button><button data-v="-1">No label</button></div></div>
+    <div class="ctl"><label for="cgW"><span>Guidance weight w</span><output id="cgWOut"></output></label><input type="range" id="cgW" min="0" max="6" step="0.5" value="2"></div>
+    <div class="stats" id="cgStats"></div>
+    <p class="hint">Uses the network trained in section 4; retraining there updates this lab.</p>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>To control what a diffusion model draws, give the network a condition \(c\) (a class, or a text prompt embedded by a model such as <a href="../clip/">CLIP</a> or T5) as an extra input: \(\varepsilon_\theta(x_t,t,c)\). On its own, conditioning is often too weak: samples drift between classes or only loosely match the prompt.</p>
+      <p><a class="term" data-t="cfg">Classifier-free guidance</a> trains one network to be both conditional and unconditional, by replacing \(c\) with a “null” token for a random 10–20% of training examples. At sampling time, run it both ways and extrapolate away from the unconditional prediction:</p>
+      <div class="mathbox c1">$$\tilde\varepsilon=(1+w)\,\varepsilon_\theta(x_t,t,c)-w\,\varepsilon_\theta(x_t,t,\varnothing).$$</div>
+      <p>The difference between the two predictions points towards “more like \(c\)”; scaling it up by \(w\) exaggerates that. In score terms it samples from a sharpened \(p(x)\,p(c\mid x)^{w+1}\). Raise \(w\) in the lab: samples concentrate on the requested moon and pull towards its most typical region, at the cost of variety. Text-to-image systems use \(w\) around 3–10: higher gives closer prompt match and less diversity.</p>
+      <h3>Latent diffusion</h3>
+      <p>Running diffusion on a 1024×1024×3 image is expensive. <a class="term" data-t="latent-diffusion">Latent diffusion</a> (the design behind Stable Diffusion) first trains a VAE-like autoencoder that compresses images about 8× in each direction into a latent grid, then runs the whole diffusion process in that latent space, with a <a class="term" data-t="u-net">U-Net</a> or a transformer as \(\varepsilon_\theta\) and the text fed in through <a href="../cross-attention/">cross-attention</a>. The decoder turns the final latent back into pixels. So all four ideas on this page meet in one system: an autoencoder for compression, VAE-style regularisation of its latent space, an adversarial loss to keep the decoder sharp, and diffusion with guidance to generate.</p>
+      <p class="src">Adapted from: Ho and Salimans, <a href="https://arxiv.org/abs/2207.12598" target="_blank" rel="noopener">Classifier-Free Diffusion Guidance</a> (2022); Rombach et al., <a href="https://arxiv.org/abs/2112.10752" target="_blank" rel="noopener">High-Resolution Image Synthesis with Latent Diffusion Models</a> (CVPR 2022).</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+  <p class="sub">A VAE loss with the reparameterisation trick, a complete 2-D DDPM with classifier-free guidance in PyTorch, and text-to-image with Hugging Face diffusers.</p>
+<pre class="code"><span class="c"># pip install torch scikit-learn diffusers transformers accelerate</span>
+<span class="k">import</span> torch, torch.nn <span class="k">as</span> nn, torch.nn.functional <span class="k">as</span> F
+<span class="k">from</span> sklearn.datasets <span class="k">import</span> make_moons
+
+<span class="c"># ---- 1. VAE loss: reconstruction + beta * KL, with the reparameterisation trick ----</span>
+<span class="k">def</span> <span class="f">vae_loss</span>(encoder, decoder, x, beta=1.0):
+    mu, logvar = <span class="f">encoder</span>(x).chunk(2, dim=-1)
+    z = mu + torch.exp(0.5 * logvar) * torch.randn_like(mu)          <span class="c"># z = mu + sigma * eps</span>
+    recon = F.mse_loss(<span class="f">decoder</span>(z), x, reduction=<span class="s">"sum"</span>) / <span class="f">len</span>(x)
+    kl = -0.5 * torch.sum(1 + logvar - mu**2 - logvar.exp()) / <span class="f">len</span>(x)
+    <span class="k">return</span> recon + beta * kl
+
+<span class="c"># ---- 2. DDPM on two moons, conditioned on the moon, with classifier-free guidance ----</span>
+X, y = <span class="f">make_moons</span>(4000, noise=0.05)
+X = torch.tensor((X - X.mean(0)) / X.std(0), dtype=torch.float32); y = torch.tensor(y)
+
+T = 100
+beta = torch.linspace(1e-4, 0.05, T); alpha = 1 - beta; abar = torch.cumprod(alpha, 0)
+
+<span class="k">class</span> <span class="f">EpsNet</span>(nn.Module):
+    <span class="k">def</span> <span class="f">__init__</span>(self, n_classes=2, d=128):
+        <span class="f">super</span>().__init__()
+        self.emb = nn.Embedding(n_classes + 1, 16)                      <span class="c"># index n_classes = "no label"</span>
+        self.net = nn.Sequential(nn.Linear(2 + 16 + 2, d), nn.SiLU(), nn.Linear(d, d), nn.SiLU(), nn.Linear(d, 2))
+    <span class="k">def</span> <span class="f">forward</span>(self, x, t, c):
+        tf = torch.stack([torch.sin(t / T * 3.14), torch.cos(t / T * 3.14)], -1)
+        <span class="k">return</span> self.net(torch.cat([x, self.emb(c), tf], -1))
+
+model = <span class="f">EpsNet</span>(); opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+<span class="k">for</span> step <span class="k">in</span> <span class="f">range</span>(5000):
+    i = torch.randint(0, <span class="f">len</span>(X), (256,)); x0, c = X[i], y[i].clone()
+    c[torch.rand(256) < 0.2] = 2                                         <span class="c"># hide the label 20% of the time</span>
+    t = torch.randint(0, T, (256,)); eps = torch.randn_like(x0)
+    xt = abar[t].sqrt()[:, <span class="k">None</span>] * x0 + (1 - abar[t]).sqrt()[:, <span class="k">None</span>] * eps
+    loss = F.mse_loss(<span class="f">model</span>(xt, t.float(), c), eps)
+    opt.zero_grad(); loss.backward(); opt.step()
+
+@torch.no_grad()
+<span class="k">def</span> <span class="f">sample</span>(n, cls, w=2.0):
+    x = torch.randn(n, 2); c = torch.full((n,), cls); null = torch.full((n,), 2)
+    <span class="k">for</span> t <span class="k">in</span> <span class="f">reversed</span>(<span class="f">range</span>(T)):
+        tt = torch.full((n,), <span class="f">float</span>(t))
+        eps = (1 + w) * <span class="f">model</span>(x, tt, c) - w * <span class="f">model</span>(x, tt, null)       <span class="c"># classifier-free guidance</span>
+        x = (x - beta[t] / (1 - abar[t]).sqrt() * eps) / alpha[t].sqrt()
+        <span class="k">if</span> t > 0: x = x + beta[t].sqrt() * torch.randn_like(x)
+    <span class="k">return</span> x
+
+<span class="f">print</span>(<span class="f">sample</span>(500, cls=0)[:5])
+
+<span class="c"># ---- 3. Text-to-image with a pretrained latent diffusion model ----</span>
+<span class="k">from</span> diffusers <span class="k">import</span> DiffusionPipeline
+pipe = DiffusionPipeline.from_pretrained(<span class="s">"stabilityai/stable-diffusion-2-1-base"</span>)  <span class="c"># needs a GPU for speed</span>
+image = <span class="f">pipe</span>(<span class="s">"a watercolour fox in a snowy forest"</span>, guidance_scale=7.5, num_inference_steps=30).images[0]
+image.save(<span class="s">"fox.png"</span>)
+</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">7</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page is written for this site in its own words, with its own labs, which train small networks from scratch in JavaScript. The methods come from these papers:</p>
+    <ul>
+      <li>Hinton and Salakhutdinov (2006); Vincent et al., denoising autoencoders (2008).</li>
+      <li>Kingma and Welling, <a href="https://arxiv.org/abs/1312.6114" target="_blank" rel="noopener">Auto-Encoding Variational Bayes</a> (2013); Higgins et al., β-VAE (2017); van den Oord et al., VQ-VAE (2017).</li>
+      <li>Goodfellow et al., <a href="https://arxiv.org/abs/1406.2661" target="_blank" rel="noopener">Generative Adversarial Nets</a> (2014); Arjovsky et al., Wasserstein GAN (2017); Karras et al., StyleGAN (2019).</li>
+      <li>Sohl-Dickstein et al. (2015); Ho, Jain and Abbeel, <a href="https://arxiv.org/abs/2006.11239" target="_blank" rel="noopener">DDPM</a> (2020); Song et al., DDIM and score-based SDEs (2021); Ho and Salimans, <a href="https://arxiv.org/abs/2207.12598" target="_blank" rel="noopener">classifier-free guidance</a> (2022); Rombach et al., <a href="https://arxiv.org/abs/2112.10752" target="_blank" rel="noopener">latent diffusion</a> (2022).</li>
+      <li>PyTorch and Hugging Face <a href="https://huggingface.co/docs/diffusers" target="_blank" rel="noopener">diffusers</a> documentation, for the Python section.</li>
+    </ul>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"Why can't you reliably generate new data by decoding random codes from a plain autoencoder?","o":["Its decoder has no weights","Nothing makes the codes of real data fill a known region, so random codes can land where the decoder was never trained","It only works on images","Its loss is a KL divergence"],"a":1,"e":"A plain autoencoder only learns to reconstruct. The VAE adds a KL term that pulls codes towards N(0, I), so sampling from N(0, I) lands where the decoder has been trained."},
+{"q":"What does the reparameterisation trick z = μ + σ·ε achieve?","o":["It removes the KL term","It lets gradients flow through the sampling step to μ and σ","It makes the decoder deterministic","It enlarges the latent space"],"a":1,"e":"The randomness moves into ε, which does not depend on the parameters, so μ and σ are ordinary differentiable outputs."},
+{"q":"In a GAN, what information does the generator receive during training?","o":["The training images directly","The gradient of the discriminator's output with respect to its samples","The ELBO","The class labels"],"a":1,"e":"G never sees the data; it learns only through D's judgement, back-propagated into its samples."},
+{"q":"What is a DDPM's noise-prediction network trained to output?","o":["The clean image directly","The noise ε that was added to make x_t","The class label","The discriminator score"],"a":1,"e":"The loss is ‖ε − ε_θ(x_t, t)‖², a regression on the added noise; this is equivalent to estimating the score of the noisy data."},
+{"q":"In classifier-free guidance with weight w, which prediction is used?","o":["ε(x, ∅) only","(1 + w)·ε(x, c) − w·ε(x, ∅)","w·ε(x, c)","ε(x, c) + ε(x, ∅)"],"a":1,"e":"The model is run with and without the condition and the difference is amplified, trading diversity for fidelity to c."}
+]</script>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/gen.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette();
+const B=2.7;
+function scatter(plot, layers, bg){ const P=P0(), c=plot.ctx; plot.setBounds({x0:-B,x1:B,y0:-B,y1:B}); plot.clear(); if(bg) bg(c,P); plot.grid(1,false);
+  layers.forEach(L=>{ c.fillStyle=L.color; c.globalAlpha=L.alpha??.85; L.pts.forEach((p,i)=>{ if(!isFinite(p[0])||!isFinite(p[1])) return; c.fillStyle=L.colors?L.colors[i]:L.color; c.beginPath(); c.arc(plot.X(p[0]),plot.Y(p[1]),L.r||2.4,0,7); c.fill(); });
+    if(L.line){ c.globalAlpha=1; c.strokeStyle=L.color; c.lineWidth=2.5; c.beginPath(); L.line.forEach((p,i)=>{ const X=plot.X(p[0]),Y=plot.Y(p[1]); i?c.lineTo(X,Y):c.moveTo(X,Y); }); c.stroke(); } });
+  c.globalAlpha=1; }
+/* one lab trains at a time; each starts the first time it scrolls into view */
+let active=null;
+function trainer(name, init, step, draw, max){ const T={name,it:0,raf:0,running:false};
+  T.start=()=>{ if(active&&active!==T) active.stop(); active=T; init(); T.it=0; T.running=true; cancelAnimationFrame(T.raf);
+    const loop=()=>{ const t0=performance.now(); while(performance.now()-t0<14&&T.it<max){ step(T.it); T.it++; } draw(); if(T.it<max&&T.running) T.raf=requestAnimationFrame(loop); else T.running=false; }; loop(); };
+  T.stop=()=>{ T.running=false; cancelAnimationFrame(T.raf); };
+  return T; }
+function onView(el, fn){ el=document.querySelector(el); let done=false; if(!('IntersectionObserver' in window)){ fn(); return; }
+  const io=new IntersectionObserver(es=>{ if(!done&&es.some(e=>e.isIntersecting)){ done=true; io.disconnect(); fn(); } },{rootMargin:'100px'}); io.observe(el); }
+const sig=z=>1/(1+Math.exp(-z));
+
+/* ---------- 1. autoencoder ---------- */
+const aeP=new ML.Plot('#aePlot'); let aeZ=1, enc, dec, aeD, aeLoss=0;
+const aeT=trainer('ae',()=>{ const r=ML.rng(5); aeD=[...Array(500)].map(()=>{ const t=-2+4*r(); return [t+.05*r.gauss(),.9*Math.sin(1.6*t)+.05*r.gauss()]; }); enc=GX.MLP([2,32,32,aeZ],{act:'tanh',seed:1}); dec=GX.MLP([aeZ,32,32,2],{act:'tanh',seed:2}); },
+  ()=>{ const r=Math.random, Bn=32; let L=0; for(let b=0;b<Bn;b++){ const x=aeD[Math.floor(r()*aeD.length)], e=enc.fwd(x), d=dec.fwd(e.y); const dy=[0,1].map(j=>2*(d.y[j]-x[j])/Bn); L+=(d.y[0]-x[0])**2+(d.y[1]-x[1])**2; enc.bwd(e.c,dec.bwd(d.c,dy)); }
+    dec.adam(3e-3); enc.adam(3e-3); aeLoss=.98*aeLoss+.02*L/Bn; }, drawAe, 3000);
+function drawAe(){ if(!enc) return; const P=P0(), rec=aeD.map(x=>dec.run(enc.run(x))), Z=aeD.map(x=>enc.run(x));
+  let line=null; if(aeZ===1){ const zs=Z.map(z=>z[0]), lo=Math.min(...zs), hi=Math.max(...zs), sp=hi-lo; line=[]; for(let k=0;k<=120;k++){ const z=lo-.15*sp+1.3*sp*k/120; line.push(dec.run([z])); } }
+  scatter(aeP,[{pts:aeD,color:P.muted,alpha:.45,r:2},{pts:rec,color:P.c1,r:2.2}].concat(line?[{pts:[],color:P.c5,line}]:[]));
+  const mse=aeD.reduce((s,x,i)=>s+(x[0]-rec[i][0])**2+(x[1]-rec[i][1])**2,0)/aeD.length;
+  GX.stats('#aeStats',[[mse.toFixed(4),'reconstruction error','c1'],[String(aeT.it),'training steps','c3'],[aeZ===1?'2 → 1 → 2':'2 → 2 → 2','shape','c5']]); }
+ML.bindSeg('aeZ',v=>{ aeZ=+v; aeT.start(); }); $('#aeGo').onclick=aeT.start; aeP.onResize=drawAe; onView('#aePlot',aeT.start);
+
+/* ---------- 2. VAE ---------- */
+const vP=new ML.Plot('#vaePlot'), vL=new ML.Plot('#vaeLat'); let ve, vd, vD, vY, vRec=0, vKL=0, vEps=null;
+const S2=0.03;
+const vaeT=trainer('vae',()=>{ const r=ML.rng(8), d=GX.data('gauss8',800,r); vD=d.X; vY=vD.map(p=>Math.round(((Math.atan2(p[1],p[0])/(Math.PI/4))+8))%8); ve=GX.MLP([2,48,48,4],{act:'tanh',seed:3,outScale:.3}); vd=GX.MLP([2,48,48,2],{act:'tanh',seed:4}); const g=ML.rng(77); vEps=[...Array(500)].map(()=>[g.gauss(),g.gauss()]); },
+  ()=>{ const beta=+$('#vaeB').value, Bn=32; let R=0,K=0;
+    for(let b=0;b<Bn;b++){ const x=vD[Math.floor(Math.random()*vD.length)], e=ve.fwd(x), mu=[e.y[0],e.y[1]], lv=[Math.max(-8,Math.min(4,e.y[2])),Math.max(-8,Math.min(4,e.y[3]))];
+      const eps=[gs(),gs()], sd=lv.map(v=>Math.exp(.5*v)), z=[mu[0]+sd[0]*eps[0],mu[1]+sd[1]*eps[1]], d=vd.fwd(z);
+      const dy=[0,1].map(j=>(d.y[j]-x[j])/S2/Bn); R+=((d.y[0]-x[0])**2+(d.y[1]-x[1])**2)/(2*S2); const dz=vd.bwd(d.c,dy);
+      K+=.5*[0,1].reduce((s,j)=>s+mu[j]*mu[j]+Math.exp(lv[j])-lv[j]-1,0);
+      ve.bwd(e.c,[dz[0]+beta*mu[0]/Bn,dz[1]+beta*mu[1]/Bn,(dz[0]*eps[0]*.5*sd[0]+beta*.5*(Math.exp(lv[0])-1)/Bn),(dz[1]*eps[1]*.5*sd[1]+beta*.5*(Math.exp(lv[1])-1)/Bn)]); }
+    vd.adam(2e-3,1,{clip:50}); ve.adam(2e-3,1,{clip:50}); vRec=.98*vRec+.02*R/Bn; vKL=.98*vKL+.02*K/Bn; }, drawVae, 3500);
+function gs(){ let u=0; while(!u) u=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(6.283185*Math.random()); }
+function drawVae(){ if(!ve) return; const P=P0(), smp=vEps.map(z=>vd.run(z)), cols=[P.c1,P.c2,P.c3,P.c4,P.c5,P.ink,P.muted,P.c1];
+  scatter(vP,[{pts:vD,color:P.muted,alpha:.4,r:2},{pts:smp,color:P.c2,r:2.2}]);
+  const mus=vD.map(x=>{ const y=ve.run(x); return [y[0],y[1]]; }), hue=i=>`hsl(${vY[i]*45},70%,55%)`;
+  vL.setBounds({x0:-3,x1:3,y0:-3,y1:3}); scatter(vL,[{pts:mus.map(m=>[m[0]*B/3,m[1]*B/3]),colors:mus.map((_,i)=>hue(i)),color:P.c1,r:2}],(c,Pp)=>{ c.strokeStyle=Pp.muted; c.setLineDash([4,4]); c.beginPath(); c.arc(vL.X(0),vL.Y(0),Math.abs(vL.X(B/3)-vL.X(0)),0,7); c.stroke(); c.setLineDash([]); });
+  GX.stats('#vaeStats',[[vRec.toFixed(2),'reconstruction term','c1'],[vKL.toFixed(2),'KL term','c4'],[String(vaeT.it),'training steps','c3']]); }
+ML.bindRange('vaeB',()=>vaeT.start(),v=>(+v).toFixed(2)); $('#vaeGo').onclick=vaeT.start; vP.onResize=drawVae; vL.onResize=drawVae; onView('#vaePlot',vaeT.start);
+
+/* ---------- 3. GAN ---------- */
+const gP=new ML.Plot('#ganPlot'), glP=new ML.Plot('#ganLoss',{equal:false}); let G, D, gD, gName='gauss8', gHist=[], gZ=null, dR=.5, dF=.5;
+const ganT=trainer('gan',()=>{ const r=ML.rng(12); gD=GX.data(gName,800,r).X; G=GX.MLP([2,48,48,2],{act:'lrelu',seed:5}); D=GX.MLP([2,48,48,1],{act:'lrelu',seed:6}); gHist=[]; const g=ML.rng(91); gZ=[...Array(500)].map(()=>[g.gauss(),g.gauss()]); },
+  (it)=>{ const lr=Math.pow(10,+$('#ganLr').value), Bn=32; let lr_=0, lf=0, sr=0, sf=0;
+    for(let b=0;b<Bn;b++){ const x=gD[Math.floor(Math.random()*gD.length)], o=D.fwd(x), p=sig(o.y[0]); D.bwd(o.c,[(p-1)/Bn]); lr_-=Math.log(p+1e-9); sr+=p;
+      const f=G.run([gs(),gs()]), of=D.fwd(f), pf=sig(of.y[0]); D.bwd(of.c,[pf/Bn]); lf-=Math.log(1-pf+1e-9); sf+=pf; }
+    D.adam(lr,1,{b1:.5});
+    let lg=0; for(let b=0;b<Bn;b++){ const g=G.fwd([gs(),gs()]), o=D.fwd(g.y), p=sig(o.y[0]); lg-=Math.log(p+1e-9); const dx=D.gradIn(o.c,[(p-1)/Bn]); G.bwd(g.c,dx); }
+    G.adam(lr,1,{b1:.5}); dR=.95*dR+.05*sr/Bn; dF=.95*dF+.05*sf/Bn;
+    if(it%10===0) gHist.push([it,(lr_+lf)/Bn,lg/Bn]); }, drawGan, 4000);
+function drawGan(){ if(!G) return; const P=P0(), fake=gZ.map(z=>G.run(z));
+  scatter(gP,[{pts:gD,color:P.muted,alpha:.4,r:2},{pts:fake,color:P.c2,r:2.2}],(c,Pp)=>{ const n=28, w=gP.w/n, h=gP.h/n; for(let i=0;i<n;i++) for(let j=0;j<n;j++){ const x=gP.ix((i+.5)*w), y=gP.iy((j+.5)*h), p=sig(D.run([x,y])[0]); c.fillStyle=Pp.c5; c.globalAlpha=.32*p; c.fillRect(i*w,j*h,w+1,h+1); } c.globalAlpha=1; });
+  if(gHist.length>1) GX.chart(glP,[{pts:gHist.map(h=>[h[0],h[1]]),color:P.c5,width:1.8,label:'D loss'},{pts:gHist.map(h=>[h[0],h[2]]),color:P.c2,width:1.8,label:'G loss'}],{x0:0,x1:4000,y0:0,y1:Math.max(2,...gHist.map(h=>Math.max(h[1],h[2])))});
+  let modes='–'; if(gName==='gauss8'){ const hit=new Set(); fake.forEach(p=>{ for(let k=0;k<8;k++){ const t=k*Math.PI/4; if(Math.hypot(p[0]-1.6*Math.cos(t),p[1]-1.6*Math.sin(t))<.35) hit.add(k); } }); modes=hit.size+' of 8'; }
+  GX.stats('#ganStats',[[dR.toFixed(2),'D(real) on average','c5'],[dF.toFixed(2),'D(fake) on average','c2'],[modes,'clusters the generator reaches','c1'],[String(ganT.it),'steps','c3']]); }
+ML.bindSeg('ganD',v=>{ gName=v; ganT.start(); }); ML.bindRange('ganLr',()=>ganT.start(),v=>(+Math.pow(10,+v).toPrecision(2)).toString()); $('#ganGo').onclick=ganT.start; gP.onResize=drawGan; glP.onResize=drawGan; onView('#ganPlot',ganT.start);
+
+/* ---------- 4 & 5. diffusion with classifier-free guidance ---------- */
+const TT=40, betas=[...Array(TT)].map((_,i)=>1e-3+(0.2-1e-3)*i/(TT-1)), alphas=betas.map(b=>1-b), abar=[]; alphas.reduce((p,a,i)=>(abar[i]=p*a),1);
+const dP=new ML.Plot('#dfPlot'), dl=new ML.Plot('#dfLoss',{equal:false}), cP=new ML.Plot('#cgPlot'); let E, dD, dY, dHist=[], dL=1, dV='gen', smp=null, cg=null, cgC=0;
+const feats=(x,t,c)=>{ const u=t/TT; return [x[0],x[1],Math.sin(Math.PI*u),Math.cos(Math.PI*u),Math.sin(3*Math.PI*u),Math.cos(3*Math.PI*u),c===0?1:0,c===1?1:0]; };
+const dfT=trainer('df',()=>{ const r=ML.rng(21), d=GX.data('moons',1200,r); dD=d.X.map(p=>[p[0]*1.1,p[1]*1.1]); dY=d.y; E=GX.MLP([8,64,64,2],{act:'silu',seed:9}); dHist=[]; dL=1; smp=null; cg=null; },
+  (it)=>{ const Bn=48; let L=0;
+    for(let b=0;b<Bn;b++){ const i=Math.floor(Math.random()*dD.length), x0=dD[i], c=Math.random()<.2?-1:dY[i], t=Math.floor(Math.random()*TT), e=[gs(),gs()], sa=Math.sqrt(abar[t]), sb=Math.sqrt(1-abar[t]);
+      const o=E.fwd(feats([sa*x0[0]+sb*e[0],sa*x0[1]+sb*e[1]],t,c)); L+=(o.y[0]-e[0])**2+(o.y[1]-e[1])**2; E.bwd(o.c,[2*(o.y[0]-e[0])/Bn,2*(o.y[1]-e[1])/Bn]); }
+    E.adam(it<2500?2e-3:7e-4); dL=.98*dL+.02*L/Bn/2; if(it%20===0) dHist.push([it,dL]);
+    if(it===3999){ smp=null; cg=null; } }, drawDf, 4000);
+function sample(n, c, w, seed){ const r=ML.rng(seed); let X=[...Array(n)].map(()=>[r.gauss(),r.gauss()]); const C=[...Array(n)].map((_,i)=>c===-2?(i%2):c);
+  for(let t=TT-1;t>=0;t--){ X=X.map((x,i)=>{ const ec=E.run(feats(x,t,C[i])); let e=ec; if(w&&C[i]>=0){ const eu=E.run(feats(x,t,-1)); e=[(1+w)*ec[0]-w*eu[0],(1+w)*ec[1]-w*eu[1]]; }
+      const k=betas[t]/Math.sqrt(1-abar[t]), s=1/Math.sqrt(alphas[t]); let y=[s*(x[0]-k*e[0]),s*(x[1]-k*e[1])]; if(t>0){ const sd=Math.sqrt(betas[t]); y=[y[0]+sd*r.gauss(),y[1]+sd*r.gauss()]; } return y; }); }
+  return {X,C}; }
+let smpSeed=1, lastS=0, lastC=0;
+function drawDf(){ if(!E) return; const P=P0(), col=c=>c===0?P.c1:P.c4;
+  if(dV==='fwd'){ const t=+$('#dfT').value, r=ML.rng(3); const pts=dD.slice(0,600).map(x=>{ if(!t) return x; const sa=Math.sqrt(abar[t-1]), sb=Math.sqrt(1-abar[t-1]); return [sa*x[0]+sb*r.gauss(),sa*x[1]+sb*r.gauss()]; });
+    scatter(dP,[{pts,colors:dY.slice(0,600).map(col),color:P.c1,r:2.2}]); }
+  else { if(!smp||(dfT.running&&performance.now()-lastS>2000)){ smp=sample(dfT.running?120:400,-2,0,smpSeed); lastS=performance.now(); } scatter(dP,[{pts:dD,color:P.muted,alpha:.3,r:2},{pts:smp.X,color:P.c2,r:2.4}]); }
+  if(dHist.length>1) GX.chart(dl,[{pts:dHist,color:P.c1,width:2,label:'noise-prediction loss'}],{x0:0,x1:4000,y0:0,y1:Math.max(1,...dHist.map(h=>h[1]))});
+  GX.stats('#dfStats',[[dL.toFixed(3),'loss (1.0 = no better than guessing)','c1'],[String(dfT.it),'training steps','c3'],[(Math.sqrt(1-abar[Math.max(0,+$('#dfT').value-1)])).toFixed(2),'noise share at step t','c4']]);
+  drawCg(); }
+function drawCg(){ if(!E) return; const P=P0(), w=+$('#cgW').value;
+  if(!cg||(dfT.running&&performance.now()-lastC>2500)){ cg=sample(dfT.running?80:300,cgC,cgC<0?0:w,7); lastC=performance.now(); }
+  scatter(cP,[{pts:dD,colors:dY.map(c=>c===0?P.c1:P.c4),color:P.c1,alpha:.22,r:2},{pts:cg.X,color:P.c2,r:2.4}]);
+  const inA=cg.X.filter(p=>{ let best=1e9,bc=0; for(let i=0;i<dD.length;i+=3){ const d=(dD[i][0]-p[0])**2+(dD[i][1]-p[1])**2; if(d<best){ best=d; bc=dY[i]; } } return bc===0; }).length/cg.X.length;
+  const spread=Math.sqrt(cg.X.reduce((s,p)=>s+p[0]*p[0]+p[1]*p[1],0)/cg.X.length-Math.pow(cg.X.reduce((s,p)=>s+p[0],0)/cg.X.length,2)-Math.pow(cg.X.reduce((s,p)=>s+p[1],0)/cg.X.length,2));
+  GX.stats('#cgStats',[[(100*(cgC===1?1-inA:inA)).toFixed(0)+'%',cgC<0?'samples nearest moon A':'samples on the requested moon','c5'],[spread.toFixed(2),'spread of the samples','c4'],[cgC<0?'–':w.toFixed(1),'guidance weight','c1']]); }
+ML.bindSeg('dfV',v=>{ dV=v; drawDf(); }); ML.bindRange('dfT',()=>{ if(dV!=='fwd'){ dV='fwd'; document.querySelectorAll('#dfV button').forEach(b=>b.classList.toggle('on',b.dataset.v==='fwd')); } drawDf(); });
+$('#dfGo').onclick=dfT.start; $('#dfS').onclick=()=>{ smpSeed++; smp=null; drawDf(); };
+ML.bindSeg('cgC',v=>{ cgC=+v; cg=null; drawCg(); }); ML.bindRange('cgW',()=>{ cg=null; drawCg(); },v=>(+v).toFixed(1));
+dP.onResize=drawDf; dl.onResize=drawDf; cP.onResize=drawCg; onView('#dfPlot',dfT.start);
+})();
+</script>
+<script>NLP.nav('nlp','generative'); ML.renderMath(document.body);</script>
+</body>
+</html>

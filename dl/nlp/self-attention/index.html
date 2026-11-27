@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Self-attention</title>
+<meta name="description" content="Every word looks at every other word: hand-built heads (previous word, pronoun to noun, adjective to noun), the causal mask, why scores are divided by the square root of d, multi-head attention and the n-squared cost.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP</p>
+  <h1>Self-attention: <span class="grad">every word looks at every word</span></h1>
+  <p class="lede">In self-attention a sentence attends to itself. Each word makes a query ("what am I looking for?"), a key ("what do I offer?") and a value ("what I pass on"). Every word scores every other word, and its new vector is a mix of the values of the words that matched. One layer replaces the slow step-by-step reading of an RNN with a single parallel operation.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#heads">1 · Heads you can inspect</a><a href="#mask">2 · Causal mask</a><a href="#scale">3 · Why divide by √d</a><a href="#multi">4 · Multi-head</a><a href="#cost">5 · The n² cost</a><a href="#py">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is self-attention, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>In "The animal didn't cross the street because it was too tired", what does "it" mean? The answer depends on a word five positions away, and in another sentence it could be twenty. An RNN has to carry that information step by step through its hidden state. We want every word to be able to look directly at every other word in one step, decide which ones are relevant, and pull in their information.</p>
+      <h3>The idea</h3><p>In <a class="term" data-t="self-attention">self-attention</a> a sequence attends to itself: every token makes a query, a key and a value, and every token looks at every other token. Several <a class="term" data-t="multi-head">heads</a> run in parallel, each free to look for something different (the previous word, the noun a pronoun refers to). A <a class="term" data-t="causal-mask">causal mask</a> stops a token seeing the future when the model generates text.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Multiply each token vector by three learned matrices to get Q, K and V.</li><li>Score every pair, divide by √d, mask the future if generating, softmax by row.</li><li>Each token’s output is the weighted mix of all values.</li><li>Do this in several heads and concatenate.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A meeting where everyone can hear everyone at once. Each person decides whom to listen to, and different people listen for different things.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Every pair of tokens is one step apart</li><li>Fully parallel, so fast to train on GPUs</li><li>Heads specialise into readable patterns</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Cost grows with the square of the length</li><li>Has no sense of order without positional encodings</li><li>Needs lots of data to learn good heads</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="self-attention">Self-attention</a><a class="term" data-t="multi-head">Multi-head attention</a><a class="term" data-t="causal-mask">Causal mask</a><a class="term" data-t="scaled-dot">Scaled dot product</a><a class="term" data-t="positional-encoding">Positional encoding</a><a class="term" data-t="qkv">Query, key, value</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="heads" class="card hl">
+  <h2><span class="num">1</span>Attention heads you can inspect</h2>
+  <p class="sub">Each word is a small feature vector: its word type (determiner, adjective, noun, verb, pronoun, other), whether it is a living thing, and a <a class="term" data-t="positional-encoding">positional encoding</a> (sines and cosines of its position). Four heads have hand-set query and key matrices, each looking for one thing. Trained models learn heads like these on their own. Edit the sentence, pick a head, click a word.</p>
+  <input class="txt" id="hIn" value="the tired animal did not cross the street because it was too tired">
+  <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:8px">
+    <div class="seg" id="hSeg"><button data-v="0">Previous word</button><button data-v="1" class="on">Pronoun → living noun</button><button data-v="2">Adjective → its noun</button><button data-v="3">Everyone → nouns</button></div>
+    <div class="seg" id="cSeg"><button data-v="0" class="on">Bidirectional (BERT)</button><button data-v="1">Causal (GPT)</button></div>
+  </div>
+  <div style="overflow-x:auto;margin-top:10px"><svg class="diagram" id="hSvg" viewBox="0 0 900 170" style="min-width:640px"></svg></div>
+  <div class="grid2">
+    <div><div id="hHeat"></div><p class="hint">Row = the word doing the looking (query), column = the word looked at (key). Rows sum to 100%. Grey dots are masked.</p></div>
+    <div>
+      <h3 style="margin-top:0">"<span id="hWord"></span>" attends to</h3><div id="hBars"></div>
+      <div class="mathbox c2" id="hForm" style="margin-top:10px"></div>
+      <div class="note" id="hNote"></div>
+    </div>
+  </div>
+</section>
+
+<section id="mask" class="card">
+  <h2><span class="num">2</span>The causal mask: no peeking at the future</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>A model that generates text one token at a time (<a class="term" data-t="gpt">GPT</a> and every chat model) is trained to predict word \(t+1\) from words \(1\dots t\). If word \(t\) could attend to word \(t+1\) during training, it would just copy the answer. The <a class="term" data-t="causal-mask">causal mask</a> sets those scores to \(-\infty\) before the softmax, so their weights become exactly 0:</p>
+      <div class="mathbox c4">$$s_{tj}\leftarrow -\infty\quad\text{for } j>t\qquad\Rightarrow\qquad a_{tj}=0$$</div>
+      <p><a class="term" data-t="bert">BERT</a>-style encoders see the whole sentence in both directions, which is better for understanding but cannot generate left to right. Flip the toggle in section 1: the upper triangle greys out, and the "previous word" head still works (it only looks back), but the adjective head breaks for any adjective whose noun comes later.</p>
+      <p>A bonus of the mask: one forward pass over a sentence of \(n\) tokens trains \(n\) predictions at once, and at generation time the keys and values of earlier tokens never change, so they are cached (the <b>KV cache</b>).</p>
+    </div>
+    <div><div id="mHeat"></div><p class="hint">The mask itself for the current sentence: purple cells may attend, grey cells are blocked.</p></div>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: causal multi-head self-attention</h5><ol>
+        <li><span class="kw">input</span> token vectors \(X\) (\(n\times d\)), \(H\) heads, weights \(W_Q^h,W_K^h,W_V^h,W_O\)</li>
+        <li><span class="kw">for</span> each head \(h=1..H\) <span class="kw">do</span> <span class="cm">heads run in parallel</span></li>
+        <li class="i1">\(Q\leftarrow XW_Q^h\); \(K\leftarrow XW_K^h\); \(V\leftarrow XW_V^h\) <span class="cm">every token makes q, k, v</span></li>
+        <li class="i1">\(S\leftarrow QK^\top/\sqrt{d_h}\) <span class="cm">n × n: every token scores every token</span></li>
+        <li class="i1">\(S_{ij}\leftarrow-\infty\) for \(j&gt;i\) <span class="cm">causal mask: no peeking ahead</span></li>
+        <li class="i1">\(A\leftarrow\operatorname{softmax}(S)\) row by row; \(Z_h\leftarrow AV\)</li>
+        <li>\(Y\leftarrow[Z_1\,\cdots\,Z_H]\,W_O\) <span class="cm">concatenate heads, mix them</span></li>
+        <li><span class="kw">return</span> \(Y\) <span class="cm">same shape as X</span></li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: why the mask lets a model train on every position at once</summary><div>
+        <p>A language model is trained to predict token \(i+1\) from tokens \(1..i\). Without the mask, position \(i\) could simply look at token \(i+1\) and copy it. With the mask, row \(i\) of \(A\) is zero beyond column \(i\), so output \(i\) depends only on the past. That means one forward pass over a sequence of length \(n\) gives \(n\) honest training examples at once, which is the main reason transformers train so much faster than RNNs.</p>
+        <p>Setting the score to \(-\infty\) (in practice a large negative number) before the softmax, rather than zeroing weights afterwards, keeps each row a proper distribution that sums to 1. Note also that self-attention by itself is <i>permutation-equivariant</i>: shuffle the tokens and the outputs shuffle the same way. It has no idea of order, which is why positional encodings must be added to \(X\).</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="scale" class="card">
+  <h2><span class="num">3</span>Why divide by \(\sqrt{d}\)?</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>If the \(d\) numbers in a query and a key are independent with mean 0 and variance 1, their dot product has variance \(d\), so its typical size grows like \(\sqrt d\). With \(d=128\) raw scores are around ±11, and softmax of numbers that far apart puts almost all the weight on one key. Its gradient is then nearly zero (<a class="term" data-t="saturation">saturation</a>) and the layer stops learning.</p>
+      <div class="mathbox c3">$$\operatorname{Var}(q^\top k)=\sum_{i=1}^{d}\operatorname{Var}(q_ik_i)=d\quad\Rightarrow\quad \operatorname{Var}\!\Big(\frac{q^\top k}{\sqrt d}\Big)=1$$</div>
+      <div class="ctl"><label for="sd"><span>Width \(d\) of queries and keys</span><output id="sdOut"></output></label><input type="range" id="sd" min="0" max="10" step="1" value="7"></div>
+      <div class="row"><button class="btn" id="sNew">New random query and keys</button></div>
+      <div class="stats" id="sStats" style="margin-top:10px"></div>
+    </div>
+    <div>
+      <div class="grid2">
+        <div><h3 style="margin-top:0">Raw \(q^\top k\)</h3><div id="sRaw"></div></div>
+        <div><h3 style="margin-top:0">Scaled \(q^\top k/\sqrt d\)</h3><div id="sScl"></div></div>
+      </div>
+      <div class="plot short" id="sPlot" style="margin-top:10px"></div>
+      <div class="legend"><span><i class="sw" style="background:var(--c4)"></i>raw</span><span><i class="sw" style="background:var(--c1)"></i>scaled</span></div>
+      <p class="hint">Average largest softmax weight over 10 keys (300 random draws per \(d\)), log scale in \(d\). 10% = evenly spread, 100% = all on one key.</p>
+    </div>
+  </div>
+</section>
+
+<section id="multi" class="card hl">
+  <h2><span class="num">4</span>Multi-head attention: several questions at once</h2>
+  <p class="sub">One head can only produce one mixing pattern per word. Running \(h\) heads in parallel, each with its own smaller \(W_Q, W_K, W_V\), lets one head track the previous word while another resolves pronouns. Their outputs are concatenated and mixed by \(W_O\).</p>
+  <div class="mathbox c1">$$\operatorname{head}_i=\operatorname{softmax}\!\Big(\frac{XW_Q^{(i)}(XW_K^{(i)})^\top}{\sqrt{d/h}}\Big)XW_V^{(i)},\qquad \operatorname{MHA}(X)=[\operatorname{head}_1;\dots;\operatorname{head}_h]\,W_O$$</div>
+  <div class="grid2" id="mhGrid" style="margin-top:8px"></div>
+  <div class="grid2" style="margin-top:10px">
+    <div>
+      <div class="ctl"><label for="pd"><span>Model width \(d\)</span><output id="pdOut"></output></label><input type="range" id="pd" min="64" max="8192" step="64" value="768"></div>
+      <div class="ctl"><label for="ph"><span>Heads \(h\)</span><output id="phOut"></output></label><input type="range" id="ph" min="1" max="64" value="12"></div>
+    </div>
+    <div class="stats" id="pStats"></div>
+  </div>
+  <p class="hint">Splitting into heads does not add parameters: \(h\) heads of width \(d/h\) cost the same \(4d^2\) as one head of width \(d\). Default: GPT-2 small (\(d=768\), 12 heads of 64).</p>
+</section>
+
+<section id="cost" class="card">
+  <h2><span class="num">5</span>The price: \(n^2\)</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>Every token scores every other token, so a sequence of \(n\) tokens makes an \(n\times n\) weight matrix per head per layer. Double the context, quadruple the work. This is why long context windows were hard and why there is so much research on cheaper attention.</p>
+      <ul><li><b>FlashAttention</b> computes the same result in tiles and never stores the full matrix: memory becomes linear in \(n\), the arithmetic stays \(n^2\).</li>
+      <li><b>Sliding-window</b> and <b>sparse</b> attention only score nearby or selected pairs.</li>
+      <li><b>Grouped-query attention</b> shares keys and values across heads to shrink the KV cache.</li></ul>
+      <div class="ctl"><label for="cn"><span>Sequence length \(n\)</span><output id="cnOut"></output></label><input type="range" id="cn" min="7" max="17" step="0.5" value="13"></div>
+    </div>
+    <div><div class="stats" id="cStats"></div>
+      <div class="plot short" id="cPlot" style="margin-top:10px"></div>
+      <p class="hint">Memory to store all weight matrices of one layer (32 heads, 2 bytes per number), log-log axes. The slope of 2 is the \(n^2\).</p></div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> torch, torch.nn.functional <span class="k">as</span> F
+
+n, d, h = <span class="s">13</span>, <span class="s">64</span>, <span class="s">4</span>
+X = torch.randn(n, d)
+Wq, Wk, Wv, Wo = (torch.randn(d, d) / d**<span class="s">0.5</span> <span class="k">for</span> _ <span class="k">in</span> range(<span class="s">4</span>))
+split = <span class="k">lambda</span> M: M.view(n, h, d // h).transpose(<span class="s">0</span>, <span class="s">1</span>)            <span class="c"># (h, n, d/h)</span>
+Q, K, V = split(X @ Wq), split(X @ Wk), split(X @ Wv)
+mask = torch.ones(n, n).tril().bool()                                <span class="c"># causal</span>
+A = (Q @ K.transpose(-<span class="s">1</span>, -<span class="s">2</span>) / (d // h)**<span class="s">0.5</span>).masked_fill(~mask, float(<span class="s">"-inf"</span>)).softmax(-<span class="s">1</span>)
+out = (A @ V).transpose(<span class="s">0</span>, <span class="s">1</span>).reshape(n, d) @ Wo
+
+fast = F.scaled_dot_product_attention(Q, K, V, is_causal=<span class="k">True</span>)    <span class="c"># fused, FlashAttention when available</span>
+<span class="k">assert</span> torch.allclose((A @ V), fast, atol=<span class="s">1e-5</span>)</pre>
+</section>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette();
+
+/* ---------- word features ---------- */
+const LEX={det:'the a an this that his her its my your their some every',
+  adj:'tired wide big small red old young happy busy narrow heavy quick lazy brown hungry tall short long sad angry cold warm',
+  noun:'animal cat dog girl boy man woman teacher student fox bird child doctor street road book table house car river ball trophy suitcase box park city tree door',
+  verb:'did do does cross crossed was is were are saw see sat ran jumped chased gave read fit fits put likes liked wanted said ate',
+  pron:'it he she they him her them'};
+const TYPES=['det','adj','noun','verb','pron','other'], LIVING=new Set('animal cat dog girl boy man woman teacher student fox bird child doctor he she they him them'.split(' '));
+const TYPE={}; Object.entries(LEX).forEach(([t,ws])=>ws.split(' ').forEach(w=>{ if(!TYPE[w]) TYPE[w]=t; })); TYPE.her='pron';
+const OM=[1,0.5,0.25,0.125];
+const pe=t=>OM.flatMap(w=>[Math.sin(w*t),Math.cos(w*t)]);
+const feat=(w,t)=>({w,t,type:TYPE[w]||'other',living:LIVING.has(w)?1:0,pe:pe(t)});
+const is=(f,ty)=>f.type===ty?1:0;
+/* each head: query and key vectors built from the features (equivalent to fixed W_Q, W_K) */
+const HEADS=[
+ {name:'Previous word', q:f=>[0,0,...pe(f.t).map(v=>8*v)], k:f=>[0,0,...pe(f.t+1)],
+  form:'q_t=8\\,\\mathrm{PE}(t),\\quad k_j=\\mathrm{PE}(j+1)=R\\,\\mathrm{PE}(j)\\\\ q_t^\\top k_j=8\\sum_i\\cos\\big(\\omega_i(t-1-j)\\big)',
+  note:'Pure position, no word content. Because \\(\\mathrm{PE}(j+1)\\) is a fixed rotation of \\(\\mathrm{PE}(j)\\), one key matrix shifts every position by one, and each word finds the word just before it. Heads like this are found in real trained models; paired with a later "induction" head they let a model copy repeated patterns.'},
+ {name:'Pronoun → living noun', q:f=>[6*is(f,'pron'),6*is(f,'pron'),...pe(f.t).map(v=>1.2*v)], k:f=>[is(f,'noun'),f.living*is(f,'noun'),...pe(f.t)],
+  form:'q_t=6\\,[\\text{pron}_t,\\ \\text{pron}_t]\\oplus1.2\\,\\mathrm{PE}(t),\\quad k_j=[\\text{noun}_j,\\ \\text{noun}_j\\cdot\\text{living}_j]\\oplus\\mathrm{PE}(j)',
+  note:'Pronouns look for nouns, and living nouns score double. Other words have no content query, so the small position term makes them look mostly at themselves and their neighbours. Try changing the last word to "wide": a person reads "it" as the street, but this single head still picks "animal". Resolving that needs information from "wide" mixed into "it" first, which is what stacking layers provides.'},
+ {name:'Adjective → its noun', q:f=>[5*is(f,'adj'),0,...pe(f.t).map(v=>1.5*is(f,'adj')*v)], k:f=>[is(f,'noun'),0,...pe(f.t-1)],
+  form:'q_t=\\text{adj}_t\\,\\big(5\\,[1,0]\\oplus1.5\\,\\mathrm{PE}(t)\\big),\\quad k_j=[\\text{noun}_j,0]\\oplus\\mathrm{PE}(j-1)',
+  note:'Adjectives look for nouns, preferring the word right after them. Non-adjectives have an all-zero query, so every score is 0 and the softmax spreads their weight evenly: a head that has nothing to do still has to put its weight somewhere. With the causal mask on, an English adjective cannot see its noun, which comes later.'},
+ {name:'Everyone → nouns', q:f=>[3,0,...pe(f.t).map(()=>0)], k:f=>[is(f,'noun'),0,...pe(f.t).map(()=>0)],
+  form:'q_t=[3,0,\\mathbf 0],\\quad k_j=[\\text{noun}_j,0,\\mathbf 0]',
+  note:'A content-only head: every word collects the nouns of the sentence, giving each word a summary of what the sentence is about. Position plays no part, so the result is the same for every word.'}];
+let head=1, causal=false, sel=9;
+const words=()=>($('#hIn').value.toLowerCase().match(/[a-z]+/g)||['the']).slice(0,16);
+function attn(F,h,cz){ const H=HEADS[h], Q=F.map(H.q), K=F.map(H.k); return Q.map((q,t)=>{ const s=K.map((k,j)=>cz&&j>t?-Infinity:NLP.dot(q,k)); const m=Math.max(...s), e=s.map(v=>v===-Infinity?0:Math.exp(v-m)), z=e.reduce((a,b)=>a+b,0); return e.map(v=>v/z); }); }
+function drawHeads(){ const P=P0(), W=words(), F=W.map(feat); if(sel>=W.length) sel=W.length-1; const A=attn(F,head,causal);
+  NLP.heat('#hHeat',A,W,W,{max:1,fmt:v=>v>=0.1?Math.round(v*100):'',selRow:sel,mask:(i,j)=>causal&&j>i,onRow:i=>{ sel=i; drawHeads(); },onCell:i=>{ sel=i; drawHeads(); },rowW:'64px'});
+  const n=W.length, xs=W.map((_,i)=>30+i*(840/Math.max(1,n-1))); let s='';
+  A[sel].forEach((a,j)=>{ if(a<0.02||j===sel) return; const x1=xs[sel], x2=xs[j], mid=(x1+x2)/2, hgt=Math.min(110,18+Math.abs(x2-x1)*0.35);
+    s+=`<path d="M${x1},128 Q${mid},${128-hgt*2} ${x2},128" fill="none" stroke="${P.c1}" stroke-width="${1+10*a}" opacity="${.25+.75*a}"/>`; });
+  W.forEach((w,i)=>{ const ty=feat(w,i).type, col={det:P.muted,adj:P.c3,noun:P.c2,verb:P.c5,pron:P.c4,other:P.muted}[ty];
+    s+=`<g style="cursor:pointer" data-i="${i}"><rect x="${xs[i]-30}" y="130" width="60" height="26" rx="6" fill="${col}" opacity="${i===sel?.35:.14}" stroke="${i===sel?P.c1:'none'}" stroke-width="2"/><text x="${xs[i]}" y="148" text-anchor="middle" font-size="13" font-weight="${i===sel?700:500}" fill="${P.ink}">${NLP.esc(w)}</text><text x="${xs[i]}" y="167" text-anchor="middle" font-size="9" fill="${col}">${ty}</text></g>`; });
+  $('#hSvg').innerHTML=s; $('#hSvg').querySelectorAll('g').forEach(g=>g.addEventListener('click',()=>{ sel=+g.dataset.i; drawHeads(); }));
+  $('#hWord').textContent=W[sel];
+  $('#hBars').innerHTML=NLP.bars(W.map((w,j)=>({label:j+' '+w,value:A[sel][j],color:j===sel?P.muted:P.c1})).filter((_,j)=>!(causal&&j>sel)).sort((a,b)=>b.value-a.value).slice(0,5),{max:1,fmt:v=>(v*100).toFixed(0)+'%',lw:'100px'});
+  $('#hForm').innerHTML=ML.tex('\\begin{aligned}&'+HEADS[head].form.replace('\\\\','\\\\ &')+'\\end{aligned}',true);
+  $('#hNote').innerHTML=HEADS[head].note; if(window.renderMathInElement) renderMathInElement($('#hNote'),{delimiters:[{left:'\\(',right:'\\)',display:false}]});
+  NLP.heat('#mHeat',W.map((_,i)=>W.map((_,j)=>j<=i?1:0)),W,W,{max:1,fmt:()=>'',mask:(i,j)=>j>i,rowW:'64px'});
+  drawMulti(W,F); }
+$('#hIn').addEventListener('input',drawHeads);
+ML.bindSeg('hSeg',v=>{ head=+v; ML.setSeg('hSeg',v); drawHeads(); });
+ML.bindSeg('cSeg',v=>{ causal=v==='1'; ML.setSeg('cSeg',v); drawHeads(); });
+
+/* ---------- 4. multi-head mini maps ---------- */
+function drawMulti(W,F){ const g=$('#mhGrid'); g.innerHTML=HEADS.map((H,h)=>`<div><h3 style="margin:0 0 4px">Head ${h+1}: ${H.name}</h3><div id="mh${h}"></div></div>`).join('');
+  HEADS.forEach((H,h)=>NLP.heat('#mh'+h,attn(F,h,causal),W,W,{max:1,fmt:()=>'',mask:(i,j)=>causal&&j>i,rowW:'56px'})); }
+function drawParams(){ const d=+$('#pd').value; let h=+$('#ph').value; $('#pdOut').textContent=d; $('#phOut').textContent=h;
+  const ok=d%h===0, f=x=>x>=1e6?(x/1e6).toFixed(2)+' M':(x/1e3).toFixed(1)+' k';
+  $('#pStats').innerHTML=[['c1',ok?d/h:(d/h).toFixed(1),'width per head d/h'+(ok?'':' (must divide evenly)')],['c2',f(4*d*d+4*d),'parameters per attention layer'],['c3',f(3*d*d),'of which W_Q, W_K, W_V'],['c4',f(d*d),'W_O']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+['#pd','#ph'].forEach(id=>$(id).addEventListener('input',drawParams));
+
+/* ---------- 3. scaling ---------- */
+let sSeed=1; const sP=new ML.Plot('#sPlot',{equal:false}); let sCurve=null;
+function maxW(d,r,scaled){ const q=Array.from({length:d},()=>r.gauss()), s=Array.from({length:10},()=>{ let x=0; for(let i=0;i<d;i++) x+=q[i]*r.gauss(); return scaled?x/Math.sqrt(d):x; }); return Math.max(...NLP.softmax(s)); }
+function buildS(){ const r=ML.rng(3), A=[],B=[]; for(let e=0;e<=10;e+=0.5){ const d=Math.round(Math.pow(2,e)); let a=0,b=0; for(let k=0;k<300;k++){ a+=maxW(d,r,false); b+=maxW(d,r,true); } A.push([d,a/300]); B.push([d,b/300]); } sCurve={A,B}; }
+function drawScale(){ const P=P0(), d=Math.pow(2,+$('#sd').value); $('#sdOut').textContent=d;
+  const r=ML.rng(50+sSeed*7+d), q=Array.from({length:d},()=>r.gauss()), raw=Array.from({length:10},()=>{ let x=0; for(let i=0;i<d;i++) x+=q[i]*r.gauss(); return x; });
+  const scl=raw.map(v=>v/Math.sqrt(d)), a1=NLP.softmax(raw), a2=NLP.softmax(scl);
+  const bars=(a,col)=>NLP.bars(a.map((v,i)=>({label:'k'+(i+1),value:v,color:col})),{max:1,fmt:v=>(v*100).toFixed(0)+'%',lw:'30px'});
+  $('#sRaw').innerHTML=bars(a1,P.c4); $('#sScl').innerHTML=bars(a2,P.c1);
+  const sd=x=>Math.sqrt(x.reduce((s,v)=>s+v*v,0)/x.length), ent=a=>-a.reduce((s,p)=>s+(p>0?p*Math.log(p):0),0)/Math.log(10);
+  $('#sStats').innerHTML=`<div class="stat c4"><b>±${sd(raw).toFixed(1)}</b><span>typical raw score (≈ √d = ${Math.sqrt(d).toFixed(1)})</span></div><div class="stat c1"><b>±${sd(scl).toFixed(1)}</b><span>typical scaled score</span></div><div class="stat c3"><b>${(ent(a1)*100).toFixed(0)}% / ${(ent(a2)*100).toFixed(0)}%</b><span>spread of weights, raw / scaled (100% = even)</span></div>`;
+  ML.chart(sP,[{pts:sCurve.A,color:P.c4,width:2.4},{pts:sCurve.B,color:P.c1,width:2.4}],{logx:true,y0:0,y1:1,xl:'d',vline:d}); }
+$('#sd').addEventListener('input',drawScale); $('#sNew').addEventListener('click',()=>{ sSeed++; drawScale(); }); sP.onResize=drawScale;
+
+/* ---------- 5. cost ---------- */
+const cP=new ML.Plot('#cPlot',{equal:false});
+const fb=b=>b>=1e12?(b/1e12).toFixed(1)+' TB':b>=1e9?(b/1e9).toFixed(1)+' GB':b>=1e6?(b/1e6).toFixed(1)+' MB':(b/1e3).toFixed(0)+' kB';
+function drawCost(){ const P=P0(), n=Math.round(Math.pow(2,+$('#cn').value)); $('#cnOut').textContent=n.toLocaleString();
+  const per=n*n*2; $('#cStats').innerHTML=[['c1',(n*n).toExponential(2).replace('e+',' × 10^'),'scores per head per layer'],['c2',fb(per),'one head, one layer (2 bytes each)'],['c4',fb(per*32),'all 32 heads of one layer'],['c3',fb(per*32*32),'32 layers, if all were kept']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  const pts=[]; for(let e=7;e<=17;e+=0.25){ const m=Math.pow(2,e); pts.push([m,Math.log10(m*m*2*32)]); }
+  ML.chart(cP,[{pts,color:P.c2,width:2.6}],{logx:true,xl:'n (y axis: log10 bytes)',vline:n}); }
+$('#cn').addEventListener('input',drawCost); cP.onResize=drawCost;
+
+buildS(); drawHeads(); drawParams(); drawScale(); drawCost();
+})();
+</script>
+<script>NLP.nav('nlp','self-attention'); ML.renderMath(document.body);</script>
+</body>
+</html>

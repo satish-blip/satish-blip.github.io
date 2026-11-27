@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LLM post-training & alignment: SFT, LoRA, RLHF, DPO</title>
+<meta name="description" content="How a base language model becomes a helpful assistant: supervised fine-tuning with loss masking, LoRA and QLoRA memory maths, a reward model trained live from preferences, RLHF's KL-regularised objective and reward hacking, and DPO derived and trained in your browser.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<style>
+.src{font-size:12.5px;color:var(--muted);margin:10px 0 0;border-left:3px solid var(--line);padding-left:10px}
+.src a{color:inherit;text-decoration:underline;text-decoration-color:var(--line)}
+.pt-chat{font:12.5px/2 "JetBrains Mono",ui-monospace,monospace;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;min-height:150px}
+.pt-chat span{display:inline-block;padding:0 4px;margin:1px;border-radius:4px;border:1px solid transparent}
+.pt-chat span.sp{color:var(--muted);font-size:11px}
+.pt-chat span.on{background:color-mix(in srgb,var(--c5) 22%,transparent);border-color:color-mix(in srgb,var(--c5) 55%,transparent)}
+.pt-chat span.off{opacity:.5;text-decoration:line-through;text-decoration-color:var(--line)}
+.lora-svg{width:100%;height:auto;display:block}
+.lora-svg text{font:600 12px Inter,system-ui,sans-serif}
+</style>
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP &middot; Large language models</p>
+  <h1>Post-training: <span class="grad">from text predictor to helpful assistant</span></h1>
+  <p class="lede">A pre-trained base model has read the internet, but ask it a question and it may answer with three more questions, because that is what text on the internet often does next. Post-training teaches it to follow instructions, to be helpful and honest, and to refuse what it should refuse. This page walks through the recipe used for today's assistants: supervised fine-tuning, parameter-efficient LoRA and QLoRA, a reward model learnt from human preferences, reinforcement learning from human feedback, and Direct Preference Optimization, which gets the same answer without the reinforcement learning.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#sft">1 · Supervised fine-tuning</a><a href="#lora">2 · LoRA &amp; QLoRA</a><a href="#rm">3 · A reward model from preferences</a><a href="#rlhf">4 · RLHF and the KL leash</a><a href="#dpo">5 · DPO</a><a href="#recipe">6 · The full recipe</a><a href="#py">7 · Python</a><a href="#credits">8 · Sources &amp; credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is post-training, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>After <a href="../llm-pretraining/">pre-training</a>, a <a class="term" data-t="base-model">base model</a> is very good at continuing text, and that is all. It does not know it is supposed to answer you, it has no sense of which of many plausible continuations a person would prefer, and it will happily continue harmful text. How do we turn knowledge into helpful behaviour, cheaply, without starting over?</p>
+      <h3>The idea</h3><p>Two kinds of extra data, both far smaller than the pre-training corpus. First, <b>demonstrations</b>: good conversations written by people, used for <a class="term" data-t="sft">supervised fine-tuning</a>. Second, <b>comparisons</b>: two answers to the same prompt and a judgement of which is better. Comparisons are easier to give than perfect answers, and they drive <a class="term" data-t="rlhf">RLHF</a> or <a class="term" data-t="dpo">DPO</a>, which push the model towards answers people prefer without drifting too far from what it already knows.</p>
+      <h3>How it works</h3><ol class="steps2"><li>SFT: train on example conversations, scoring only the assistant's words.</li><li>Collect preference pairs: for a prompt, which of two answers is better?</li><li>Either fit a <a class="term" data-t="reward-model">reward model</a> and run RL against it (RLHF), or optimise the preferences directly (DPO).</li><li>Evaluate, red-team, and repeat; often with <a class="term" data-t="lora">LoRA</a> so only a sliver of the weights is trained.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A brilliant graduate who knows a lot but has never worked with customers. First they shadow experienced staff and copy what good replies look like (SFT). Then a manager reads pairs of their draft replies and says “this one is better” (preferences). Over time they learn what good service means, while their knowledge stays the same; a good manager also stops them from changing their whole personality to please one difficult customer (the KL leash).</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Huge change in behaviour from a small amount of data</li><li>LoRA and QLoRA make it possible on one GPU</li><li>Preferences capture “better” when “correct” is hard to write down</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Reward hacking: the model exploits flaws in the reward</li><li>Preference data carries labeller biases (for example, liking long answers)</li><li>Fine-tuning can erase skills or safety behaviour if done carelessly</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="sft">SFT</a><a class="term" data-t="chat-template">Chat template</a><a class="term" data-t="loss-mask">Loss mask</a><a class="term" data-t="lora">LoRA</a><a class="term" data-t="qlora">QLoRA</a><a class="term" data-t="peft">PEFT</a><a class="term" data-t="reward-model">Reward model</a><a class="term" data-t="bradley-terry">Bradley–Terry</a><a class="term" data-t="rlhf">RLHF</a><a class="term" data-t="ppo">PPO</a><a class="term" data-t="kl-divergence">KL divergence</a><a class="term" data-t="reward-hacking">Reward hacking</a><a class="term" data-t="dpo">DPO</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="sft" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Supervised fine-tuning: learn to answer, not to ask</h2>
+    <p class="sub">A training conversation laid out the way the model sees it, with its special tokens. Choose which tokens the loss is computed on, then see how SFT shifts what the model writes after a question.</p>
+    <div class="ctl"><div class="seg" id="sftMask"><button data-v="asst" class="on">Loss on assistant tokens only</button><button data-v="all">Loss on every token</button></div></div>
+    <div class="pt-chat" id="sftChat"></div>
+    <div class="stats" id="sftStats"></div>
+    <div class="ctl"><div class="seg" id="sftM"><button data-v="base" class="on">Base model</button><button data-v="sft">After SFT</button></div></div>
+    <div class="plot pe-vis" id="sftBars" style="padding:10px 12px"></div>
+    <p class="hint">Green tokens contribute to the loss. The bars are a toy illustration of what comes after “What is the capital of France?”, not measurements of a real model.</p>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>SFT is the same next-token loss as pre-training, on a different dataset: conversations between a user and an ideal assistant, written or checked by people. Each conversation is turned into one token sequence with a <a class="term" data-t="chat-template">chat template</a>, which wraps every turn in special tokens that mark who is speaking (<code>&lt;|user|&gt;</code>, <code>&lt;|assistant|&gt;</code>, <code>&lt;|end|&gt;</code>, or similar; each model family has its own).</p>
+      <p>Write a training example as a prompt \(x\) (system message and user turns) and the response \(y=(y_1,\dots,y_T)\). We want the model to produce \(y\) given \(x\), not to learn to write user questions, so the loss covers only the response:</p>
+      <div class="mathbox c1">$$\mathcal L_{\text{SFT}}(\theta)=-\frac{1}{T}\sum_{t=1}^{T}\log\pi_\theta\big(y_t\mid x,\,y_{&lt;t}\big).$$</div>
+      <p>In code this is a <a class="term" data-t="loss-mask">loss mask</a>: the targets at prompt positions are set to an ignore value (−100 in PyTorch) so they add nothing to the gradient. Switch the lab to “every token” and the count of loss tokens grows, but most of the extra ones teach the model to imitate users.</p>
+      <p>How much data? Surprisingly little. The LIMA paper fine-tuned a 65B model on 1,000 carefully chosen examples and got an assistant that people often preferred to ones trained on far more data. The authors' conclusion, the <b>superficial alignment hypothesis</b>, is that almost all knowledge comes from pre-training, and SFT mainly teaches the format and style of a helpful answer. Quality and diversity of the demonstrations matter more than their number.</p>
+      <details class="deeper"><summary>Going deeper: packing, multi-turn data and catastrophic forgetting</summary><div>
+        <p><b>Packing.</b> Conversations vary in length, so short ones are concatenated into one long training sequence to avoid wasting computation on padding; attention masks or position resets keep them from seeing each other.</p>
+        <p><b>Multi-turn.</b> In a conversation with several assistant turns, each assistant turn is a target and each user turn is masked. The model learns to use the whole history as context.</p>
+        <p><b>Forgetting.</b> Fine-tuning all weights on a narrow dataset with a high learning rate can erase abilities learnt in pre-training. Small learning rates (around 1e-5 for full fine-tuning), few epochs, mixing in general data, and LoRA (next section) all reduce it.</p>
+      </div></details>
+      <p class="src">The 1,000-example result is from Zhou et al., <a href="https://arxiv.org/abs/2305.11206" target="_blank" rel="noopener">LIMA: Less Is More for Alignment</a> (NeurIPS 2023).</p>
+    </div>
+  </div>
+</section>
+
+<section id="lora" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>LoRA and QLoRA: fine-tune 0.1% of the weights</h2>
+    <p class="sub">Pick a model, a LoRA rank and which weight matrices get adapters. The calculator counts trainable parameters and the GPU memory for weights, gradients and optimiser state in three set-ups.</p>
+    <div class="ctl"><label for="loM"><span>Model</span></label><select id="loM"><option value="l27">Llama 2 7B</option><option value="l38" selected>Llama 3 8B</option><option value="l213">Llama 2 13B</option><option value="l370">Llama 3 70B</option></select></div>
+    <div class="ctl"><label for="loR"><span>LoRA rank r</span><output id="loROut"></output></label><input type="range" id="loR" min="0" max="8" step="1" value="4"></div>
+    <div class="ctl"><div class="seg" id="loT"><button data-v="qv">q, v only</button><button data-v="attn">all attention</button><button data-v="all" class="on">attention + MLP</button></div></div>
+    <svg class="lora-svg" id="loSvg" viewBox="0 0 520 170" aria-label="LoRA diagram"></svg>
+    <div class="stats" id="loStats"></div>
+    <div class="plot pe-vis" id="loBars" style="padding:10px 12px"></div>
+    <p class="hint">Memory for weights + gradients + AdamW state only. Activations come on top and depend on batch size and sequence length; gradient checkpointing trims them.</p>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Full fine-tuning updates every weight. For an 8B model that means 8 billion gradients and 16 billion Adam moments, about 16 bytes per parameter in mixed precision: over 120 GB before any activations. Most of us do not have that.</p>
+      <p>Hu et al. (2021) observed that the <i>change</i> fine-tuning makes to a weight matrix tends to have low intrinsic rank: it lives in a few directions. <a class="term" data-t="lora">LoRA</a> (low-rank adaptation) builds that in. Freeze the pre-trained matrix \(W_0\in\mathbb R^{d\times k}\) and learn the update as a product of two thin matrices:</p>
+      <div class="mathbox c1">$$h=W_0x+\Delta W x=W_0x+\frac{\alpha}{r}\,B A x,\qquad B\in\mathbb R^{d\times r},\;A\in\mathbb R^{r\times k},\;r\ll\min(d,k).$$</div>
+      <p>The trainable parameters drop from \(dk\) to \(r(d+k)\). For a \(4096\times4096\) projection with \(r=16\), that is 131k instead of 16.8M, 128 times fewer. \(A\) starts random and \(B\) starts at zero, so at step 0 the model is exactly the pre-trained one; \(\alpha/r\) is a fixed scale so the learning rate does not need retuning when you change \(r\). After training, \(BA\) can be added into \(W_0\), so inference costs nothing extra; or adapters can be kept separate and swapped per task. The <a href="../../../math/svd/#lowrank">SVD page</a> shows why a rank-\(r\) product is the best way to store “a few directions”.</p>
+      <p><a class="term" data-t="qlora">QLoRA</a> (Dettmers et al., 2023) goes further: store the frozen \(W_0\) in 4 bits using the NF4 data type (quantile levels designed for normally distributed weights), quantise the quantisation constants too (“double quantisation”), and backpropagate through the 4-bit weights into bf16 LoRA adapters. A 65B model could then be fine-tuned on one 48 GB GPU with no measured loss against 16-bit fine-tuning on their benchmarks.</p>
+      <details class="deeper"><summary>Going deeper: which rank, which layers, and LoRA's relatives</summary><div>
+        <p>Ranks of 8 to 64 are typical. The QLoRA paper found that putting adapters on <i>all</i> linear layers mattered more than the rank. Variants include DoRA (separates magnitude and direction of the update), LoRA+ (different learning rates for \(A\) and \(B\)), and prefix tuning and adapters, which add parameters elsewhere. The <a href="../llm-adaptation/">LLM adaptation map</a> compares all of these with RAG and prompting.</p>
+        <p>LoRA is not free: on tasks far from pre-training (a new language, lots of new knowledge) low-rank updates learn less than full fine-tuning, though they also forget less.</p>
+      </div></details>
+      <p class="src">Adapted from: Hu et al., <a href="https://arxiv.org/abs/2106.09685" target="_blank" rel="noopener">LoRA: Low-Rank Adaptation of Large Language Models</a> (2021); Dettmers et al., <a href="https://arxiv.org/abs/2305.14314" target="_blank" rel="noopener">QLoRA: Efficient Finetuning of Quantized LLMs</a> (2023). Model shapes from the Llama 2 and Llama 3 model cards.</p>
+    </div>
+  </div>
+</section>
+
+<section id="rm" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>A reward model, trained live from preferences</h2>
+    <p class="sub">Simulated labellers compare pairs of answers described by four features. A linear reward model learns from “A is better than B” alone. Compare its weights with the hidden truth.</p>
+    <div class="plot wide" id="rmPlot"></div>
+    <div class="ctl"><label for="rmN"><span>Preference pairs</span><output id="rmNOut"></output></label><input type="range" id="rmN" min="20" max="2000" step="20" value="400"></div>
+    <div class="ctl"><label for="rmL"><span>Labellers' liking for length</span><output id="rmLOut"></output></label><input type="range" id="rmL" min="0" max="1.5" step="0.05" value="0.5"></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="rmGo">Train the reward model</button></div>
+    <div class="plot pe-vis" id="rmW" style="padding:10px 12px"></div>
+    <div class="stats" id="rmStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>People find it hard to give an answer a score out of 10, but easy to say which of two answers is better. So the data is a set of triples \((x, y_w, y_l)\): a prompt, the preferred (“winning”) answer and the other one. How do we turn comparisons into a number?</p>
+      <p>Assume each answer has a hidden quality \(r(x,y)\), and that the chance a person prefers \(y_w\) grows with the gap in quality. The <a class="term" data-t="bradley-terry">Bradley–Terry model</a> (1952), the same model behind chess ratings, says</p>
+      <div class="mathbox c1">$$P(y_w\succ y_l\mid x)=\sigma\big(r(x,y_w)-r(x,y_l)\big)=\frac{1}{1+e^{-(r_w-r_l)}} .$$</div>
+      <p>A <a class="term" data-t="reward-model">reward model</a> \(r_\phi\), usually the SFT model with its output layer replaced by a single number, is fitted by maximum likelihood on the comparisons:</p>
+      <div class="mathbox c1">$$\mathcal L_{\text{RM}}(\phi)=-\,\mathbb E_{(x,y_w,y_l)}\Big[\log\sigma\big(r_\phi(x,y_w)-r_\phi(x,y_l)\big)\Big].$$</div>
+      <p>This is <a href="../../../ml/logistic-regression/">logistic regression</a> on differences. In the lab each answer is four numbers (helpfulness, correctness, harmfulness, length) and \(r_\phi\) is linear in them, so you can read the learnt weights. Two things to notice:</p>
+      <ul>
+        <li>Only differences are learnt, so rewards have no natural zero; adding a constant changes nothing. With few pairs the weights are noisy, and accuracy on new pairs is capped by the labellers' own randomness.</li>
+        <li>Raise “liking for length”. The reward model faithfully learns that longer is better, even though length is not what anyone wants. A policy optimised against this reward will learn to pad. This is a well-documented real effect: RLHF models' answers get longer.</li>
+      </ul>
+      <p class="src">Adapted from: Ouyang et al., <a href="https://arxiv.org/abs/2203.02155" target="_blank" rel="noopener">Training language models to follow instructions with human feedback</a> (InstructGPT, 2022), section 3.5; on length, Singhal et al., <a href="https://arxiv.org/abs/2310.03716" target="_blank" rel="noopener">A Long Way to Go: Investigating Length Correlations in RLHF</a> (2023).</p>
+    </div>
+  </div>
+</section>
+
+<section id="rlhf" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>RLHF: maximise reward, on a KL leash</h2>
+    <p class="sub">Eight candidate answers to one prompt. The reference (SFT) model's probabilities are grey; the reward model's scores are on the right. Loosen the leash β and watch the optimal policy, the proxy reward and the true quality.</p>
+    <div class="plot wide" id="klPlot"></div>
+    <div class="ctl"><label for="klB"><span>KL strength β</span><output id="klBOut"></output></label><input type="range" id="klB" min="-2" max="1" step="0.02" value="0"></div>
+    <div class="plot pe-vis" id="klBars" style="padding:10px 12px"></div>
+    <div class="stats" id="klStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>With a reward model in hand, we want a policy \(\pi_\theta\) (the language model) that writes answers with high reward. But the reward model is only an approximation, trained on a limited set of answers; far from those, its scores are unreliable. So RLHF maximises reward while penalising how far the policy moves from the reference model \(\pi_{\text{ref}}\) (the SFT model), measured by <a class="term" data-t="kl-divergence">KL divergence</a>:</p>
+      <div class="mathbox c1">$$\max_{\pi}\;\mathbb E_{x,\;y\sim\pi(\cdot\mid x)}\big[r(x,y)\big]\;-\;\beta\,\mathrm{KL}\big(\pi(\cdot\mid x)\,\big\|\,\pi_{\text{ref}}(\cdot\mid x)\big).$$</div>
+      <p>For one prompt, this objective has an exact solution. Write the KL as \(\sum_y\pi(y)\log\frac{\pi(y)}{\pi_{\text{ref}}(y)}\), add a Lagrange multiplier for \(\sum_y\pi(y)=1\), and set the derivative to zero:</p>
+      <div class="mathbox c1">$$r(y)-\beta\Big(\log\frac{\pi(y)}{\pi_{\text{ref}}(y)}+1\Big)-\lambda=0\;\;\Longrightarrow\;\;\pi^*(y)=\frac{1}{Z}\,\pi_{\text{ref}}(y)\,\exp\!\Big(\frac{r(y)}{\beta}\Big).$$</div>
+      <p>The optimal policy re-weights the reference by the exponentiated reward. Large \(\beta\): stay close to the SFT model. Small \(\beta\): pile all probability onto the highest-reward answer. The lab computes \(\pi^*\) exactly.</p>
+      <p>Now the catch. Answer H was written to game the reward model: long, confident and flattering, it scores highest under the proxy reward but its true quality is poor. As β shrinks, proxy reward keeps rising while true quality first rises, then collapses. This is <a class="term" data-t="reward-hacking">reward hacking</a>, an instance of Goodhart's law (“when a measure becomes a target, it ceases to be a good measure”). Gao et al. (2023) measured exactly this curve on real models: gold-standard reward peaks and then falls as KL from the start grows.</p>
+      <div class="algo" data-anim="rlhf"><h5 class="algo-h">Algorithm: RLHF with PPO</h5><ol>
+        <li><span class="kw">input</span> SFT model \(\pi_{\text{ref}}\), reward model \(r_\phi\), prompts, KL weight \(\beta\)</li>
+        <li>\(\pi_\theta\leftarrow\pi_{\text{ref}}\) <span class="cm">plus a value head for PPO</span></li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1">sample prompts \(x\) and answers \(y\sim\pi_\theta(\cdot\mid x)\)</li>
+        <li class="i1">score: \(R\leftarrow r_\phi(x,y)-\beta\log\frac{\pi_\theta(y\mid x)}{\pi_{\text{ref}}(y\mid x)}\) <span class="cm">reward minus KL penalty</span></li>
+        <li class="i1">estimate advantages of each token with the value head</li>
+        <li class="i1">update \(\theta\) with PPO's clipped objective for a few epochs on this batch</li>
+        <li><span class="kw">return</span> \(\pi_\theta\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: PPO, GRPO, and rewards you can verify</summary><div>
+        <p><a class="term" data-t="ppo">PPO</a> (proximal policy optimisation) is a policy-gradient method that limits each update by clipping the probability ratio \(\pi_\theta/\pi_{\text{old}}\) to \([1-\epsilon,1+\epsilon]\). It needs four models in memory at once (policy, reference, reward, value), which is part of why RLHF is expensive and finicky.</p>
+        <p><b>GRPO</b> (group relative policy optimisation, used for DeepSeek's reasoning models) drops the value model: sample a group of answers per prompt and use each answer's reward minus the group mean, divided by the group's standard deviation, as its advantage.</p>
+        <p><b>Verifiable rewards.</b> For maths and code, the reward can be a checker (is the final answer right, do the tests pass) instead of a learnt model, which is much harder to hack. Training with such rewards is how recent reasoning models learn long chains of thought. <b>RLAIF</b> and Constitutional AI replace human labellers with an AI judge guided by written principles.</p>
+      </div></details>
+      <p class="src">Adapted from: Ouyang et al., <a href="https://arxiv.org/abs/2203.02155" target="_blank" rel="noopener">InstructGPT</a> (2022); the closed-form optimum as derived in Rafailov et al., <a href="https://arxiv.org/abs/2305.18290" target="_blank" rel="noopener">Direct Preference Optimization</a> (2023), appendix A.1; Gao, Schulman and Hilton, <a href="https://arxiv.org/abs/2210.10760" target="_blank" rel="noopener">Scaling Laws for Reward Model Overoptimization</a> (2023); Schulman et al., <a href="https://arxiv.org/abs/1707.06347" target="_blank" rel="noopener">PPO</a> (2017); Shao et al., <a href="https://arxiv.org/abs/2402.03300" target="_blank" rel="noopener">DeepSeekMath (GRPO)</a> (2024).</p>
+    </div>
+  </div>
+</section>
+
+<section id="dpo" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>DPO: preferences straight into the policy</h2>
+    <p class="sub">The same eight answers. Simulated people compare random pairs using the true quality; DPO trains the policy on those comparisons directly, with no reward model and no RL. Does it reach the KL-optimal policy?</p>
+    <div class="plot wide" id="dpoPlot"></div>
+    <div class="ctl"><label for="dpoB"><span>β</span><output id="dpoBOut"></output></label><input type="range" id="dpoB" min="-1.3" max="0.7" step="0.02" value="-0.3"></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="dpoGo">Train 300 steps</button><button class="btn" id="dpoRe">Reset to the SFT model</button></div>
+    <div class="plot pe-vis" id="dpoBars" style="padding:10px 12px"></div>
+    <div class="stats" id="dpoStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Rafailov et al. (2023) noticed that the closed form in section 4 can be turned around. If \(\pi^*(y)=\pi_{\text{ref}}(y)\,e^{r(y)/\beta}/Z\), then taking logs and rearranging expresses the reward through the policy:</p>
+      <div class="mathbox c1">$$r(x,y)=\beta\log\frac{\pi^*(y\mid x)}{\pi_{\text{ref}}(y\mid x)}+\beta\log Z(x).$$</div>
+      <p>Put this into the Bradley–Terry model. The awkward \(Z(x)\) is the same for both answers to a prompt, so it cancels in the difference \(r_w-r_l\). What remains is a loss on the policy alone, the <a class="term" data-t="dpo">DPO</a> loss:</p>
+      <div class="mathbox c1">$$\mathcal L_{\text{DPO}}(\theta)=-\,\mathbb E\Big[\log\sigma\Big(\beta\log\frac{\pi_\theta(y_w\mid x)}{\pi_{\text{ref}}(y_w\mid x)}-\beta\log\frac{\pi_\theta(y_l\mid x)}{\pi_{\text{ref}}(y_l\mid x)}\Big)\Big].$$</div>
+      <p>Read it as: raise the log-probability of the winner and lower that of the loser, each measured relative to the reference, and push harder on pairs the model currently gets wrong. The quantity \(\beta\log\frac{\pi_\theta}{\pi_{\text{ref}}}\) is the <b>implicit reward</b>: the policy is secretly its own reward model.</p>
+      <p>In the lab, train and compare the bars with the dashed outline, the exact KL-optimal policy for the <i>true</i> qualities. With enough comparisons DPO lands on it; and because the comparisons come from people judging true quality, not from a hackable proxy, answer H is pushed down. DPO is simple (one model plus a frozen reference, an ordinary supervised loss) and is now one of the most used alignment methods, with many variants (IPO, KTO, SimPO, ORPO).</p>
+      <div class="algo" data-anim="dpo"><h5 class="algo-h">Algorithm: one DPO training step</h5><ol>
+        <li><span class="kw">input</span> a batch of \((x, y_w, y_l)\), policy \(\pi_\theta\), frozen \(\pi_{\text{ref}}\), \(\beta\)</li>
+        <li><span class="kw">for</span> each pair: sum token log-probs \(\log\pi_\theta(y\mid x)\) and \(\log\pi_{\text{ref}}(y\mid x)\) for \(y_w\) and \(y_l\)</li>
+        <li class="i1">\(\hat r_w\leftarrow\beta(\log\pi_\theta(y_w)-\log\pi_{\text{ref}}(y_w))\); \(\hat r_l\) likewise <span class="cm">implicit rewards</span></li>
+        <li class="i1">\(\ell\leftarrow-\log\sigma(\hat r_w-\hat r_l)\)</li>
+        <li>\(\theta\leftarrow\theta-\eta\,\nabla_\theta\,\text{mean}(\ell)\) <span class="cm">weight on each pair is σ(r̂_l − r̂_w)</span></li>
+        <li><span class="kw">return</span> \(\theta\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: the gradient, and when DPO goes wrong</summary><div>
+        <p>Differentiating gives \(\nabla_\theta\mathcal L=-\beta\,\mathbb E\big[\sigma(\hat r_l-\hat r_w)\,(\nabla\log\pi_\theta(y_w)-\nabla\log\pi_\theta(y_l))\big]\). The weight \(\sigma(\hat r_l-\hat r_w)\) is large when the implicit reward ranks the pair the wrong way, so DPO concentrates on its mistakes, just like logistic regression.</p>
+        <p>DPO only sees the answers in the dataset (it is <i>offline</i>). If the preference data was generated by a different model, the policy can drift towards answers nobody ever judged. Online or iterative DPO, which regenerates and re-labels answers from the current policy, fixes much of this. Both answers in a pair can also lose probability at once; methods such as adding an SFT term on the winners counter this.</p>
+      </div></details>
+      <p class="src">Adapted from: Rafailov, Sharma, Mitchell, Ermon, Manning and Finn, <a href="https://arxiv.org/abs/2305.18290" target="_blank" rel="noopener">Direct Preference Optimization: Your Language Model is Secretly a Reward Model</a> (NeurIPS 2023), equations 4–7.</p>
+    </div>
+  </div>
+</section>
+
+<section id="recipe" class="card">
+  <h2><span class="num">6</span>The full recipe, and how the methods compare</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Stage</th><th>Data</th><th>Loss / method</th><th>What it changes</th><th>Cost</th></tr>
+    <tr><td>Pre-training</td><td>Trillions of raw tokens</td><td>Next-token cross-entropy</td><td>Knowledge, language, skills</td><td>Months, thousands of GPUs</td></tr>
+    <tr><td>SFT</td><td>10³–10⁶ demonstrations</td><td>Cross-entropy on responses only</td><td>Format, style, following instructions</td><td>Hours to days</td></tr>
+    <tr><td>Reward model</td><td>10⁴–10⁶ comparisons</td><td>Bradley–Terry log-loss</td><td>A learnt scorer of answers</td><td>Like SFT</td></tr>
+    <tr><td>RLHF (PPO / GRPO)</td><td>Prompts + reward model or checker</td><td>Reward − β·KL, policy gradient</td><td>Preferences, reasoning, refusals</td><td>Highest: several models, sampling</td></tr>
+    <tr><td>DPO and variants</td><td>Comparisons</td><td>Logistic loss on implicit rewards</td><td>Preferences</td><td>About twice SFT</td></tr>
+    <tr><td>LoRA / QLoRA</td><td>Any of the above</td><td>Same losses, low-rank updates</td><td>Same, at a fraction of the memory</td><td>One GPU for 7–70B</td></tr>
+  </table></div>
+  <p class="hint">Real pipelines interleave these: several rounds of SFT and preference training, rejection sampling (generate many answers, keep the best for SFT), and safety-specific data. The <a href="../llm-adaptation/">LLM adaptation map</a> sets post-training beside RAG and prompting as ways to adapt a model.</p>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">7</span>The same thing in Python</h2>
+  <p class="sub">Hugging Face TRL and PEFT: QLoRA-style SFT, then DPO on preference pairs. Dataset names are examples from the Hugging Face Hub.</p>
+<pre class="code"><span class="c"># pip install torch transformers datasets peft trl bitsandbytes</span>
+<span class="k">import</span> torch
+<span class="k">from</span> datasets <span class="k">import</span> load_dataset
+<span class="k">from</span> transformers <span class="k">import</span> AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+<span class="k">from</span> peft <span class="k">import</span> LoraConfig
+<span class="k">from</span> trl <span class="k">import</span> SFTConfig, SFTTrainer, DPOConfig, DPOTrainer
+
+base = <span class="s">"meta-llama/Llama-3.1-8B"</span>                 <span class="c"># any causal LM you have access to</span>
+tok = AutoTokenizer.from_pretrained(base)
+
+<span class="c"># QLoRA: load the frozen base model in 4-bit NF4 with double quantisation</span>
+bnb = <span class="f">BitsAndBytesConfig</span>(load_in_4bit=<span class="k">True</span>, bnb_4bit_quant_type=<span class="s">"nf4"</span>,
+                         bnb_4bit_use_double_quant=<span class="k">True</span>, bnb_4bit_compute_dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained(base, quantization_config=bnb, device_map=<span class="s">"auto"</span>)
+
+lora = <span class="f">LoraConfig</span>(r=16, lora_alpha=32, lora_dropout=0.05, task_type=<span class="s">"CAUSAL_LM"</span>,
+                  target_modules=[<span class="s">"q_proj"</span>, <span class="s">"k_proj"</span>, <span class="s">"v_proj"</span>, <span class="s">"o_proj"</span>,
+                                  <span class="s">"gate_proj"</span>, <span class="s">"up_proj"</span>, <span class="s">"down_proj"</span>])
+
+<span class="c"># 1) SFT on conversations ("messages" column); the chat template is applied for you,</span>
+<span class="c">#    and assistant_only_loss masks the user turns out of the loss</span>
+sft = <span class="f">SFTTrainer</span>(model=model, processing_class=tok, peft_config=lora,
+                 train_dataset=<span class="f">load_dataset</span>(<span class="s">"HuggingFaceH4/ultrachat_200k"</span>, split=<span class="s">"train_sft[:5%]"</span>),
+                 args=<span class="f">SFTConfig</span>(output_dir=<span class="s">"sft-out"</span>, learning_rate=2e-4, num_train_epochs=1,
+                                per_device_train_batch_size=4, gradient_accumulation_steps=4,
+                                assistant_only_loss=<span class="k">True</span>, bf16=<span class="k">True</span>))
+sft.train()
+
+<span class="c"># 2) DPO on (prompt, chosen, rejected) pairs; the frozen reference is the SFT model</span>
+dpo = <span class="f">DPOTrainer</span>(model=sft.model, processing_class=tok,
+                 train_dataset=<span class="f">load_dataset</span>(<span class="s">"trl-lib/ultrafeedback_binarized"</span>, split=<span class="s">"train"</span>),
+                 args=<span class="f">DPOConfig</span>(output_dir=<span class="s">"dpo-out"</span>, beta=0.1, learning_rate=5e-6, bf16=<span class="k">True</span>))
+dpo.train()
+
+<span class="f">print</span>(sft.model.print_trainable_parameters())   <span class="c"># e.g. ~0.5% of weights are trainable</span></pre>
+  <p class="hint">Argument names follow recent TRL releases and change between versions; check the TRL documentation for the one you install. For a reward model and PPO, TRL provides RewardTrainer and PPOTrainer; for GRPO, GRPOTrainer.</p>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">8</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page is written for this site in its own words, with its own labs. The methods and equations come from these papers and documentation:</p>
+    <ul>
+      <li>Ouyang et al., <a href="https://arxiv.org/abs/2203.02155" target="_blank" rel="noopener">Training language models to follow instructions with human feedback</a> (InstructGPT, 2022): the SFT → reward model → PPO recipe.</li>
+      <li>Rafailov et al., <a href="https://arxiv.org/abs/2305.18290" target="_blank" rel="noopener">Direct Preference Optimization</a> (2023): the closed-form optimum and the DPO loss.</li>
+      <li>Hu et al., <a href="https://arxiv.org/abs/2106.09685" target="_blank" rel="noopener">LoRA</a> (2021); Dettmers et al., <a href="https://arxiv.org/abs/2305.14314" target="_blank" rel="noopener">QLoRA</a> (2023).</li>
+      <li>Zhou et al., <a href="https://arxiv.org/abs/2305.11206" target="_blank" rel="noopener">LIMA</a> (2023); Gao et al., <a href="https://arxiv.org/abs/2210.10760" target="_blank" rel="noopener">Reward model overoptimization</a> (2023); Singhal et al., <a href="https://arxiv.org/abs/2310.03716" target="_blank" rel="noopener">length correlations in RLHF</a> (2023).</li>
+      <li>Schulman et al., <a href="https://arxiv.org/abs/1707.06347" target="_blank" rel="noopener">Proximal Policy Optimization</a> (2017); Shao et al., <a href="https://arxiv.org/abs/2402.03300" target="_blank" rel="noopener">DeepSeekMath</a> (2024) for GRPO; Bai et al., <a href="https://arxiv.org/abs/2212.08073" target="_blank" rel="noopener">Constitutional AI</a> (2022).</li>
+      <li>Hugging Face <a href="https://huggingface.co/docs/trl" target="_blank" rel="noopener">TRL</a> and <a href="https://huggingface.co/docs/peft" target="_blank" rel="noopener">PEFT</a> documentation, for the Python section.</li>
+    </ul>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"In supervised fine-tuning on chat data, which tokens usually contribute to the loss?","o":["Every token, including the system and user turns","Only the assistant's response tokens","Only the last token of each conversation","Only the special tokens of the chat template"],"a":1,"e":"The prompt positions are masked (target −100), so the model learns to write answers, not to imitate users."},
+{"q":"A 4096×4096 weight matrix gets a LoRA adapter with rank r = 8. How many trainable parameters does the adapter add?","o":["8","4096 × 8 = 32,768","2 × 4096 × 8 = 65,536","4096² = 16.8 million"],"a":2,"e":"B is 4096×8 and A is 8×4096, so r(d + k) = 8 × 8192 = 65,536, about 256 times fewer than the full matrix."},
+{"q":"A reward model is trained with the Bradley–Terry loss. What does it learn from the data?","o":["The absolute score each human gave each answer","Only differences in reward between two answers to the same prompt","The probability of each token","Which prompts are harmful"],"a":1,"e":"The loss depends on r(y_w) − r(y_l), so only differences are identified; adding a constant to all rewards changes nothing."},
+{"q":"In the KL-regularised RLHF objective, what happens to the optimal policy as β → 0?","o":["It stays equal to the reference model","It puts all probability on the answer with the highest (proxy) reward","It becomes uniform over all answers","It minimises the reward"],"a":1,"e":"π* ∝ π_ref · exp(r/β). As β shrinks the exponent dominates, so the policy collapses onto the top-reward answer, which is where reward hacking happens."},
+{"q":"Why does DPO need no separate reward model?","o":["Because it ignores human preferences","Because the reward can be written as β·log(π/π_ref) plus a term that cancels in the Bradley–Terry difference","Because it uses a hand-written reward","Because it only works with LoRA"],"a":1,"e":"Inverting the closed-form RLHF optimum expresses the reward through the policy; Z(x) cancels between the two answers, leaving a supervised loss on the policy."}
+]</script>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/gen.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette(); const esc=NLP.esc;
+const pct=x=>(100*x).toFixed(x<0.1&&x>0?1:0)+'%';
+/* ---------- 1. SFT ---------- */
+const CHAT=[['sp','<|system|>'],['sys','You'],['sys','are'],['sys','a'],['sys','helpful'],['sys','assistant.'],['sp','<|end|>'],['sp','<|user|>'],['usr','What'],['usr','is'],['usr','the'],['usr','capital'],['usr','of'],['usr','France?'],['sp','<|end|>'],['sp','<|assistant|>'],['ast','The'],['ast','capital'],['ast','of'],['ast','France'],['ast','is'],['ast','Paris.'],['spa','<|end|>'],['sp','<|user|>'],['usr','And'],['usr','Italy?'],['sp','<|end|>'],['sp','<|assistant|>'],['ast','Rome.'],['spa','<|end|>']];
+let sftMode='asst', sftM='base';
+function drawSft(){ const P=P0();
+  $('#sftChat').innerHTML=CHAT.map(([r,t])=>{ const on=sftMode==='all'?true:(r==='ast'||r==='spa'); const col=r==='usr'?'var(--c3)':r==='sys'?'var(--c4)':r==='ast'?'var(--c1)':''; return `<span class="${r.startsWith('sp')?'sp ':''}${on?'on':'off'}" style="${col?'color:'+col:''}">${esc(t)}</span>`; }).join(' ');
+  const n=CHAT.filter(([r])=>sftMode==='all'||r==='ast'||r==='spa').length;
+  GX.stats('#sftStats',[[String(n),'tokens in the loss','c5'],[String(CHAT.length),'tokens in the sequence','c3'],[sftMode==='all'?'imitates users too':'answers only','what the model learns',sftMode==='all'?'c2':'c1']]);
+  const B=sftM==='base'?[['What is the capital of Germany?',0.34],['(a new question, as in a quiz list)',0.22],['France is a country in Western Europe…',0.18],['Paris',0.16],['I don’t know.',0.10]]:[['The capital of France is Paris.',0.86],['Paris.',0.09],['What is the capital of Germany?',0.01],['France is a country in Western Europe…',0.03],['I don’t know.',0.01]];
+  $('#sftBars').innerHTML=NLP.bars(B.map(([l,v],i)=>({label:l,value:v,color:(sftM==='sft'&&i<2)||(sftM==='base'&&i===3)?P.c5:i===0&&sftM==='base'?P.c2:P.c4})),{max:1,lw:'minmax(150px,60%)',fmt:pct}); }
+ML.bindSeg('sftMask',v=>{ sftMode=v; drawSft(); }); ML.bindSeg('sftM',v=>{ sftM=v; drawSft(); }); drawSft();
+
+/* ---------- 2. LoRA calculator ---------- */
+const MOD={l27:{d:4096,L:32,ff:11008,kv:4096,V:32000,name:'Llama 2 7B'},l38:{d:4096,L:32,ff:14336,kv:1024,V:128256,name:'Llama 3 8B'},l213:{d:5120,L:40,ff:13824,kv:5120,V:32000,name:'Llama 2 13B'},l370:{d:8192,L:80,ff:28672,kv:1024,V:128256,name:'Llama 3 70B'}};
+let loT='all';
+function drawLo(){ const P=P0(), m=MOD[$('#loM').value], r=Math.pow(2,+$('#loR').value), d=m.d;
+  $('#loROut').textContent=r;
+  const mats={q:[d,d],k:[d,m.kv],v:[d,m.kv],o:[d,d],gate:[d,m.ff],up:[d,m.ff],down:[m.ff,d]};
+  const tgt=loT==='qv'?['q','v']:loT==='attn'?['q','k','v','o']:Object.keys(mats);
+  const total=m.L*Object.values(mats).reduce((s,[a,b])=>s+a*b,0)+2*m.V*d, lora=m.L*tgt.reduce((s,k)=>s+r*(mats[k][0]+mats[k][1]),0);
+  const full=16*total, lo=2*total+16*lora, ql=total*(4.127/8)+16*lora, G=80e9;
+  GX.stats('#loStats',[[GX.fmtN(total,2),'parameters in '+m.name,'c3'],[GX.fmtN(lora,1),'trainable LoRA parameters','c1'],[(100*lora/total).toFixed(2)+'%','share trained','c5'],[GX.bytes(full),'full fine-tuning','c2'],[GX.bytes(lo),'LoRA (bf16 base)','c4'],[GX.bytes(ql),'QLoRA (4-bit base)','c5']]);
+  $('#loBars').innerHTML=NLP.bars([{label:'Full fine-tuning (16 B/param)',value:full/1e9,color:P.c2},{label:'LoRA, frozen bf16 base',value:lo/1e9,color:P.c4},{label:'QLoRA, frozen NF4 base',value:ql/1e9,color:P.c5},{label:'one 80 GB GPU',value:80,color:P.muted}],{max:Math.max(full/1e9,80),lw:'minmax(150px,52%)',fmt:v=>v.toFixed(v<10?1:0)+' GB'});
+  const w=Math.min(120,10+r*1.6), s=$('#loSvg');
+  s.innerHTML=`<rect x="20" y="20" width="130" height="130" rx="6" fill="${P.c3}" fill-opacity=".25" stroke="${P.c3}"/><text x="85" y="90" text-anchor="middle" fill="${P.ink}">W₀ (frozen)</text><text x="85" y="108" text-anchor="middle" fill="${P.muted}">${d}×${d}</text>`+
+   `<text x="170" y="90" fill="${P.ink}" style="font-size:20px">+</text>`+
+   `<rect x="200" y="20" width="${w*0.35+6}" height="130" rx="4" fill="${P.c1}" fill-opacity=".55" stroke="${P.c1}"/><text x="${203+w*0.175}" y="165" text-anchor="middle" fill="${P.c1}">B</text>`+
+   `<rect x="${215+w*0.35}" y="20" width="130" height="${w*0.35+6}" rx="4" fill="${P.c4}" fill-opacity=".55" stroke="${P.c4}"/><text x="${280+w*0.35}" y="${42+w*0.35}" text-anchor="middle" fill="${P.c4}">A</text>`+
+   `<text x="${360+w*0.35}" y="70" fill="${P.ink}">r = ${r}</text><text x="${360+w*0.35}" y="92" fill="${P.muted}">${GX.fmtN(r*2*d,1)} vs ${GX.fmtN(d*d,1)}</text><text x="${360+w*0.35}" y="112" fill="${P.muted}">per square matrix</text>`; }
+ML.bindRange('loR',drawLo,v=>Math.pow(2,v)); $('#loM').onchange=drawLo; ML.bindSeg('loT',v=>{ loT=v; drawLo(); }); drawLo();
+
+/* ---------- 3. reward model ---------- */
+const FEAT=['helpful','correct','harmful','length'], TRUE=[2,2,-3,0];
+const rmP=new ML.Plot('#rmPlot',{equal:false}); let rmHist=[], rmW=[0,0,0,0], rmAcc=null, rmSeed=1;
+function rmData(n,lenLike,seed){ const r=ML.rng(seed), X=[]; const ans=()=>[r(),r(),r()<.15?r():0,r()]; const u=a=>TRUE[0]*a[0]+TRUE[1]*a[1]+TRUE[2]*a[2]+lenLike*a[3]*2;
+  for(let i=0;i<n;i++){ const a=ans(), b=ans(), pa=1/(1+Math.exp(-(u(a)-u(b)))); X.push(r()<pa?[a,b]:[b,a]); } return X; }
+function trainRm(){ const n=+$('#rmN').value, lenLike=+$('#rmL').value, D=rmData(n,lenLike,rmSeed++), Te=rmData(800,lenLike,9999);
+  let w=[0,0,0,0]; const m=[0,0,0,0], v=[0,0,0,0]; rmHist=[];
+  for(let it=1;it<=250;it++){ const g=[0,0,0,0]; let L=0; D.forEach(([a,b])=>{ const z=a.reduce((s,x,j)=>s+w[j]*(x-b[j]),0), p=1/(1+Math.exp(-z)); L-=Math.log(p+1e-12); for(let j=0;j<4;j++) g[j]-=(1-p)*(a[j]-b[j]); });
+    for(let j=0;j<4;j++){ const gj=g[j]/D.length+1e-3*w[j]; m[j]=.9*m[j]+.1*gj; v[j]=.999*v[j]+.001*gj*gj; w[j]-=0.1*(m[j]/(1-Math.pow(.9,it)))/(Math.sqrt(v[j]/(1-Math.pow(.999,it)))+1e-8); }
+    const acc=Te.filter(([a,b])=>a.reduce((s,x,j)=>s+w[j]*(x-b[j]),0)>0).length/Te.length; rmHist.push([it,L/D.length,acc]); }
+  rmW=w; rmAcc=rmHist[rmHist.length-1][2]; drawRm(); }
+function drawRm(){ const P=P0(), lenLike=+$('#rmL').value, tw=[...TRUE.slice(0,3),lenLike*2];
+  if(rmHist.length) GX.chart(rmP,[{pts:rmHist.map(h=>[h[0],h[1]]),color:P.c2,width:2.5,label:'training loss'},{pts:rmHist.map(h=>[h[0],h[2]]),color:P.c5,width:2.5,label:'accuracy on new pairs'}],{x0:1,x1:250,y0:0,y1:1,xl:'gradient steps'});
+  else { rmP.clear(); }
+  $('#rmW').innerHTML='<div class="hint" style="margin:0 0 6px">Learnt weight (bar) and hidden truth (number) for each feature</div>'+NLP.bars(FEAT.map((f,j)=>({label:f+'  (true '+tw[j].toFixed(1)+')',value:rmW[j],color:j===3?P.c4:rmW[j]>=0?P.c5:P.c2})),{max:4,lw:'minmax(150px,52%)',fmt:v=>v.toFixed(2)});
+  GX.stats('#rmStats',[[rmAcc==null?'–':pct(rmAcc),'accuracy on 800 new pairs','c5'],[String(+$('#rmN').value),'pairs used','c3'],[rmAcc==null?'–':(rmW[3]>0.3?'yes, '+rmW[3].toFixed(2):'no'),'learnt to reward length?','c4']]); }
+ML.bindRange('rmN',()=>{}); ML.bindRange('rmL',()=>{ drawRm(); },v=>v.toFixed(2)); $('#rmGo').onclick=trainRm; rmP.onResize=drawRm; trainRm();
+
+/* ---------- 4 & 5. eight answers ---------- */
+const ANS=[['A','Correct, short',.14,1.0,1.1],['B','Correct, explains why',.10,1.6,1.8],['C','Correct but rambling',.08,1.4,1.0],['D','Partly wrong',.22,0.2,0.0],['E','Wrong, confident',.12,0.5,-1.0],['F','Off-topic',.12,-1.0,-1.2],['G','Refuses needlessly',.18,-0.6,-0.8],['H','Long, flattering, hollow',.04,2.6,-0.5]];
+const REF=ANS.map(a=>a[2]), PROXY=ANS.map(a=>a[3]), TRUEQ=ANS.map(a=>a[4]);
+const optPol=(r,b)=>{ const w=REF.map((p,i)=>p*Math.exp(r[i]/b)), s=w.reduce((x,y)=>x+y,0); return w.map(x=>x/s); };
+const KL=p=>p.reduce((s,x,i)=>s+(x>1e-12?x*Math.log(x/REF[i]):0),0), EV=(p,r)=>p.reduce((s,x,i)=>s+x*r[i],0);
+const klP=new ML.Plot('#klPlot',{equal:false}); let klB=1;
+const curve=[]; for(let e=1.5;e>=-2.2;e-=0.02){ const b=Math.pow(10,e), p=optPol(PROXY,b); curve.push([KL(p),EV(p,PROXY),EV(p,TRUEQ),b]); }
+function barsFor(p,ref,outline){ const P=P0(); return '<div style="display:grid;grid-template-columns:minmax(130px,46%) 1fr 50px;gap:4px 8px;align-items:center;font-size:12.5px">'+ANS.map((a,i)=>`<span><b>${a[0]}</b> ${a[1]}</span><span style="position:relative;height:16px;background:var(--soft);border-radius:3px"><span style="position:absolute;left:0;top:0;bottom:0;width:${100*ref[i]}%;background:${P.muted};opacity:.35;border-radius:3px"></span><span style="position:absolute;left:0;top:3px;bottom:3px;width:${100*p[i]}%;background:${i===7?P.c2:P.c1};border-radius:3px"></span>${outline?`<span style="position:absolute;top:0;bottom:0;left:calc(${100*outline[i]}% - 1px);border-left:2px dashed ${P.ink}"></span>`:''}</span><span class="mono" style="text-align:right">${(100*p[i]).toFixed(0)}%</span>`).join('')+'</div>'; }
+function drawKl(){ const P=P0(), p=optPol(PROXY,klB), k=KL(p);
+  const best=curve.reduce((q,c)=>c[2]>q[2]?c:q);
+  GX.chart(klP,[{pts:curve.map(c=>[c[0],c[1]]),color:P.c4,width:2.5,label:'proxy reward (reward model)'},{pts:curve.map(c=>[c[0],c[2]]),color:P.c5,width:2.5,label:'true quality'}],{x0:0,x1:Math.max(...curve.map(c=>c[0])),xl:'KL(π ‖ π_ref) in nats',vline:k,marks:[{x:k,y:EV(p,PROXY),color:P.c4},{x:k,y:EV(p,TRUEQ),color:P.c5},{x:best[0],y:best[2],color:P.ink,label:'best true quality',dy:-10}]});
+  $('#klBars').innerHTML='<div class="hint" style="margin:0 0 6px">Optimal policy π* (colour) over the reference π_ref (grey). Proxy reward → '+ANS.map(a=>a[0]+' '+a[3].toFixed(1)).join(', ')+'</div>'+barsFor(p,REF);
+  $('#klBOut').textContent=klB<0.1?klB.toFixed(3):klB.toFixed(2);
+  GX.stats('#klStats',[[k.toFixed(2),'KL from the SFT model','c3'],[EV(p,PROXY).toFixed(2),'expected proxy reward','c4'],[EV(p,TRUEQ).toFixed(2),'expected true quality','c5'],[pct(p[7]),'probability of hack answer H','c2']]); }
+ML.bindRange('klB',v=>{ klB=Math.pow(10,v); drawKl(); },v=>{ const b=Math.pow(10,v); return b<0.1?b.toFixed(3):b.toFixed(2); }); klP.onResize=drawKl; drawKl();
+
+/* DPO trained live on comparisons judged by true quality */
+const dpoP=new ML.Plot('#dpoPlot',{equal:false}); let th=REF.map(Math.log), dpoHist=[], dpoStep=0, dpoRng=ML.rng(5);
+const dB=()=>Math.pow(10,+$('#dpoB').value);
+const pol=()=>{ const m=Math.max(...th), e=th.map(x=>Math.exp(x-m)), s=e.reduce((a,b)=>a+b,0); return e.map(x=>x/s); };
+function dpoTrain(n){ const b=dB(), lr=0.05;
+  for(let s=0;s<n;s++){ const g=new Array(8).fill(0); let L=0;
+    for(let k=0;k<64;k++){ const i=dpoRng.int(8); let j=dpoRng.int(7); if(j>=i) j++; const pw=1/(1+Math.exp(-(TRUEQ[i]-TRUEQ[j]))); const [w,l]=dpoRng()<pw?[i,j]:[j,i];
+      /* log pi(y) = th[y] - logsumexp(th): the logsumexp cancels in the winner-minus-loser difference */
+      const z=b*((th[w]-Math.log(REF[w]))-(th[l]-Math.log(REF[l]))), sg=1/(1+Math.exp(z)); L+=Math.log(1+Math.exp(-z));
+      g[w]-=b*sg; g[l]+=b*sg; }
+    for(let q=0;q<8;q++) th[q]-=lr*g[q]/64*8; dpoStep++; dpoHist.push([dpoStep,L/64]); }
+  drawDpo(); }
+function drawDpo(){ const P=P0(), b=dB(), p=pol(), target=optPol(TRUEQ,b);
+  if(dpoHist.length) GX.chart(dpoP,[{pts:dpoHist,color:P.c2,width:2.2,label:'DPO loss'}],{x0:0,x1:Math.max(300,dpoStep),y0:0,xl:'training steps (64 comparisons each)'}); else { dpoP.clear(); const c=dpoP.ctx; c.save(); c.fillStyle=P.muted; c.font='600 14px Inter,system-ui'; c.textAlign='center'; c.fillText('Press “Train 300 steps” to start DPO from the SFT model',dpoP.w/2,dpoP.h/2); c.restore(); }
+  $('#dpoBars').innerHTML='<div class="hint" style="margin:0 0 6px">Policy after DPO (colour), the SFT reference (grey) and the exact KL-optimal policy for the true qualities (dashed)</div>'+barsFor(p,REF,target);
+  const tv=0.5*p.reduce((s,x,i)=>s+Math.abs(x-target[i]),0);
+  $('#dpoBOut').textContent=b.toFixed(2);
+  GX.stats('#dpoStats',[[String(dpoStep),'steps so far','c3'],[EV(p,TRUEQ).toFixed(2),'expected true quality','c5'],[pct(tv),'distance to the optimum (total variation)','c1'],[pct(p[7]),'probability of H','c2']]); }
+$('#dpoGo').onclick=()=>dpoTrain(300); $('#dpoRe').onclick=()=>{ th=REF.map(Math.log); dpoHist=[]; dpoStep=0; drawDpo(); };
+ML.bindRange('dpoB',()=>{ drawDpo(); },v=>Math.pow(10,v).toFixed(2)); dpoP.onResize=drawDpo; drawDpo();
+ML.onTheme(()=>{ drawSft(); drawLo(); drawRm(); drawKl(); drawDpo(); });
+})();
+</script>
+<script>NLP.nav('nlp','llm-post-training'); ML.renderMath(document.body);</script>
+</body>
+</html>

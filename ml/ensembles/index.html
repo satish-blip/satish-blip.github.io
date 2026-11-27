@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bagging and Boosting Lab</title>
+<meta name="description" content="Step through random forests and AdaBoost in the browser: bootstrap samples, out-of-bag error and vote averaging for bagging; sample weights, weighted error, alpha and the weight update for boosting, on the same datasets.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Algorithms"></nav></div></header>
+
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Ensembles</p>
+  <h1>Bagging &amp; <span class="grad">Boosting</span></h1>
+  <p class="lede">A single decision tree is easy to read but unreliable: deep trees chase noise, shallow trees miss structure. This page shows two ways to turn many imperfect trees into one strong model. <b>Bagging</b> (random forests) trains deep trees independently on resampled data and averages them, which cuts variance. <b>Boosting</b> (AdaBoost) trains tiny trees one after another, each focusing on the points the previous ones got wrong, which cuts bias. Step through both algorithms on the same data.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#rf">1 · Random forest, step by step</a><a href="#rfmaths">2 · Why averaging works</a><a href="#ada">3 · AdaBoost, step by step</a><a href="#adamaths">4 · The AdaBoost maths</a><a href="#vs">5 · Bagging vs boosting</a><a href="#code">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What are bagging and boosting, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>On the <a href="../decision-trees/">decision tree page</a>, pressing "New sample" gave a noticeably different tree each time. A model whose answer depends that much on which training points happened to be collected has high <a class="term" data-t="variance">variance</a>. On the other hand, a tree limited to one question (a stump) is stable but far too simple: it has high bias. Can we combine trees to get the best of both?</p>
+      <h3>The idea</h3><p>An <a class="term" data-t="ensemble">ensemble</a> combines many simple models into a stronger one. There are two big recipes, one for each problem.</p><p><b><a class="term" data-t="bagging">Bagging</a></b> fixes variance. It trains many models side by side, each on a slightly different random copy of the data (a <a class="term" data-t="bootstrap">bootstrap sample</a>), and lets them vote. A <a class="term" data-t="random-forest">random forest</a> does this with deep decision trees, which are individually unstable but whose mistakes average out. <b><a class="term" data-t="boosting">Boosting</a></b> fixes bias. It trains models one after another; each new one concentrates on the points the previous ones got wrong. <a class="term" data-t="adaboost">AdaBoost</a> does this with tiny one-question trees (<a class="term" data-t="stump">stumps</a>).</p>
+      <h3>How it works</h3><ol class="steps2"><li>Bagging: draw a bootstrap sample, train a tree, repeat many times, then take the majority vote.</li><li>Random forest: also pick a random subset of features at each split so the trees differ more.</li><li>Boosting: train a <a class="term" data-t="weak-learner">weak learner</a>, raise the weight of the points it got wrong, train the next one on the re-weighted data.</li><li>Give each boosted learner a vote in proportion to its accuracy, and sum.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Bagging is asking 100 people to guess the number of sweets in a jar and taking the average: individual guesses are wild, but their errors partly cancel. It works best when the people think independently, which is what the random feature subsets in a forest try to ensure. Boosting is a study group where each new member focuses on the questions the group still gets wrong.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Among the most accurate methods on tabular data</li><li>Random forests need almost no tuning and give a free error estimate</li><li>Boosting turns very weak models into strong ones</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Harder to interpret than one tree</li><li>Boosting can overfit noisy labels</li><li>More computation</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="ensemble">Ensemble</a><a class="term" data-t="bagging">Bagging</a><a class="term" data-t="bootstrap">Bootstrap</a><a class="term" data-t="random-forest">Random forest</a><a class="term" data-t="oob">Out-of-bag</a><a class="term" data-t="variance">Variance</a><a class="term" data-t="boosting">Boosting</a><a class="term" data-t="adaboost">AdaBoost</a><a class="term" data-t="weak-learner">Weak learner</a><a class="term" data-t="stump">Stump</a><a class="term" data-t="gradient-boosting">Gradient boosting</a><a class="term" data-t="bias-variance">Bias–variance</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. Background maths: <a href="../../math/probability/#rv">variance of random variables</a>, <a href="../../math/inference/#sampling">averages of samples</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="row" style="justify-content:space-between;align-items:flex-end;gap:16px">
+    <div class="ctl" style="flex:1;min-width:280px"><span class="lbl">Dataset (shared by both algorithms)</span><div class="dsrow" id="dsPick"></div></div>
+    <div class="grid2" style="gap:12px;min-width:280px">
+      <div class="ctl"><label for="nPts">Points <output id="nPtsOut"></output></label><input type="range" id="nPts" min="40" max="400" step="10" value="200"></div>
+      <div class="ctl"><label for="noise">Noise <output id="noiseOut"></output></label><input type="range" id="noise" min="0" max="1" step="0.05" value="0.3"></div>
+    </div>
+  </div>
+</section>
+
+<!-- RANDOM FOREST -->
+<section id="rf">
+  <h2 class="section-title">1 · Random forest, step by step</h2>
+  <div class="card hl">
+    <p class="sub">Press <b>Play</b> to add trees one at a time. On the left is the newest tree on its own; in the middle is the vote of all trees so far. Watch the middle picture calm down as the jagged individual trees are averaged.</p>
+    <div class="grid3 g3w">
+      <div><h3 style="margin-top:0">Tree <span id="rfT"></span> on its bootstrap sample</h3><div class="plot sq" id="rfTree"></div>
+        <p class="hint">Point size = how many times it was drawn. Hollow points were not drawn at all: they are this tree's <b>out-of-bag</b> points.</p></div>
+      <div><h3 style="margin-top:0">Forest of the first <span id="rfT2"></span> trees (average vote)</h3><div class="plot sq" id="rfForest"></div>
+        <p class="hint">Shading = fraction of trees voting class 1. Notice how the jagged single-tree edges smooth out.</p></div>
+      <div>
+        <div class="controls">
+          <div class="ctl"><label for="rfN"><span>Number of trees B</span><output id="rfNOut"></output></label><input type="range" id="rfN" min="1" max="100" value="40"></div>
+          <div class="ctl"><label for="rfD"><span>Max depth of each tree</span><output id="rfDOut"></output></label><input type="range" id="rfD" min="1" max="14" value="8"></div>
+          <div class="ctl"><span class="lbl">Features tried per split</span><div class="seg" id="rfF"><button data-v="1" class="on">1 of 2 (random forest)</button><button data-v="2">2 of 2 (plain bagging)</button></div></div>
+          <div class="player"><button class="btn" id="rfPrev">◀</button><button class="btn primary" id="rfPlay">Play</button><button class="btn" id="rfNext">▶</button><span class="pos" id="rfPos"></span></div>
+          <input type="range" id="rfK" min="1" max="40" value="1">
+        </div>
+        <div class="stats" id="rfStats" style="margin-top:12px"></div>
+      </div>
+    </div>
+    <div class="grid2" style="margin-top:16px">
+      <div class="steps" id="rfSteps">
+        <div class="step"><h4>① Bootstrap</h4>Draw \(n\) points <b>with replacement</b> from the \(n\) training points. About \(1-(1-\tfrac1n)^n\approx63.2\%\) are unique; the rest of each sample is repeats. <span id="rfS1"></span></div>
+        <div class="step"><h4>② Grow a decorrelated tree</h4>Fit a deep tree to that sample, but at every split consider only a random subset of features (\(m\) of \(d\); here \(m=1\) of 2 for a random forest). <span id="rfS2"></span></div>
+        <div class="step"><h4>③ Aggregate</h4>Average the trees' class-1 probabilities (soft voting): \(\hat p(x)=\tfrac1B\sum_b\hat p_b(x)\). Predict 1 when \(\hat p\ge0.5\). <span id="rfS3"></span></div>
+        <div class="step"><h4>④ Out-of-bag check (free validation)</h4>For each point, average only the trees that did <i>not</i> see it. That error estimates test error without a held-out set. <span id="rfS4"></span></div>
+      </div>
+      <div><div class="plot wide" id="rfCurve"></div>
+        <div class="legend"><span><i class="sw" style="background:var(--c2)"></i>forest test error</span><span><i class="sw" style="background:var(--c4)"></i>out-of-bag error</span><span><i class="sw" style="background:var(--muted)"></i>average single-tree test error</span></div></div>
+    </div>
+    <h3>All trees <span class="pill">click one to inspect it</span></h3>
+    <div class="thumbs" id="rfThumbs"></div>
+  </div>
+</section>
+
+<section id="rfmaths" class="card">
+  <h2><span class="num">2</span>Why averaging works</h2>
+  <p class="sub">Why should averaging many bad-ish trees give a good one? The answer is a two-line variance calculation, and it also explains why random forests deliberately hide features.</p>
+  <div class="grid2 prose">
+    <div>
+      <h3>Step 1: averaging independent guesses</h3>
+      <p>Suppose each tree's prediction at a point \(x\) is a random quantity (random because the bootstrap sample is random) with variance \(\sigma^2\). If the \(B\) trees were completely independent, their average would have variance \(\sigma^2/B\): a hundred trees would be ten times less wobbly (in standard deviation) than one.</p>
+      <h3>Step 2: but the trees are correlated</h3>
+      <p>Trees trained on overlapping data are not independent. If any two have correlation \(\rho\), the average has variance</p>
+      <div class="mathbox c1">$$\operatorname{Var}\Big(\frac1B\sum_{b=1}^B\hat f_b(x)\Big)=\rho\,\sigma^2+\frac{1-\rho}{B}\,\sigma^2$$</div>
+      <p>Adding trees kills the second term, but the first term stays: no number of trees can push variance below \(\rho\sigma^2\). Bagged trees are correlated because they all see similar data and grab the same strong splits, so \(\rho\) is large.</p>
+      <h3>Step 3: decorrelate</h3>
+      <p>Random forests lower \(\rho\) by hiding features at each split: trees are forced to differ. Each tree is a little worse, but the average is better. Switch between "1 of 2" and "2 of 2" above and compare the final test error.</p>
+      <div class="note">Bias is unchanged by averaging: a forest of depth-1 trees is still a weak model. That is why forests use deep, low-bias trees, and why boosting (which fights bias) uses shallow ones.</div>
+      <details class="deeper"><summary>Going deeper: deriving the variance of a correlated average</summary><div>
+        <p>Let \(f_b\) have variance \(\sigma^2\) and \(\operatorname{Cov}(f_b,f_c)=\rho\sigma^2\) for \(b\ne c\). Variance of a sum is the sum of all covariances: \(\operatorname{Var}(\sum_bf_b)=\sum_b\operatorname{Var}(f_b)+\sum_{b\ne c}\operatorname{Cov}(f_b,f_c)=B\sigma^2+B(B-1)\rho\sigma^2\). Divide by \(B^2\): \(\frac{\sigma^2}{B}+\frac{B-1}{B}\rho\sigma^2=\rho\sigma^2+\frac{1-\rho}{B}\sigma^2\). Feature subsampling lowers \(\rho\) at the price of a slightly larger \(\sigma^2\) and bias per tree; the usual defaults, \(m=\sqrt d\) for classification and \(m=d/3\) for regression, are the empirical sweet spots.</p>
+      </div></details>
+    </div>
+    <div>
+      <h3>The 63.2% rule</h3>
+      <p>Each draw misses a particular point with probability \(1-1/n\), and there are \(n\) independent draws:</p>
+      <div class="mathbox c3">$$P(\text{point } i\text{ never drawn})=\Big(1-\frac1n\Big)^n\ \xrightarrow{n\to\infty}\ e^{-1}\approx0.368$$</div>
+      <p>So every tree leaves about a third of the data out-of-bag, which gives the OOB estimate for free: each point is judged only by trees that never saw it, just like a test set.</p>
+      <h3>Variance shrinking, live</h3>
+      <div class="plot short" id="varPlot"></div>
+      <p class="hint">The curve is \(\rho\sigma^2+(1-\rho)\sigma^2/B\) with \(\sigma^2=1\) for \(\rho=\) 0, 0.2, 0.5 and 0.8. Lower correlation gives a lower floor.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: random forest (classification)</h5><ol>
+        <li><span class="kw">input</span> data \(\{(x_i,y_i)\}_{i=1}^n\) with \(d\) features, number of trees \(B\), features per split \(m\)</li>
+        <li><span class="kw">for</span> \(b=1\) <span class="kw">to</span> \(B\) <span class="kw">do</span></li>
+        <li class="i1">\(S_b\leftarrow\) \(n\) indices drawn uniformly <b>with replacement</b> <span class="cm">bootstrap</span></li>
+        <li class="i1">grow tree \(T_b\) on \(S_b\) as in CART, except:</li>
+        <li class="i2">at each node, choose \(m\) features at random and search splits only on those</li>
+        <li class="i1">remember the out-of-bag set \(O_b\leftarrow\{1..n\}\setminus S_b\)</li>
+        <li><span class="kw">to predict</span> \(x\): \(\hat p(x)\leftarrow\tfrac1B\sum_b\hat p_{T_b}(x)\); <span class="kw">return</span> \([\hat p(x)\ge0.5]\)</li>
+        <li><span class="kw">OOB error</span>: for each \(i\), average only trees with \(i\in O_b\); compare with \(y_i\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<!-- ADABOOST -->
+<section id="ada">
+  <h2 class="section-title">3 · AdaBoost, step by step</h2>
+  <div class="card hl">
+    <p class="sub">Each round adds one small tree. On the left, point size shows how much each point matters this round; the crosses are the new tree's mistakes, which will matter more next round. In the middle is the weighted vote of all trees so far.</p>
+    <div class="grid3 g3w">
+      <div><h3 style="margin-top:0">Round <span id="adT"></span>: weak learner \(h_t\) and weights \(D_t\)</h3><div class="plot sq" id="adWeak"></div>
+        <p class="hint">Point area ∝ weight before this round. ✕ = misclassified by \(h_t\); those points get heavier next round.</p></div>
+      <div><h3 style="margin-top:0">Ensemble \(F_t(x)=\sum_{s\le t}\alpha_sh_s(x)\)</h3><div class="plot sq" id="adEns"></div>
+        <p class="hint">Shading = \(\sigma(2F_t)\). The bold line is \(F_t=0\).</p></div>
+      <div>
+        <div class="controls">
+          <div class="ctl"><label for="adN"><span>Rounds T</span><output id="adNOut"></output></label><input type="range" id="adN" min="1" max="200" value="60"></div>
+          <div class="ctl"><span class="lbl">Weak learner</span><div class="seg" id="adD"><button data-v="1" class="on">Stump (depth 1)</button><button data-v="2">Depth 2</button><button data-v="3">Depth 3</button></div></div>
+          <div class="player"><button class="btn" id="adPrev">◀</button><button class="btn primary" id="adPlay">Play</button><button class="btn" id="adNext">▶</button><span class="pos" id="adPos"></span></div>
+          <input type="range" id="adK" min="1" max="60" value="1">
+        </div>
+        <div id="adCalc" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <div class="grid2" style="margin-top:16px">
+      <div class="steps">
+        <div class="step"><h4>① Fit a weak learner to the weighted data</h4>Find \(h_t\) that minimises the weighted error \(\varepsilon_t=\sum_iD_t(i)\,[h_t(x_i)\ne y_i]\). Here \(h_t\) is a small tree grown with weighted Gini.</div>
+        <div class="step"><h4>② Give it a say</h4>\(\alpha_t=\tfrac12\ln\frac{1-\varepsilon_t}{\varepsilon_t}\). Accurate learners (\(\varepsilon_t\) small) get a large vote; a coin flip (\(\varepsilon_t=0.5\)) gets zero.</div>
+        <div class="step"><h4>③ Reweight</h4>\(D_{t+1}(i)=D_t(i)\,e^{-\alpha_ty_ih_t(x_i)}/Z_t\): mistakes are multiplied by \(e^{\alpha_t}\), correct points by \(e^{-\alpha_t}\), then everything is renormalised.</div>
+        <div class="step"><h4>④ Combine</h4>Final classifier \(H(x)=\operatorname{sign}\big(\sum_t\alpha_th_t(x)\big)\).</div>
+      </div>
+      <div><div class="plot wide" id="adCurve"></div>
+        <div class="legend"><span><i class="sw" style="background:var(--c3)"></i>ensemble training error</span><span><i class="sw" style="background:var(--c2)"></i>ensemble test error</span><span><i class="sw" style="background:var(--c4)"></i>weighted error \(\varepsilon_t\) of each weak learner</span><span><i class="sw" style="background:var(--c1)"></i>bound \(\prod Z_t\)</span></div></div>
+    </div>
+    <h3>Votes \(\alpha_t\) per round</h3>
+    <div class="plot short" id="adAlpha"></div>
+  </div>
+</section>
+
+<section id="adamaths" class="card">
+  <h2><span class="num">4</span>The AdaBoost maths</h2>
+  <p class="sub">The reweighting rule and the \(\alpha_t\) formula above look like clever tricks. They are not: both drop out of one loss function, minimised one tree at a time.</p>
+  <div class="grid2 prose">
+    <div>
+      <h3>Step 1: pick a loss for the whole ensemble</h3>
+      <p>Use labels \(y_i\in\{-1,+1\}\). The ensemble's score is \(F(x)=\sum_t\alpha_th_t(x)\), and \(y_iF(x_i)\) is positive when the point is classified correctly, large when confidently so. AdaBoost uses the exponential loss, which punishes negative values sharply:</p>
+      <div class="mathbox c1">$$L(F)=\sum_{i=1}^n e^{-y_iF(x_i)},\qquad F_t=F_{t-1}+\alpha_th_t$$</div>
+      <h3>Step 2: add one learner at a time</h3>
+      <p>We do not re-fit old learners; we only choose the next \(h_t\) and its weight \(\alpha_t\). Split the loss: \(e^{-y_iF_t(x_i)}=e^{-y_iF_{t-1}(x_i)}\cdot e^{-\alpha_ty_ih_t(x_i)}\). The first factor is fixed, so it acts as a weight on point \(i\): \(w_i\propto e^{-y_iF_{t-1}(x_i)}\). That is exactly \(D_t\), and it explains step ③: points the ensemble gets wrong have large \(w_i\).</p>
+      <h3>Step 3: the best vote for that learner</h3>
+      <p>For a fixed \(h_t\), correct points contribute \(e^{-\alpha}\) and wrong ones \(e^{\alpha}\), so the loss is \(e^{-\alpha}(1-\varepsilon_t)+e^{\alpha}\varepsilon_t\) up to a constant. Setting the derivative to zero:</p>
+      <div class="mathbox c3">$$-e^{-\alpha}(1-\varepsilon_t)+e^{\alpha}\varepsilon_t=0\ \Longrightarrow\ \alpha_t=\tfrac12\ln\frac{1-\varepsilon_t}{\varepsilon_t}$$</div>
+      <p>So AdaBoost is <b>forward stagewise additive modelling</b> with exponential loss, the idea that <a class="term" data-t="gradient-boosting">gradient boosting</a> later generalised to any differentiable loss: each new tree is fitted to the negative gradient of the loss (for squared error, simply the residuals).</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: AdaBoost</h5><ol>
+        <li><span class="kw">input</span> data \((x_i,y_i)\) with \(y_i\in\{-1,+1\}\), rounds \(T\), weak-learner depth</li>
+        <li>\(D_1(i)\leftarrow1/n\) for all \(i\)</li>
+        <li><span class="kw">for</span> \(t=1\) <span class="kw">to</span> \(T\) <span class="kw">do</span></li>
+        <li class="i1">\(h_t\leftarrow\) small tree fitted with point weights \(D_t\)</li>
+        <li class="i1">\(\varepsilon_t\leftarrow\sum_iD_t(i)\,[h_t(x_i)\ne y_i]\)</li>
+        <li class="i1"><span class="kw">if</span> \(\varepsilon_t\ge\tfrac12\) <span class="kw">then</span> stop <span class="cm">no better than chance</span></li>
+        <li class="i1">\(\alpha_t\leftarrow\tfrac12\ln\frac{1-\varepsilon_t}{\varepsilon_t}\)</li>
+        <li class="i1">\(D_{t+1}(i)\leftarrow D_t(i)\,e^{-\alpha_ty_ih_t(x_i)}\) for all \(i\)</li>
+        <li class="i1">divide \(D_{t+1}\) by its sum \(Z_t\)</li>
+        <li><span class="kw">return</span> \(H(x)=\operatorname{sign}\big(\sum_t\alpha_th_t(x)\big)\)</li>
+      </ol></div>
+    </div>
+    <div>
+      <h3>Training error falls exponentially</h3>
+      <div class="mathbox c5">$$\begin{aligned}\frac1n\sum_i[H(x_i)\ne y_i]\ &amp;\le\ \prod_{t=1}^TZ_t=\prod_{t=1}^T2\sqrt{\varepsilon_t(1-\varepsilon_t)}\\ &amp;\le\ \exp\Big(-2\sum_t\gamma_t^2\Big),\quad \gamma_t=\tfrac12-\varepsilon_t\end{aligned}$$</div>
+      <p>In words: as long as each weak learner beats a coin flip by some margin \(\gamma\), training error goes to zero, and fast. Watch the purple bound in the chart above sit on top of the training error.</p>
+      <details class="deeper"><summary>Going deeper: proving the training-error bound</summary><div>
+        <p>Unroll the weight update: \(D_{T+1}(i)=\frac{1}{n}\frac{e^{-y_iF_T(x_i)}}{\prod_tZ_t}\). The weights sum to 1, so \(\frac1n\sum_ie^{-y_iF_T(x_i)}=\prod_tZ_t\). A mistake means \(y_iF_T(x_i)\le0\), so \(e^{-y_iF_T(x_i)}\ge1\): the exponential loss is an upper bound on the 0/1 loss, and the training error is at most \(\prod_tZ_t\). With the optimal \(\alpha_t\), \(Z_t=(1-\varepsilon_t)e^{-\alpha_t}+\varepsilon_te^{\alpha_t}=2\sqrt{\varepsilon_t(1-\varepsilon_t)}=\sqrt{1-4\gamma_t^2}\le e^{-2\gamma_t^2}\), using \(1+x\le e^x\).</p>
+        <p>Why does test error often keep falling after training error reaches zero? Boosting keeps increasing the <i>margins</i> \(y_iF(x_i)/\sum_t\alpha_t\) of the training points, and generalisation bounds depend on the margin distribution rather than on the number of rounds (Schapire et al., 1998). The same idea underlies the SVM.</p>
+      </div></details>
+      <div class="note warn"><b>Where stumps fail.</b> On <b>XOR</b>, every single-feature stump has \(\varepsilon\approx0.5\), so \(\alpha\approx0\) and boosting stalls: no stump beats chance, and adding zero-weight stumps never helps. Switch the weak learner to depth 2 (which can represent an interaction) and it works. Weak learners must be <i>weakly</i> better than chance.</div>
+      <div class="note"><b>Sensitive to noise.</b> Mislabelled points keep getting heavier, so on <b>Noisy labels</b> boosting eventually spends its rounds on them. Watch the test error curve.</div>
+    </div>
+  </div>
+</section>
+
+<section id="vs" class="card">
+  <h2><span class="num">5</span>Bagging vs boosting at a glance</h2>
+  <div class="tblwrap"><table class="tbl" style="font-size:14px">
+    <tr><th></th><th style="text-align:left">Bagging / random forest</th><th style="text-align:left">Boosting / AdaBoost</th></tr>
+    <tr><td>Base learners</td><td style="text-align:left;white-space:normal">Deep trees (low bias, high variance)</td><td style="text-align:left;white-space:normal">Shallow trees, often stumps (high bias, low variance)</td></tr>
+    <tr><td>Training</td><td style="text-align:left;white-space:normal">Independent, in parallel, each on a bootstrap sample</td><td style="text-align:left;white-space:normal">Sequential, each on reweighted data</td></tr>
+    <tr><td>Combination</td><td style="text-align:left;white-space:normal">Equal-weight average</td><td style="text-align:left;white-space:normal">Weighted vote with \(\alpha_t\)</td></tr>
+    <tr><td>Mainly reduces</td><td style="text-align:left;white-space:normal">Variance</td><td style="text-align:left;white-space:normal">Bias (and variance)</td></tr>
+    <tr><td>More learners</td><td style="text-align:left;white-space:normal">Never overfits by adding trees; error levels off</td><td style="text-align:left;white-space:normal">Can eventually overfit noisy data; tune T</td></tr>
+    <tr><td>Noise</td><td style="text-align:left;white-space:normal">Robust</td><td style="text-align:left;white-space:normal">Sensitive (exponential loss up-weights outliers)</td></tr>
+    <tr><td>Free extras</td><td style="text-align:left;white-space:normal">Out-of-bag error, feature importance</td><td style="text-align:left;white-space:normal">Margin view, training error bound</td></tr>
+  </table></div>
+  <div class="stats" id="vsStats" style="margin-top:14px"></div>
+  <p class="hint">In practice, the strongest tabular models today are gradient-boosted trees (XGBoost, LightGBM, CatBoost): boosting with a smooth loss, a small learning rate that shrinks each tree's contribution, and random row and feature subsampling borrowed from forests.</p>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.ensemble <span class="k">import</span> RandomForestClassifier, BaggingClassifier, AdaBoostClassifier
+<span class="k">from</span> sklearn.tree <span class="k">import</span> DecisionTreeClassifier
+
+rf = RandomForestClassifier(n_estimators=<span class="s">40</span>, max_depth=<span class="s">8</span>, max_features=<span class="s">1</span>, oob_score=<span class="k">True</span>).<span class="f">fit</span>(X, y)
+rf.oob_score_                       <span class="c"># 1 - OOB error</span>
+bag = BaggingClassifier(DecisionTreeClassifier(max_depth=<span class="s">8</span>), n_estimators=<span class="s">40</span>).<span class="f">fit</span>(X, y)
+
+ada = AdaBoostClassifier(DecisionTreeClassifier(max_depth=<span class="s">1</span>), n_estimators=<span class="s">60</span>, algorithm=<span class="s">"SAMME"</span>).<span class="f">fit</span>(X, y)
+ada.estimator_weights_              <span class="c"># alpha_t (sklearn's SAMME uses ln((1-e)/e), i.e. 2x this page's alpha)</span>
+ada.estimator_errors_               <span class="c"># epsilon_t</span>
+<span class="k">for</span> F <span class="k">in</span> ada.<span class="f">staged_decision_function</span>(X_test): ...   <span class="c"># F_t after each round</span></pre>
+</section>
+
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything is computed in your browser in plain JavaScript.</p>
+</main>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/gloss.js"></script>
+<script src="../assets/models.js"></script>
+<script src="../assets/tree.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML, Mo=ML.models;
+ML.nav('ensembles'); ML.renderMath(document.body);
+const S={ds:'moons', n:200, noise:0.3, seed:7, X:[], y:[], test:null};
+function load(){ const d=ML.dataset(S.ds,S.n,S.noise,S.seed); S.X=d.X; S.y=d.y; S.test=ML.dataset(S.ds,400,S.noise,S.seed+202); }
+const err=(f,X,y)=>{ let e=0; X.forEach((x,i)=>{ if((f(x)>=0.5?1:0)!==y[i]) e++; }); return e/X.length; };
+
+/* ================= Random forest ================= */
+const R={B:40, depth:8, mf:1, k:1, m:null, timer:null, curve:null};
+const rfTree=new ML.Plot('#rfTree'), rfForest=new ML.Plot('#rfForest'), rfCurve=new ML.Plot('#rfCurve',{equal:false}), varPlot=new ML.Plot('#varPlot',{equal:false});
+function rfBuild(){ rfStop(); R.m=Mo.RandomForest(S.X,S.y,{nTrees:R.B,maxDepth:R.depth,maxFeatures:R.mf,seed:S.seed*3+1}); $('#rfK').max=R.B; R.k=Math.min(R.k,R.B)||1; $('#rfK').value=R.k;
+  // curves
+  const T=S.test, P=T.X.map(x=>R.m.trees.map(t=>t.proba(x))); const fe=[], oob=[], single=[]; let singleSum=0;
+  for(let b=1;b<=R.B;b++){ let e=0; P.forEach((ps,i)=>{ let s=0; for(let t=0;t<b;t++) s+=ps[t]; if((s/b>=0.5?1:0)!==T.y[i]) e++; }); fe.push([b,e/T.X.length]);
+    let es=0; P.forEach((ps,i)=>{ if((ps[b-1]>=0.5?1:0)!==T.y[i]) es++; }); singleSum+=es/T.X.length; single.push([b,singleSum/b]); oob.push([b,R.m.oob(b)]); }
+  R.curve={fe,oob,single}; rfThumbs(); rfDraw(); }
+function rfDraw(){ const P=ML.palette(), m=R.m, k=R.k, t=m.trees[k-1], cnt=m.boots[k-1];
+  rfTree.clear(); rfTree.regions((x,y)=>t.proba([x,y]),5); rfTree.grid(1); ML.drawPartitions(rfTree,t,Infinity,{alpha:.25});
+  const c=rfTree.ctx; S.X.forEach((x,i)=>{ const X=rfTree.X(x[0]), Y=rfTree.Y(x[1]), col=S.y[i]?P.k1:P.k0; c.beginPath(); if(cnt[i]){ c.arc(X,Y,2.6+2.2*Math.sqrt(cnt[i]),0,7); c.fillStyle=col; c.fill(); c.strokeStyle=P.dark?'#0b0d19':'#fff'; c.lineWidth=1; c.stroke(); } else { c.arc(X,Y,3.6,0,7); c.strokeStyle=col; c.lineWidth=1.8; c.stroke(); } });
+  rfForest.clear(); rfForest.regions((x,y)=>m.probaK([x,y],k),5); rfForest.grid(1); rfForest.contour((x,y)=>m.probaK([x,y],k)-0.5,0,{width:2.4}); rfForest.points(S.X,S.y,{r:3.4});
+  $('#rfT').textContent=k; $('#rfT2').textContent=k; $('#rfPos').textContent=`tree ${k} / ${R.B}`;
+  const uniq=cnt.filter(v=>v>0).length, oobN=S.X.length-uniq, tAcc=1-err(x=>t.proba(x),S.test.X,S.test.y), fAcc=1-R.curve.fe[k-1][1];
+  $('#rfStats').innerHTML=[['c1',ML.pct(uniq/S.X.length),'unique points in sample'],['c4',oobN,'out-of-bag points'],['c3',ML.pct(tAcc),'this tree: test acc.'],['c5',ML.pct(fAcc),`forest of ${k}: test acc.`],['c2',ML.pct(1-R.curve.oob[k-1][1]||NaN),'OOB accuracy']].map(([c2,v,l])=>`<div class="stat ${c2}"><b>${v}</b><span>${l}</span></div>`).join('');
+  $('#rfS1').innerHTML=`<b>Now:</b> ${uniq} unique of ${S.X.length} (${ML.pct(uniq/S.X.length)}).`; $('#rfS2').innerHTML=`<b>Now:</b> tree ${k} has ${t.leaves} leaves, depth ${t.depth}.`;
+  $('#rfS3').innerHTML=`<b>Now:</b> averaging ${k} tree${k>1?'s':''}.`; $('#rfS4').innerHTML=`<b>Now:</b> OOB error ${isNaN(R.curve.oob[k-1][1])?'– (some points not yet out-of-bag)':ML.pct(R.curve.oob[k-1][1])}.`;
+  ML.$$('#rfSteps .step').forEach((s,i)=>s.classList.toggle('on', i===(R.phase??2)));
+  ML.chart(rfCurve,[{pts:R.curve.single,color:P.muted,width:2,dash:[5,4]},{pts:R.curve.oob.filter(p=>!isNaN(p[1])),color:P.c4,width:2.2},{pts:R.curve.fe,color:P.c2,width:2.8}],{y0:0,vline:k,xl:'number of trees',yfmt:v=>(100*v).toFixed(0)+'%'});
+  ML.$$('#rfThumbs .thumb').forEach((el,i)=>el.classList.toggle('on',i===k-1)); }
+let thumbTok=0;
+function rfThumbs(){ const box=$('#rfThumbs'), tok=++thumbTok; box.innerHTML=''; const show=Math.min(R.B,48);
+  for(let b=0;b<show;b++){ const el=document.createElement('div'); el.className='thumb'; el.innerHTML=`<div class="plot sq" style="border:0;border-radius:0"></div><div>tree ${b+1}</div>`; el.onclick=()=>{ rfStop(); R.k=b+1; $('#rfK').value=R.k; R.phase=1; rfDraw(); }; box.appendChild(el); }
+  let b=0; const step=()=>{ if(tok!==thumbTok||b>=show) return; const el=box.children[b], t=R.m.trees[b]; const pl=new ML.Plot(el.firstChild); const dr=()=>{ pl.clear(); pl.regions((x,y)=>t.proba([x,y]),4); }; dr(); pl.onResize=dr; b++; setTimeout(step,0); }; step(); }
+function rfStop(){ if(R.timer){ clearInterval(R.timer); R.timer=null; $('#rfPlay').textContent='Play'; } }
+$('#rfPlay').onclick=()=>{ if(R.timer){ rfStop(); return; } if(R.k>=R.B) R.k=0; $('#rfPlay').textContent='Pause'; let ph=0; R.k=Math.max(1,R.k);
+  R.timer=setInterval(()=>{ R.phase=ph; if(ph===0 && R.k<R.B && R.k>1) {} rfDraw(); ph++; if(ph>3){ ph=0; if(R.k>=R.B){ rfStop(); return; } R.k++; $('#rfK').value=R.k; } }, 450); };
+$('#rfPrev').onclick=()=>{ rfStop(); R.k=Math.max(1,R.k-1); $('#rfK').value=R.k; rfDraw(); }; $('#rfNext').onclick=()=>{ rfStop(); R.k=Math.min(R.B,R.k+1); $('#rfK').value=R.k; rfDraw(); };
+$('#rfK').oninput=()=>{ rfStop(); R.k=+$('#rfK').value; rfDraw(); };
+ML.bindRange('rfN',v=>{ R.B=v; R.k=Math.min(R.k,v); rfBuild(); }); ML.bindRange('rfD',v=>{ R.depth=v; rfBuild(); }); ML.bindSeg('rfF',v=>{ R.mf=+v; rfBuild(); });
+function drawVar(){ const P=ML.palette(), cols=[P.c5,P.c3,P.c1,P.c2]; ML.chart(varPlot,[0,0.2,0.5,0.8].map((r,j)=>({pts:Array.from({length:50},(_,b)=>[b+1,r+(1-r)/(b+1)]),color:cols[j],width:2.4})),{y0:0,y1:1,xl:'B (number of trees)'}); }
+
+/* ================= AdaBoost ================= */
+const A={T:60, depth:1, k:1, m:null, timer:null, curve:null};
+const adWeak=new ML.Plot('#adWeak'), adEns=new ML.Plot('#adEns'), adCurve=new ML.Plot('#adCurve',{equal:false}), adAlpha=new ML.Plot('#adAlpha',{equal:false});
+function adBuild(){ adStop(); A.m=Mo.AdaBoost(S.X,S.y,{rounds:A.T,depth:A.depth}); const R2=A.m.rounds.length; $('#adK').max=R2; A.k=Math.min(Math.max(1,A.k),R2); $('#adK').value=A.k;
+  const tr=[], te=[], eps=[], bound=[]; let prod=1; const Ftr=new Array(S.X.length).fill(0), Fte=new Array(S.test.X.length).fill(0);
+  A.m.rounds.forEach((r,t)=>{ S.X.forEach((x,i)=>Ftr[i]+=r.alpha*r.h(x)); S.test.X.forEach((x,i)=>Fte[i]+=r.alpha*r.h(x)); prod*=r.Z*Math.exp(0);
+    const z=2*Math.sqrt(r.err*(1-r.err)); bound.push([t+1, (bound.length?bound[bound.length-1][1]:1)*z]);
+    tr.push([t+1, Ftr.filter((f,i)=>(f>=0?1:0)!==S.y[i]).length/S.X.length]); te.push([t+1, Fte.filter((f,i)=>(f>=0?1:0)!==S.test.y[i]).length/S.test.X.length]); eps.push([t+1,r.err]); });
+  A.curve={tr,te,eps,bound}; adDraw(); }
+function adDraw(){ const P=ML.palette(), m=A.m, k=A.k, r=m.rounds[k-1], n=S.X.length;
+  adWeak.clear(); adWeak.regions((x,y)=>r.h([x,y])>0?0.85:0.15,5); adWeak.grid(1); ML.drawPartitions(adWeak,r.tree,Infinity,{alpha:.5});
+  const wmax=Math.max(...r.before); adWeak.points(S.X,S.y,{size:i=>2+11*Math.sqrt(r.before[i]/wmax), cross:i=>r.pred[i]!==(S.y[i]?1:-1), alpha:()=>.9});
+  adEns.clear(); adEns.regions((x,y)=>m.probaK([x,y],k),5); adEns.grid(1); adEns.contour((x,y)=>m.scoreK([x,y],k),0,{width:2.6}); adEns.points(S.X,S.y,{r:3.4});
+  $('#adT').textContent=k; $('#adPos').textContent=`round ${k} / ${m.rounds.length}`;
+  const wrong=r.pred.filter((p,i)=>p!==(S.y[i]?1:-1)).length, up=Math.exp(r.alpha), dn=Math.exp(-r.alpha);
+  $('#adCalc').innerHTML='<div class="mathbox c1">'+ML.tex(`\\varepsilon_{${k}}=\\sum_{\\text{wrong}}D_{${k}}(i)=${fmt(r.err,4)}`,true)+ML.tex(`\\alpha_{${k}}=\\tfrac12\\ln\\tfrac{1-${fmt(r.err,3)}}{${fmt(r.err,3)}}=${fmt(r.alpha,4)}`,true)+
+    ML.tex(`\\text{wrong}\\times e^{\\alpha}=\\times${fmt(up,3)},\\quad \\text{right}\\times e^{-\\alpha}=\\times${fmt(dn,3)},\\quad Z_{${k}}=${fmt(r.Z,4)}`,true)+'</div>'+
+    `<div class="stats"><div class="stat c4"><b>${wrong} / ${n}</b><span>points h<sub>t</sub> gets wrong</span></div><div class="stat c3"><b>${ML.pct(A.curve.tr[k-1][1])}</b><span>ensemble train error</span></div><div class="stat c2"><b>${ML.pct(A.curve.te[k-1][1])}</b><span>ensemble test error</span></div></div>`;
+  ML.chart(adCurve,[{pts:A.curve.bound,color:P.c1,width:2,dash:[5,4]},{pts:A.curve.eps,color:P.c4,width:1.6,dots:true,r:2,noline:true},{pts:A.curve.tr,color:P.c3,width:2.6},{pts:A.curve.te,color:P.c2,width:2.6}],{y0:0,y1:0.6,vline:k,xl:'round t',yfmt:v=>(100*v).toFixed(0)+'%'});
+  // alpha bars
+  adAlpha.clear(); const c=adAlpha.ctx, L=36,Rr=8,T=10,B=20,W=adAlpha.w-L-Rr,H=adAlpha.h-T-B, amax=Math.max(...m.rounds.map(q=>Math.abs(q.alpha)),1e-9), bw=W/m.rounds.length;
+  c.save(); m.rounds.forEach((q,t)=>{ const h=Math.abs(q.alpha)/amax*H; c.fillStyle=t===k-1?P.c4:P.c1; c.globalAlpha=t<k?1:.3; c.fillRect(L+t*bw+0.5,T+H-h,Math.max(1,bw-1),h); });
+  c.globalAlpha=1; c.fillStyle=P.muted; c.font='11px Inter,system-ui,sans-serif'; c.textAlign='right'; c.fillText(fmt(amax,2),L-4,T+8); c.fillText('0',L-4,T+H); c.textAlign='left'; c.fillText('round →',L,T+H+15); c.restore(); }
+function adStop(){ if(A.timer){ clearInterval(A.timer); A.timer=null; $('#adPlay').textContent='Play'; } }
+$('#adPlay').onclick=()=>{ if(A.timer){ adStop(); return; } if(A.k>=A.m.rounds.length) A.k=0; $('#adPlay').textContent='Pause'; A.timer=setInterval(()=>{ if(A.k>=A.m.rounds.length){ adStop(); return; } A.k++; $('#adK').value=A.k; adDraw(); }, A.T>80?250:600); };
+$('#adPrev').onclick=()=>{ adStop(); A.k=Math.max(1,A.k-1); $('#adK').value=A.k; adDraw(); }; $('#adNext').onclick=()=>{ adStop(); A.k=Math.min(A.m.rounds.length,A.k+1); $('#adK').value=A.k; adDraw(); };
+$('#adK').oninput=()=>{ adStop(); A.k=+$('#adK').value; adDraw(); };
+ML.bindRange('adN',v=>{ A.T=v; adBuild(); vs(); }); ML.bindSeg('adD',v=>{ A.depth=+v; adBuild(); vs(); });
+
+function vs(){ const rfE=R.curve.fe[R.B-1][1], adE=A.curve.te[A.curve.te.length-1][1], single=Mo.Tree(S.X,S.y,{maxDepth:R.depth}), stump=Mo.Tree(S.X,S.y,{maxDepth:A.depth});
+  $('#vsStats').innerHTML=[['c4',ML.pct(1-err(x=>single.proba(x),S.test.X,S.test.y)),`one depth-${R.depth} tree`],['c1',ML.pct(1-rfE),`random forest (${R.B} trees)`],['c4',ML.pct(1-err(x=>stump.proba(x),S.test.X,S.test.y)),`one depth-${A.depth} tree`],['c3',ML.pct(1-adE),`AdaBoost (${A.m.rounds.length} rounds)`]]
+   .map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>test accuracy: ${l}</span></div>`).join(''); }
+
+function all(){ load(); rfBuild(); adBuild(); vs(); }
+ML.datasetPicker('dsPick',S.ds,id=>{ S.ds=id; all(); });
+ML.bindRange('nPts',v=>{ S.n=v; all(); }); ML.bindRange('noise',v=>{ S.noise=v; all(); },v=>v.toFixed(2));
+rfTree.onResize=rfForest.onResize=rfCurve.onResize=()=>R.m&&rfDraw(); varPlot.onResize=drawVar; adWeak.onResize=adEns.onResize=adCurve.onResize=adAlpha.onResize=()=>A.m&&adDraw();
+ML.onTheme(()=>{ rfDraw(); rfThumbs(); adDraw(); drawVar(); });
+all(); drawVar();
+})();
+</script>
+</body>
+</html>

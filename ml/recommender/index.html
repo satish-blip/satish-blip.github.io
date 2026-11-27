@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recommender systems: collaborative filtering, matrix factorisation, two-tower retrieval, ranking metrics</title>
+<meta name="description" content="How “people like you also liked” works: user-based collaborative filtering by hand, matrix factorisation trained live with item embeddings you can see, two-tower retrieval and the cold-start problem, ranking metrics (precision@k, MAP, MRR, nDCG) on a list you reorder, and diversity re-ranking with MMR.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<style>
+.src{font-size:12.5px;color:var(--muted);margin:10px 0 0;border-left:3px solid var(--line);padding-left:10px}
+.src a{color:inherit;text-decoration:underline;text-decoration-color:var(--line)}
+.rs-tab{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0;table-layout:fixed}
+.rs-tab td,.rs-tab th{border:1px solid var(--line);padding:4px 2px;text-align:center}
+.rs-tab th{background:var(--soft);font-weight:600;font-size:11.5px}
+.rs-tab td.pred{font-style:italic;font-weight:700;outline:2px solid var(--c1);outline-offset:-2px}
+.rs-tab td.na{color:var(--muted)}
+.rs-tab tr.me th{color:var(--c1)}
+.rs-list{display:flex;flex-direction:column;gap:5px;margin:8px 0}
+.rs-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--soft);font-size:13px}
+.rs-row .rk{width:22px;font-weight:700;color:var(--muted);flex:none}
+.rs-row .g{flex:none;display:inline-flex;gap:2px}
+.rs-row .g i{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--c5)}
+.rs-row .g i.o{background:var(--line)}
+.rs-row button{margin-left:auto;flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px}
+.rs-row.cut{opacity:.45}
+.rs-chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;min-height:64px;align-content:flex-start}
+.rs-chips span{padding:4px 8px;border-radius:8px;font-size:12px;border:1px solid var(--line);color:#fff;font-weight:600}
+</style>
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Applied ML</p>
+  <h1>Recommender systems: <span class="grad">people like you also liked</span></h1>
+  <p class="lede">Every feed, shop and streaming service answers the same question millions of times a second: of everything we could show this person, what should go first? This page builds the answer up from the simplest idea that works, finding similar users, to learnt embeddings of users and items, the two-stage retrieve-then-rank systems used at scale, the metrics that judge a ranked list, and the re-ranking that keeps it from being ten copies of the same thing.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#cf">1 · Collaborative filtering</a><a href="#mf">2 · Matrix factorisation</a><a href="#tt">3 · Two towers &amp; cold start</a><a href="#rank">4 · Ranking metrics</a><a href="#div">5 · Diversity</a><a href="#py">6 · Python</a><a href="#credits">7 · Sources &amp; credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a recommender, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A catalogue has thousands or millions of items; each person has seen or rated a tiny fraction of them. The <a class="term" data-t="rating-matrix">user–item matrix</a> is more than 99% empty. From the few cells we know, predict which of the empty ones this person would fill with a high score, and put those at the top of their screen.</p>
+      <h3>The idea</h3><p>Taste has structure. People who agreed in the past tend to agree again (<a class="term" data-t="collaborative-filtering">collaborative filtering</a>), and that structure can be squeezed into a few numbers per user and per item, <a class="term" data-t="latent-factor">latent factors</a> such as “how much action” or “how highbrow”, learnt rather than labelled. A rating is then roughly a dot product between a user's vector and an item's vector.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Log interactions: ratings, clicks, purchases, watch time.</li><li>Learn user and item vectors that reproduce the known interactions.</li><li><a class="term" data-t="candidate-retrieval">Retrieve</a> a few hundred candidates quickly with a nearest-neighbour search.</li><li>Rank them with a richer model; re-rank for diversity and business rules.</li><li>Measure with ranking metrics offline and A/B tests online.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A good bookshop assistant. They do not know you, but they know that people who bought the two books you mention also loved a third one, and they know their shop well enough to group books by feel rather than by shelf label. When a new book arrives with no sales history, they judge it by its cover, author and genre until people start buying it.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Learning taste from behaviour alone, with no item descriptions needed</li><li>Embeddings that scale to millions of users and items</li><li>Clear offline metrics for ranked lists</li></ul></div><div class="con"><b>Watch out for</b><ul><li><a class="term" data-t="cold-start">Cold start</a>: new users and items have no history</li><li>Popularity bias and feedback loops: you only learn about what you showed</li><li>Offline metrics do not always predict online gains</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="rating-matrix">User–item matrix</a><a class="term" data-t="collaborative-filtering">Collaborative filtering</a><a class="term" data-t="implicit-feedback">Implicit feedback</a><a class="term" data-t="matrix-factorisation">Matrix factorisation</a><a class="term" data-t="latent-factor">Latent factor</a><a class="term" data-t="two-tower">Two-tower model</a><a class="term" data-t="candidate-retrieval">Retrieval</a><a class="term" data-t="cold-start">Cold start</a><a class="term" data-t="ndcg">nDCG</a><a class="term" data-t="map-at-k">MAP@k</a><a class="term" data-t="mrr">MRR</a><a class="term" data-t="mmr">MMR</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. Matrix factorisation is a close cousin of <a href="../pca/">PCA</a> and the SVD in <a href="../../math/decompositions/">matrix decompositions</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="cf" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Collaborative filtering by hand</h2>
+    <p class="sub">Six people, six films, ratings from 1 to 5; blanks are films they have not seen. Pick whose blanks to fill. The highlighted cells are predictions from the most similar people.</p>
+    <div class="ctl"><label for="cfU"><span>Recommend for</span></label><select id="cfU"></select></div>
+    <div class="ctl"><label for="cfK"><span>Neighbours used, k</span><output id="cfKOut"></output></label><input type="range" id="cfK" min="1" max="5" step="1" value="2"></div>
+    <div style="overflow-x:auto"><table class="rs-tab" id="cfTab"></table></div>
+    <div class="stats" id="cfStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The oldest recommender idea fits in two steps. First, measure how alike two people are from the films both have rated. Ratings have personal scales (some people give everyone 4 or 5), so we centre each person's ratings on their own mean \(\bar r_u\) before comparing. The cosine of the centred vectors is the <b>Pearson correlation</b> over shared items:</p>
+      <div class="mathbox c1">$$\text{sim}(u,v)=\frac{\sum_{i\in I_{uv}}(r_{ui}-\bar r_u)(r_{vi}-\bar r_v)}{\sqrt{\sum_{i\in I_{uv}}(r_{ui}-\bar r_u)^2}\sqrt{\sum_{i\in I_{uv}}(r_{vi}-\bar r_v)^2}}$$</div>
+      <p>Second, predict a missing rating from the \(k\) most similar people who did rate the film, each pulling the prediction up or down by how far <i>they</i> were from their own mean:</p>
+      <div class="mathbox c1">$$\hat r_{ui}=\bar r_u+\frac{\sum_{v\in N_k(u,i)}\text{sim}(u,v)\,(r_{vi}-\bar r_v)}{\sum_{v\in N_k(u,i)}|\text{sim}(u,v)|}$$</div>
+      <p>That is all of user-based <a class="term" data-t="collaborative-filtering">collaborative filtering</a>. Notice what it never needed: no genres, no plot summaries, only who liked what. Its weaknesses show up in the lab, too: with few shared ratings the similarities are noisy, and a film nobody similar has seen cannot be predicted at all.</p>
+      <details class="deeper"><summary>Going deeper: item-based filtering and implicit feedback</summary><div>
+        <p><b>Item-based</b> filtering flips the roles: two films are similar if the same people rated them alike, and your predicted rating for a film is a weighted average of your own ratings of similar films. Amazon popularised it (Linden et al., 2003) because item similarities are more stable than user ones and can be computed offline.</p>
+        <p>Most real data is <a class="term" data-t="implicit-feedback">implicit</a>: clicks, plays and purchases, not star ratings. A missing cell then means “not seen” more often than “disliked”, so models treat observed interactions as positives with a confidence weight and sample unobserved ones as weak negatives (Hu, Koren and Volinsky, 2008).</p>
+      </div></details>
+      <p class="src">Adapted from: Resnick et al., <a href="https://dl.acm.org/doi/10.1145/192844.192905" target="_blank" rel="noopener">GroupLens</a> (1994); Sarwar et al., <a href="https://dl.acm.org/doi/10.1145/371920.372071" target="_blank" rel="noopener">Item-based collaborative filtering</a> (2001).</p>
+    </div>
+  </div>
+</section>
+
+<section id="mf" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Matrix factorisation, trained live</h2>
+    <p class="sub">80 users and 48 films from three hidden genres; only some ratings are observed. Train \(\hat r_{ui}=\mu+b_u+b_i+\mathbf p_u^\top\mathbf q_i\) and watch the error on held-out ratings, then look at the film vectors it learnt.</p>
+    <div class="plot wide" id="mfPlot"></div>
+    <div class="plot" id="mfEmb" style="aspect-ratio:16/10"></div>
+    <div class="ctl"><label for="mfK"><span>Latent factors, k</span><output id="mfKOut"></output></label><input type="range" id="mfK" min="1" max="10" step="1" value="2"></div>
+    <div class="ctl"><label for="mfL"><span>Regularisation, λ</span><output id="mfLOut"></output></label><input type="range" id="mfL" min="0" max="0.3" step="0.01" value="0.05"></div>
+    <div class="ctl"><label for="mfD"><span>Share of ratings observed</span><output id="mfDOut"></output></label><input type="range" id="mfD" min="0.05" max="0.6" step="0.05" value="0.2"></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="mfGo">Train</button></div>
+    <div class="stats" id="mfStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Collaborative filtering compares people directly. <a class="term" data-t="matrix-factorisation">Matrix factorisation</a> instead gives every user a vector \(\mathbf p_u\in\mathbb R^k\) and every item a vector \(\mathbf q_i\in\mathbb R^k\) and says a rating is their dot product, plus a global mean \(\mu\) and biases for generous users and popular items. In matrix form the full rating matrix is approximated by a product of two thin matrices, \(R\approx PQ^\top\): rank \(k\), like a truncated SVD, but fitted only to the cells we know:</p>
+      <div class="mathbox c1">$$\min_{P,Q,b}\ \sum_{(u,i)\in\Omega}\Big[\big(r_{ui}-\mu-b_u-b_i-\mathbf p_u^\top\mathbf q_i\big)^2$$$$\qquad+\lambda\big(\lVert\mathbf p_u\rVert^2+\lVert\mathbf q_i\rVert^2+b_u^2+b_i^2\big)\Big]$$</div>
+      <p>The sum runs over the observed set \(\Omega\) only; ignoring the blanks is what makes this different from PCA. Each observed rating gives a cheap stochastic-gradient step, shown below. <a class="term" data-t="regularisation">Regularisation</a> \(\lambda\) matters a lot: users with three ratings would otherwise get huge vectors that fit those three exactly and predict nonsense.</p>
+      <div class="algo" data-anim="mfsgd"><h5 class="algo-h">Algorithm: matrix factorisation by SGD</h5><ol>
+        <li><span class="kw">input</span> observed ratings \(\Omega\), factors \(k\), step \(\eta\), penalty \(\lambda\)</li>
+        <li>initialise \(\mathbf p_u,\mathbf q_i\) small and random; \(b_u=b_i=0\); \(\mu\leftarrow\) mean rating</li>
+        <li><span class="kw">repeat</span> for each epoch, in random order over \((u,i,r)\in\Omega\)</li>
+        <li class="i1">\(e\leftarrow r-(\mu+b_u+b_i+\mathbf p_u^\top\mathbf q_i)\) <span class="cm">prediction error</span></li>
+        <li class="i1">\(b_u\mathrel{+}=\eta(e-\lambda b_u)\); \(b_i\mathrel{+}=\eta(e-\lambda b_i)\)</li>
+        <li class="i1">\(\mathbf p_u\mathrel{+}=\eta(e\,\mathbf q_i-\lambda\mathbf p_u)\); \(\mathbf q_i\mathrel{+}=\eta(e\,\mathbf p_u-\lambda\mathbf q_i)\) <span class="cm">use the old p_u</span></li>
+        <li><span class="kw">return</span> \(P, Q, b\)</li>
+      </ol></div>
+      <p>The second plot shows what the model found. Nobody told it the genres, yet with \(k=2\) the film vectors fall into three clusters: the factors are the hidden genres, rediscovered from ratings alone. Raise \(k\) and the held-out error drops a little and then rises (overfitting) unless \(\lambda\) grows with it; lower the share of observed ratings and everything gets harder.</p>
+      <details class="deeper"><summary>Going deeper: ALS, the Netflix Prize and implicit data</summary><div>
+        <p><b>Alternating least squares</b> fixes \(Q\) and solves for every \(\mathbf p_u\) exactly (each is a small ridge regression), then fixes \(P\) and solves for \(Q\), and repeats. Each half-step is embarrassingly parallel, which is why Spark's recommender uses it. For implicit data the weighted ALS of Hu et al. puts every cell in the loss, with confidence \(1+\alpha\cdot\text{count}\) on observed ones.</p>
+        <p>In the Netflix Prize (2006–2009) a single well-tuned factorisation with biases (Koren, Bell and Volinsky) beat Netflix's own system by around 6%; the winning blend of hundreds of models reached the 10% target. The biases alone explain a surprising share of the variance, which is why the lab shows a bias-only baseline.</p>
+      </div></details>
+      <p class="src">Adapted from: Koren, Bell and Volinsky, <a href="https://ieeexplore.ieee.org/document/5197422" target="_blank" rel="noopener">Matrix Factorization Techniques for Recommender Systems</a> (IEEE Computer, 2009); Funk, “Netflix Update: Try This at Home” (2006).</p>
+    </div>
+  </div>
+</section>
+
+<section id="tt" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Two towers, retrieval and cold start</h2>
+    <p class="sub">60 items as 2-D embeddings, coloured by genre; popular items have longer vectors. Tap the plot to place a user's vector. The top 5 by dot product (ringed) is what retrieval returns; switch to cosine to see popularity drop out.</p>
+    <div class="plot" id="ttPlot" style="aspect-ratio:1/1;max-width:460px"></div>
+    <div class="ctl"><div class="seg" id="ttS"><button data-v="dot" class="on">Dot product</button><button data-v="cos">Cosine</button></div></div>
+    <div class="ctl"><div class="seg" id="ttC"><button data-v="0" class="on">No new item</button><button data-v="1">Add a cold-start item</button></div></div>
+    <div class="stats" id="ttStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Matrix factorisation has one vector per user ID and one per item ID. A <a class="term" data-t="two-tower">two-tower model</a> replaces the lookup tables with two neural networks: a <b>user tower</b> that turns everything known about the user (recent items, time of day, device, country) into a vector \(\mathbf u\), and an <b>item tower</b> that turns item features (ID, text, image, category, price) into a vector \(\mathbf v\). The score is still a dot product,</p>
+      <div class="mathbox c1">$$s(u,i)=f_\theta(\text{user features})^\top g_\phi(\text{item features}),$$</div>
+      <p>trained so that items the user really engaged with score higher than other items, usually with a softmax over the true item and the other items in the batch (in-batch negatives):</p>
+      <div class="mathbox c1">$$\mathcal L=-\log\frac{e^{s(u,i^+)/\tau}}{\sum_{j\in\text{batch}}e^{s(u,j)/\tau}}.$$</div>
+      <p>The towers never look at each other, and that is the point. All item vectors can be computed ahead of time and put in an <b>approximate nearest-neighbour index</b> (such as FAISS or ScaNN); at request time you run the user tower once and fetch the top few hundred items in milliseconds out of millions. This is <a class="term" data-t="candidate-retrieval">candidate retrieval</a>; a heavier ranking model, which can look at user and item together, then orders those few hundred.</p>
+      <p><a class="term" data-t="cold-start">Cold start</a> is where features pay off. A new item with no interactions has no learnt ID vector, but its features still go through the item tower and land next to similar items (the star in the lab, placed by its genre), so it can be retrieved from day one. Dot product versus cosine matters too: the dot product rewards long vectors, and popular items get long vectors in training, so it tilts results towards the popular; cosine ignores length.</p>
+      <details class="deeper"><summary>Going deeper: sampling bias and the logQ correction</summary><div>
+        <p>In-batch negatives are drawn in proportion to popularity, because popular items appear in more batches. The model therefore learns to push popular items down too hard. Yi et al. (2019) correct for this by subtracting \(\log Q(j)\), the log of each item's sampling probability, from its logit. Mixed negative sampling adds uniformly drawn items to the batch for the same reason.</p>
+      </div></details>
+      <p class="src">Adapted from: Covington, Adams and Sargin, <a href="https://research.google/pubs/deep-neural-networks-for-youtube-recommendations/" target="_blank" rel="noopener">Deep Neural Networks for YouTube Recommendations</a> (2016); Yi et al., <a href="https://research.google/pubs/sampling-bias-corrected-neural-modeling-for-large-corpus-item-recommendations/" target="_blank" rel="noopener">Sampling-bias-corrected neural modeling</a> (2019).</p>
+    </div>
+  </div>
+</section>
+
+<section id="rank" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Ranking metrics on a list you reorder</h2>
+    <p class="sub">A recommended list of 8 films. Squares show how relevant each one really was (0 to 3). Move items up and watch every metric respond. The user has 6 relevant films in the whole catalogue; one never made the list.</p>
+    <div class="row" style="margin:6px 0;gap:6px;display:flex;flex-wrap:wrap"><button class="btn" id="rkBest">Ideal order</button><button class="btn" id="rkWorst">Worst order</button><button class="btn" id="rkShuf">Shuffle</button></div>
+    <div class="rs-list" id="rkList"></div>
+    <div class="ctl"><label for="rkK"><span>Cut-off, k</span><output id="rkKOut"></output></label><input type="range" id="rkK" min="1" max="8" step="1" value="5"></div>
+    <div class="plot pe-vis" id="rkBars" style="padding:10px 12px"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Recommenders are judged on <b>lists</b>, and position matters: nobody scrolls to item 50. Accuracy metrics like RMSE ignore this, so we use ranking metrics, computed per user on the top \(k\) and averaged over users. Call an item relevant if its grade is above zero, and let \(\text{rel}_j\) be the grade of the item at position \(j\).</p>
+      <ul>
+        <li><b>Precision@k</b> = relevant items in the top \(k\) ÷ \(k\). <b>Recall@k</b> = relevant items in the top \(k\) ÷ all relevant items the user has.</li>
+        <li><b>Average precision</b> averages precision@j at each position \(j\) that holds a relevant item, so early hits count more; <a class="term" data-t="map-at-k">MAP</a> is its mean over users.</li>
+        <li><a class="term" data-t="mrr">Reciprocal rank</a> is \(1/\text{position of the first relevant item}\): good when one right answer is enough (search, “play next”).</li>
+        <li><a class="term" data-t="ndcg">nDCG</a> uses the grades and discounts by position:</li>
+      </ul>
+      <div class="mathbox c1">$$\text{DCG@}k=\sum_{j=1}^{k}\frac{2^{\text{rel}_j}-1}{\log_2(j+1)},\qquad \text{nDCG@}k=\frac{\text{DCG@}k}{\text{IDCG@}k},$$</div>
+      <p>where IDCG is the DCG of the best possible ordering of all the user's relevant items, so nDCG lies between 0 and 1. Try swapping a grade-3 item from position 1 with a grade-1 item lower down: precision does not move, nDCG drops. That sensitivity to order is exactly why nDCG is the default for graded relevance.</p>
+      <details class="deeper"><summary>Going deeper: offline versus online evaluation</summary><div>
+        <p>Offline metrics are computed on held-out interactions, usually the last few per user (a time-based split avoids training on the future). They are biased towards what the old system showed: an item nobody was shown cannot appear as relevant. So a new model's offline gain must be confirmed by an online <a href="../causal/#ab">A/B test</a> on clicks, watch time or revenue, which is the only measure of what the change actually caused.</p>
+      </div></details>
+      <p class="src">Adapted from: Järvelin and Kekäläinen, <a href="https://dl.acm.org/doi/10.1145/582415.582418" target="_blank" rel="noopener">Cumulated gain-based evaluation of IR techniques</a> (2002); Manning, Raghavan and Schütze, <a href="https://nlp.stanford.edu/IR-book/" target="_blank" rel="noopener">Introduction to Information Retrieval</a>, ch. 8.</p>
+    </div>
+  </div>
+</section>
+
+<section id="div" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Diversity: re-ranking with MMR</h2>
+    <p class="sub">20 candidates scored for relevance; most of the best are from one genre. MMR picks 8 one at a time, trading relevance against similarity to what is already picked. Slide λ from pure diversity to pure relevance.</p>
+    <div class="ctl"><label for="dvL"><span>λ (1 = relevance only)</span><output id="dvLOut"></output></label><input type="range" id="dvL" min="0" max="1" step="0.05" value="0.7"></div>
+    <div class="ag-h" style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin:8px 0 0">The 8 recommendations, in order</div>
+    <div class="rs-chips" id="dvChips"></div>
+    <div class="stats" id="dvStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A list ranked purely by predicted relevance often repeats itself: eight episodes of the same series, ten near-identical phone cases. Each item is individually a good bet, but the list as a whole is a poor one, because if the person is not in the mood for that series, the whole screen is wasted. <a class="term" data-t="mmr">Maximal marginal relevance</a> builds the list greedily, and each new item must earn its place by being relevant <i>and</i> different from what is already there:</p>
+      <div class="mathbox c1">$$i^*=\arg\max_{i\notin S}\Big[\lambda\,\text{rel}(i)-(1-\lambda)\max_{j\in S}\text{sim}(i,j)\Big]$$</div>
+      <div class="algo" data-anim="mmr"><h5 class="algo-h">Algorithm: MMR re-ranking</h5><ol>
+        <li><span class="kw">input</span> candidates \(C\) with relevance, similarity function, list length \(n\), \(\lambda\)</li>
+        <li>\(S\leftarrow[\,]\)</li>
+        <li><span class="kw">while</span> \(|S|&lt;n\)</li>
+        <li class="i1"><span class="kw">for</span> each \(i\in C\setminus S\): \(m_i\leftarrow\lambda\,\text{rel}(i)-(1-\lambda)\max_{j\in S}\text{sim}(i,j)\)</li>
+        <li class="i1">append \(\arg\max_i m_i\) to \(S\)</li>
+        <li><span class="kw">return</span> \(S\)</li>
+      </ol></div>
+      <p>We measure the result with <b>intra-list diversity</b>, the average dissimilarity \(1-\text{sim}\) over pairs in the list, and genre coverage. In the lab, λ near 1 gives the relevance ranking; around 0.5–0.7 the list keeps most of its relevance and covers far more ground. Real systems add other list-level goals the same way: freshness, fairness to sellers, or not showing what the user already bought.</p>
+      <p class="src">Adapted from: Carbonell and Goldstein, <a href="https://dl.acm.org/doi/10.1145/290941.291025" target="_blank" rel="noopener">The use of MMR, diversity-based reranking</a> (SIGIR 1998); Ziegler et al., <a href="https://dl.acm.org/doi/10.1145/1060745.1060754" target="_blank" rel="noopener">Improving recommendation lists through topic diversification</a> (2005).</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+  <p class="sub">Matrix factorisation on MovieLens with the Surprise library, nDCG with scikit-learn, and a minimal two-tower model in PyTorch.</p>
+<pre class="code"><span class="c"># pip install scikit-surprise scikit-learn torch numpy</span>
+<span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> surprise <span class="k">import</span> Dataset, SVD, KNNWithMeans, accuracy
+<span class="k">from</span> surprise.model_selection <span class="k">import</span> train_test_split
+<span class="k">from</span> sklearn.metrics <span class="k">import</span> ndcg_score
+
+<span class="c"># ---- 1. Collaborative filtering and matrix factorisation on MovieLens 100k ----</span>
+data = Dataset.load_builtin(<span class="s">"ml-100k"</span>)                      <span class="c"># 100,000 ratings, 943 users, 1,682 films</span>
+train, test = <span class="f">train_test_split</span>(data, test_size=0.2, random_state=0)
+
+knn = <span class="f">KNNWithMeans</span>(k=40, sim_options={<span class="s">"name"</span>: <span class="s">"pearson"</span>, <span class="s">"user_based"</span>: <span class="k">True</span>})
+knn.fit(train); accuracy.rmse(knn.test(test))               <span class="c"># user-based CF, mean-centred</span>
+
+mf = <span class="f">SVD</span>(n_factors=50, reg_all=0.05, lr_all=0.005, n_epochs=30, random_state=0)
+mf.fit(train); accuracy.rmse(mf.test(test))                 <span class="c"># mu + b_u + b_i + p_u . q_i, trained by SGD</span>
+<span class="f">print</span>(mf.qi.shape)                                          <span class="c"># learnt item vectors: (n_items, 50)</span>
+
+<span class="c"># ---- 2. Ranking metrics: nDCG@5 for one user's list ----</span>
+true_relevance = np.array([[3, 2, 3, 0, 1, 2, 0, 0]])       <span class="c"># graded relevance of 8 items</span>
+model_scores   = np.array([[.9, .8, .3, .7, .6, .2, .1, .4]])
+<span class="f">print</span>(<span class="s">"nDCG@5 ="</span>, <span class="f">ndcg_score</span>(true_relevance, model_scores, k=5))
+
+<span class="c"># ---- 3. A minimal two-tower model with in-batch negatives ----</span>
+<span class="k">import</span> torch, torch.nn <span class="k">as</span> nn, torch.nn.functional <span class="k">as</span> F
+
+<span class="k">class</span> <span class="f">Tower</span>(nn.Module):
+    <span class="k">def</span> <span class="f">__init__</span>(self, n_ids, n_feats, d=32):
+        <span class="f">super</span>().__init__()
+        self.id_emb = nn.Embedding(n_ids, d)
+        self.mlp = nn.Sequential(nn.Linear(d + n_feats, 64), nn.ReLU(), nn.Linear(64, d))
+    <span class="k">def</span> <span class="f">forward</span>(self, ids, feats):
+        <span class="k">return</span> F.normalize(self.mlp(torch.cat([self.id_emb(ids), feats], -1)), dim=-1)
+
+users, items = <span class="f">Tower</span>(1000, 8), <span class="f">Tower</span>(5000, 16)
+opt = torch.optim.Adam(<span class="f">list</span>(users.parameters()) + <span class="f">list</span>(items.parameters()), lr=1e-3)
+
+<span class="k">def</span> <span class="f">train_step</span>(u_ids, u_feats, i_ids, i_feats, tau=0.05):
+    u, v = <span class="f">users</span>(u_ids, u_feats), <span class="f">items</span>(i_ids, i_feats)    <span class="c"># (B, d) each; row b is a true pair</span>
+    logits = u @ v.T / tau                                  <span class="c"># every other item in the batch is a negative</span>
+    loss = F.cross_entropy(logits, torch.arange(<span class="f">len</span>(u)))
+    opt.zero_grad(); loss.backward(); opt.step()
+    <span class="k">return</span> loss.item()
+
+<span class="c"># At serving time: precompute items(all_ids, all_feats) into an ANN index (e.g. FAISS),</span>
+<span class="c"># run the user tower once per request, and fetch the nearest few hundred items.</span>
+</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">7</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page is written for this site in its own words, with its own labs and synthetic data. The methods come from these sources:</p>
+    <ul>
+      <li>Resnick et al., GroupLens (1994); Sarwar et al., item-based collaborative filtering (2001); Linden, Smith and York, Amazon.com recommendations (2003).</li>
+      <li>Koren, Bell and Volinsky, <a href="https://ieeexplore.ieee.org/document/5197422" target="_blank" rel="noopener">Matrix Factorization Techniques for Recommender Systems</a> (2009); Hu, Koren and Volinsky, Collaborative filtering for implicit feedback datasets (2008).</li>
+      <li>Covington et al., Deep Neural Networks for YouTube Recommendations (2016); Yi et al., Sampling-bias-corrected neural modeling (2019).</li>
+      <li>Järvelin and Kekäläinen, nDCG (2002); Carbonell and Goldstein, MMR (1998).</li>
+      <li><a href="https://surpriselib.com/" target="_blank" rel="noopener">Surprise</a>, <a href="https://scikit-learn.org/stable/modules/generated/sklearn.metrics.ndcg_score.html" target="_blank" rel="noopener">scikit-learn</a> and PyTorch documentation, for the Python section. MovieLens data: Harper and Konstan (2015), GroupLens Research.</li>
+    </ul>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"Why are ratings mean-centred before computing user–user similarity?","o":["To make the matrix square","Because people use the rating scale differently; centring compares tastes, not generosity","To remove missing values","Because cosine similarity needs negative numbers"],"a":1,"e":"A generous rater and a harsh rater can have the same taste. Subtracting each user's mean removes their personal offset."},
+{"q":"In matrix factorisation for recommendations, which cells enter the loss?","o":["All cells, with blanks set to zero","Only the observed ratings","Only the diagonal","Only the highest ratings"],"a":1,"e":"The sum runs over the observed set Ω. Treating blanks as zeros would teach the model that unseen means disliked."},
+{"q":"Why can a two-tower model retrieve from millions of items in milliseconds?","o":["Because it scores every item with a large cross-network","Because item vectors are precomputed and searched with an approximate nearest-neighbour index","Because it only recommends popular items","Because it uses decision trees"],"a":1,"e":"The towers are independent, so item embeddings are computed offline; at request time one user-tower pass plus an ANN lookup is enough."},
+{"q":"A list's first relevant item is at position 4. What is its reciprocal rank?","o":["4","0.25","0.5","1"],"a":1,"e":"RR = 1 / (position of the first relevant item) = 1/4."},
+{"q":"You swap a grade-3 item at position 1 with a grade-1 item at position 3. Which metric changes?","o":["Precision@3","Recall@3","nDCG@3","None of them"],"a":2,"e":"The same items are still in the top 3, so precision and recall are unchanged; nDCG uses grades and position discounts, so it falls."}
+]</script>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../dl/assets/gen.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette(); const esc=NLP.esc;
+const pct=x=>(100*x).toFixed(x<0.1&&x>0?1:0)+'%';
+const GC=P=>[P.c1,P.c2,P.c5,P.c4];
+
+/* ---------- 1. collaborative filtering ---------- */
+const NAMES=['Asha','Ben','Chen','Dev','Ema','Femi'], FILMS=['Alien','Brave','Coco','Dune','Elf','Fargo'];
+const R=[[5,1,0,4,1,5],[4,0,2,5,0,4],[1,5,4,0,5,0],[0,4,5,1,4,2],[5,2,1,0,0,4],[2,0,5,2,5,0]];  /* 0 = not rated */
+$('#cfU').innerHTML=NAMES.map((n,i)=>`<option value="${i}"${i===4?' selected':''}>${n}</option>`).join('');
+const mean=u=>{ const v=R[u].filter(x=>x); return v.reduce((a,b)=>a+b,0)/v.length; };
+function sim(u,v){ const mu=mean(u), mv=mean(v); let a=0,b=0,c=0; for(let i=0;i<6;i++) if(R[u][i]&&R[v][i]){ const x=R[u][i]-mu, y=R[v][i]-mv; a+=x*y; b+=x*x; c+=y*y; } return b&&c?a/Math.sqrt(b*c):0; }
+function drawCf(){ const P=P0(), u=+$('#cfU').value, k=+$('#cfK').value, mu=mean(u);
+  const S=NAMES.map((_,v)=>v===u?null:sim(u,v)); const preds={};
+  for(let i=0;i<6;i++) if(!R[u][i]){ const nb=NAMES.map((_,v)=>v).filter(v=>v!==u&&R[v][i]).sort((a,b)=>Math.abs(S[b])-Math.abs(S[a])).slice(0,k);
+    const den=nb.reduce((s,v)=>s+Math.abs(S[v]),0); preds[i]=den?Math.min(5,Math.max(1,mu+nb.reduce((s,v)=>s+S[v]*(R[v][i]-mean(v)),0)/den)):null; }
+  const heat=r=>`background:color-mix(in srgb,${P.c5} ${Math.round((r-1)/4*55)}%,transparent)`;
+  $('#cfTab').innerHTML='<tr><th></th>'+FILMS.map(f=>`<th>${f}</th>`).join('')+'<th>sim</th></tr>'+R.map((row,v)=>`<tr${v===u?' class="me"':''}><th>${NAMES[v]}</th>`+row.map((r,i)=>{ if(r) return `<td style="${heat(r)}">${r}</td>`; if(v===u&&preds[i]!=null) return `<td class="pred" style="${heat(preds[i])}">${preds[i].toFixed(1)}</td>`; return `<td class="na">·</td>`; }).join('')+`<td style="color:${v===u?P.muted:S[v]>0?P.c5:P.c2};font-weight:600">${v===u?'you':S[v].toFixed(2)}</td></tr>`).join('');
+  const best=Object.entries(preds).filter(e=>e[1]!=null).sort((a,b)=>b[1]-a[1])[0];
+  GX.stats('#cfStats',[[mu.toFixed(2),NAMES[u]+'’s mean rating','c3'],[best?FILMS[best[0]]:'–','top recommendation','c5'],[best?(+best[1]).toFixed(1)+' ★':'–','predicted rating','c1']]); }
+$('#cfU').onchange=drawCf; ML.bindRange('cfK',drawCf); drawCf();
+
+/* ---------- 2. matrix factorisation ---------- */
+const NU=80, NI=48, mfP=new ML.Plot('#mfPlot',{equal:false}), emP=new ML.Plot('#mfEmb',{equal:false});
+const G=[...Array(NI)].map((_,i)=>i%3);
+let MF=null, hist=[], base=null, timer=null;
+function mkData(dens,seed){ const r=ML.rng(seed), gs=()=>{ let a=0; for(let k=0;k<6;k++) a+=r(); return (a-3)*1.41; };
+  const ang=[0,2.1,4.2], Iv=G.map(g=>[Math.cos(ang[g])+.25*gs(),Math.sin(ang[g])+.25*gs()]), Ib=G.map(()=>.4*gs());
+  const Uv=[...Array(NU)].map(()=>{ const a=r()*6.283, m=.6+r()*.8; return [m*Math.cos(a),m*Math.sin(a)]; }), Ub=[...Array(NU)].map(()=>.3*gs());
+  const tr=[], te=[]; for(let u=0;u<NU;u++) for(let i=0;i<NI;i++){ const y=Math.max(1,Math.min(5,3.4+Ub[u]+Ib[i]+1.3*(Uv[u][0]*Iv[i][0]+Uv[u][1]*Iv[i][1])+.35*gs())); const x=r(); if(x<dens) tr.push([u,i,y]); else if(x<dens+.15) te.push([u,i,y]); }
+  return {tr,te}; }
+function rmse(m,D,useF=true){ let s=0; D.forEach(([u,i,y])=>{ let p=m.mu+m.bu[u]+m.bi[i]; if(useF) for(let f=0;f<m.k;f++) p+=m.P[u][f]*m.Q[i][f]; p=Math.max(1,Math.min(5,p)); s+=(y-p)**2; }); return Math.sqrt(s/D.length); }
+function startMf(){ if(timer) cancelAnimationFrame(timer); const k=+$('#mfK').value, lam=+$('#mfL').value, D=mkData(+$('#mfD').value,7), r=ML.rng(3), sm=()=>(r()-.5)*.2;
+  const mu=D.tr.reduce((s,x)=>s+x[2],0)/D.tr.length;
+  MF={k,lam,D,mu,bu:Array(NU).fill(0),bi:Array(NI).fill(0),P:[...Array(NU)].map(()=>[...Array(k)].map(sm)),Q:[...Array(NI)].map(()=>[...Array(k)].map(sm)),ep:0}; hist=[];
+  /* bias-only baseline: train biases alone */
+  const B={...MF,k:0,bu:Array(NU).fill(0),bi:Array(NI).fill(0)}; for(let e=0;e<40;e++) D.tr.forEach(([u,i,y])=>{ const er=y-(mu+B.bu[u]+B.bi[i]); B.bu[u]+=.02*(er-lam*B.bu[u]); B.bi[i]+=.02*(er-lam*B.bi[i]); }); base=rmse(B,D.te,false);
+  const step=()=>{ const lr=.02, ord=D.tr.slice(); for(let a=ord.length-1;a>0;a--){ const b=Math.floor(r()*(a+1)); [ord[a],ord[b]]=[ord[b],ord[a]]; }
+    for(let rep=0;rep<2;rep++){ ord.forEach(([u,i,y])=>{ const p=MF.P[u], q=MF.Q[i]; let pr=mu+MF.bu[u]+MF.bi[i]; for(let f=0;f<k;f++) pr+=p[f]*q[f]; const e=y-pr;
+        MF.bu[u]+=lr*(e-lam*MF.bu[u]); MF.bi[i]+=lr*(e-lam*MF.bi[i]); for(let f=0;f<k;f++){ const pf=p[f]; p[f]+=lr*(e*q[f]-lam*pf); q[f]+=lr*(e*pf-lam*q[f]); } });
+      MF.ep++; hist.push([MF.ep,rmse(MF,D.tr),rmse(MF,D.te)]); }
+    drawMf(); if(MF.ep<80) timer=requestAnimationFrame(step); };
+  step(); }
+function drawMf(){ if(!MF) return; const P=P0(), last=hist[hist.length-1];
+  GX.chart(mfP,[{pts:hist.map(h=>[h[0],h[1]]),color:P.c4,width:2.5,label:'train RMSE'},{pts:hist.map(h=>[h[0],h[2]]),color:P.c2,width:2.5,label:'held-out RMSE'}],{x0:0,x1:80,y0:0,y1:1.6,xl:'epochs',hline:base});
+  const ex=MF.Q.map((q,i)=>[q[0],MF.k>1?q[1]:MF.bi[i]]), lim=Math.max(.5,...ex.map(p=>Math.max(Math.abs(p[0]),Math.abs(p[1]))))*1.1;
+  GX.chart(emP,[0,1,2].map(g=>({pts:ex.filter((_,i)=>G[i]===g),color:GC(P)[g],noline:true,dots:true,r:4,label:'genre '+'ABC'[g]})),{x0:-lim,x1:lim,y0:-lim,y1:lim,xl:MF.k>1?'factor 1':'factor 1 (k = 1: y is item bias)',L:36});
+  const best=hist.reduce((a,h)=>h[2]<a[2]?h:a,hist[0]);
+  GX.stats('#mfStats',[[last[2].toFixed(3),'held-out RMSE now','c2'],[best[2].toFixed(3)+' @ '+best[0],'best held-out (epoch)','c5'],[base.toFixed(3),'biases only (dashed line)','c3'],[String(MF.D.tr.length),'observed ratings','c1']]); }
+['mfK','mfL','mfD'].forEach(id=>ML.bindRange(id,startMf,id==='mfK'?null:v=>(+v).toFixed(2))); $('#mfGo').onclick=startMf; mfP.onResize=drawMf; emP.onResize=drawMf; startMf();
+
+/* ---------- 3. two towers ---------- */
+const ttP=new ML.Plot('#ttPlot',{equal:false}); let ttS='dot', ttC=0, uv=[1.2,0.6], ttF=null;
+const IT=(()=>{ const r=ML.rng(21), out=[]; for(let i=0;i<60;i++){ const g=i%4, a=g*1.571+.45+(r()-.5)*.9, pop=r()<.15?1.9+r()*.5:.6+r()*.7; out.push({g,x:pop*Math.cos(a),y:pop*Math.sin(a),pop:pop>1.8}); } return out; })();
+const cold=(()=>{ const g=1, m=IT.filter(t=>t.g===g&&!t.pop), x=m.reduce((s,t)=>s+t.x,0)/m.length, y=m.reduce((s,t)=>s+t.y,0)/m.length; return {g,x,y,cold:true}; })();
+function drawTt(){ const P=P0(), items=ttC?IT.concat([cold]):IT, nu=Math.hypot(...uv);
+  const sc=t=>ttS==='dot'?t.x*uv[0]+t.y*uv[1]:(t.x*uv[0]+t.y*uv[1])/(Math.hypot(t.x,t.y)*nu+1e-9);
+  const top=items.map((t,i)=>[sc(t),i]).sort((a,b)=>b[0]-a[0]).slice(0,5).map(x=>x[1]);
+  const S=[0,1,2,3].map(g=>({pts:items.filter(t=>g===t.g&&!t.cold).map(t=>[t.x,t.y]),color:GC(P)[g],noline:true,dots:true,r:3.5,label:['Drama','Comedy','Sci-fi','Docs'][g]}));
+  S.push({pts:top.map(i=>[items[i].x,items[i].y]),color:P.ink,noline:true,dots:false});
+  ttF=GX.chart(ttP,S,{x0:-2.6,x1:2.6,y0:-2.6,y1:2.6,L:30,marks:[{x:uv[0],y:uv[1],color:P.ink,label:'user u',r:6}].concat(ttC?[{x:cold.x,y:cold.y,color:P.c3,label:'★ new item',r:7}]:[])});
+  const c=ttP.ctx; c.save(); c.strokeStyle=P.ink; c.lineWidth=2; top.forEach(i=>{ c.beginPath(); c.arc(ttF.fx(items[i].x),ttF.fy(items[i].y),8,0,7); c.stroke(); });
+  c.setLineDash([4,4]); c.beginPath(); c.moveTo(ttF.fx(0),ttF.fy(0)); c.lineTo(ttF.fx(uv[0]),ttF.fy(uv[1])); c.stroke(); c.restore();
+  const npop=top.filter(i=>items[i].pop).length, gs=new Set(top.map(i=>items[i].g)).size;
+  GX.stats('#ttStats',[[npop+' of 5','popular items retrieved','c2'],[String(gs),'genres in the top 5','c5'],[ttC?(top.includes(items.length-1)?'yes':'no'):'–','new item retrieved?','c3']]); }
+ttP.cv.addEventListener('click',e=>{ if(!ttF) return; const r=ttP.cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  uv=[-2.6+(px-ttF.L)/ttF.W*5.2, 2.6-(py-ttF.T)/ttF.H*5.2].map(v=>Math.max(-2.5,Math.min(2.5,v))); drawTt(); });
+ML.bindSeg('ttS',v=>{ ttS=v; drawTt(); }); ML.bindSeg('ttC',v=>{ ttC=+v; drawTt(); }); ttP.onResize=drawTt; drawTt();
+
+/* ---------- 4. ranking metrics ---------- */
+const RK0=[['Arrival',2],['Paddington',0],['Heat',3],['Up',1],['Cars 2',0],['Her',3],['Gravity',0],['Moon',2]];
+const ALLREL=[3,3,2,2,1,1]; /* the user's 6 relevant films (one, grade 1, never made the list) */
+let RK=RK0.slice();
+function drawRk(){ const P=P0(), k=+$('#rkK').value;
+  $('#rkList').innerHTML=RK.map(([n,g],j)=>`<div class="rs-row${j>=k?' cut':''}"><span class="rk">${j+1}</span><span class="g">${[1,2,3].map(x=>`<i class="${x<=g?'':'o'}"></i>`).join('')}</span><span>${esc(n)}</span>${j?`<button data-j="${j}" aria-label="Move ${esc(n)} up">↑</button>`:''}</div>`).join('');
+  $('#rkList').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const j=+b.dataset.j; [RK[j-1],RK[j]]=[RK[j],RK[j-1]]; drawRk(); });
+  const top=RK.slice(0,k).map(x=>x[1]), hits=top.filter(g=>g>0).length, nrel=ALLREL.length;
+  let h=0, ap=0; top.forEach((g,j)=>{ if(g>0){ h++; ap+=h/(j+1); } }); ap/=Math.min(k,nrel);
+  const fr=RK.findIndex(x=>x[1]>0), rr=fr>=0&&fr<k?1/(fr+1):0;
+  const dcg=a=>a.reduce((s,g,j)=>s+(Math.pow(2,g)-1)/Math.log2(j+2),0), nd=dcg(top)/dcg(ALLREL.slice().sort((a,b)=>b-a).slice(0,k));
+  $('#rkBars').innerHTML=NLP.bars([{label:'Precision@'+k,value:hits/k,color:P.c1},{label:'Recall@'+k,value:hits/nrel,color:P.c3},{label:'AP@'+k,value:ap,color:P.c4},{label:'Reciprocal rank',value:rr,color:P.c2},{label:'nDCG@'+k,value:nd,color:P.c5}],{max:1,lw:'minmax(120px,45%)',fmt:v=>v.toFixed(3)}); }
+$('#rkBest').onclick=()=>{ RK.sort((a,b)=>b[1]-a[1]); drawRk(); }; $('#rkWorst').onclick=()=>{ RK.sort((a,b)=>a[1]-b[1]); drawRk(); };
+$('#rkShuf').onclick=()=>{ for(let a=RK.length-1;a>0;a--){ const b=Math.floor(Math.random()*(a+1)); [RK[a],RK[b]]=[RK[b],RK[a]]; } drawRk(); };
+ML.bindRange('rkK',drawRk); drawRk();
+
+/* ---------- 5. MMR ---------- */
+const GEN=['Drama','Comedy','Sci-fi','Docs'];
+const CAND=(()=>{ const r=ML.rng(5), out=[]; const gs=[0,0,0,0,0,0,0,1,0,2,0,1,3,2,0,1,3,2,1,3]; gs.forEach((g,i)=>{ const a=g*1.571+(r()-.5)*.5; out.push({g,rel:+(0.97-i*0.025-r()*.01).toFixed(3),v:[Math.cos(a),Math.sin(a)],n:GEN[g]+' '+(i+1)}); }); return out; })();
+const csim=(a,b)=>Math.max(0,a.v[0]*b.v[0]+a.v[1]*b.v[1]);
+function mmr(lam,n=8){ const S=[]; while(S.length<n){ let best=-1e9,bi=-1; CAND.forEach((c,i)=>{ if(S.includes(i)) return; const m=lam*c.rel-(1-lam)*(S.length?Math.max(...S.map(j=>csim(c,CAND[j]))):0); if(m>best){ best=m; bi=i; } }); S.push(bi); } return S; }
+function drawDv(){ const P=P0(), lam=+$('#dvL').value, S=mmr(lam);
+  $('#dvChips').innerHTML=S.map((i,j)=>`<span style="background:${GC(P)[CAND[i].g]}">${j+1}. ${CAND[i].n} · ${CAND[i].rel.toFixed(2)}</span>`).join('');
+  let d=0,c=0; for(let a=0;a<S.length;a++) for(let b=a+1;b<S.length;b++){ d+=1-csim(CAND[S[a]],CAND[S[b]]); c++; }
+  const rel=S.reduce((s,i)=>s+CAND[i].rel,0), rel1=mmr(1).reduce((s,i)=>s+CAND[i].rel,0);
+  GX.stats('#dvStats',[[pct(rel/rel1),'relevance kept vs λ = 1','c5'],[(d/c).toFixed(2),'intra-list diversity','c1'],[new Set(S.map(i=>CAND[i].g)).size+' of 4','genres covered','c3']]); }
+ML.bindRange('dvL',drawDv,v=>(+v).toFixed(2)); drawDv();
+})();
+</script>
+<script>ML.nav('recommender'); ML.renderMath(document.body);</script>
+</body>
+</html>

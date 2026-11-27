@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Statistical inference and hypothesis testing, explained interactively</title>
+<meta name="description" content="Sampling distributions and the central limit theorem, maximum likelihood estimation, confidence intervals you can simulate, hypothesis tests and p-values, type I and II errors and power, and how to compare ML models fairly.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-math">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Mathematical concepts &middot; Statistics</p>
+  <h1>Inference and <span class="grad">hypothesis testing</span></h1>
+  <p class="lede">We never see the whole population, only a sample. Inference is the art of saying something reliable about the whole from the part: an estimate, how far off it might be, and whether an apparent effect is real or just luck. These are the tools you need to say honestly whether model B is better than model A.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#sampling">1 · Sampling and the CLT</a><a href="#mle">2 · Maximum likelihood</a><a href="#ci">3 · Confidence intervals</a><a href="#test">4 · Hypothesis tests</a><a href="#power">5 · Errors and power</a><a href="#ml">6 · In ML</a><a href="#py">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is statistical inference, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>You train a new model and it scores 84.0% on a test set of 500 examples; the old one scored 82.6%. Is the new model better, or did it get a lucky test set? Another 500 examples would give slightly different numbers. Inference treats the score itself as random and asks how much it would wobble from sample to sample.</p>
+      <p>Three questions come up again and again. <b>Estimation:</b> what is our best guess of the unknown number (true accuracy, a mean, a weight)? <b>Uncertainty:</b> how far off might that guess be? <b>Testing:</b> is the data surprising enough to reject a "nothing is going on" explanation?</p>
+      <h3>How it works</h3>
+      <ol class="steps2"><li>Model the data as random draws from a distribution with unknown parameters.</li><li>Estimate the parameters, usually by <a class="term" data-t="likelihood">maximum likelihood</a>.</li><li>Work out how the estimate varies across samples: its <a class="term" data-t="standard-error">standard error</a>, often via the central limit theorem.</li><li>Turn that into a <a class="term" data-t="confidence-interval">confidence interval</a> or a <a class="term" data-t="p-value">p-value</a>.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Tasting soup. You do not drink the whole pot to know whether it needs salt; one well-stirred spoonful tells you. A bigger spoon gives a more reliable taste, but with diminishing returns: four times the spoon only halves the uncertainty. And if the pot was not stirred (a biased sample), no spoon size will save you.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Putting error bars on any number you report</li><li>Separating real improvements from noise</li><li>Planning how much data you need</li></ul></div><div class="con"><b>Watch out for</b><ul><li>A p-value is not the probability the hypothesis is true</li><li>Testing many things at once guarantees some false alarms</li><li>Significant does not mean large or important</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="estimator">Estimator</a><a class="term" data-t="standard-error">Standard error</a><a class="term" data-t="clt">Central limit theorem</a><a class="term" data-t="likelihood">Maximum likelihood</a><a class="term" data-t="confidence-interval">Confidence interval</a><a class="term" data-t="null-hypothesis">Null hypothesis</a><a class="term" data-t="p-value">p-value</a><a class="term" data-t="type-i-error">Type I / II error</a><a class="term" data-t="power">Power</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="sampling" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Samples, estimates and the central limit theorem</h2>
+    <p class="sub">Top: the population. Bottom: the means of many samples of size \(n\), with the normal curve the CLT predicts.</p>
+    <div class="plot short" id="pPop"></div>
+    <div class="plot short" id="pMeans" style="margin-top:8px"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="s1">Take 1 sample</button><button class="btn" id="s1000">Take 1,000 samples</button><button class="btn" id="sR">Clear</button><span class="pos" id="sPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Say the population (all possible values) has mean \(\mu\) and standard deviation \(\sigma\), neither of which we know. We draw \(n\) independent values \(x^{(1)},\dots,x^{(n)}\) and compute the sample mean \(\bar x=\frac1n\sum_ix^{(i)}\). A rule like this, which turns data into a guess, is an <a class="term" data-t="estimator">estimator</a>. Because the data are random, \(\bar x\) is random too. Two facts describe how it behaves:</p>
+      <ol class="derive">
+        <li><div class="eq">\(\mathbb E[\bar x]=\frac1n\sum_i\mathbb E[x^{(i)}]=\mu\)</div><div class="why">On average the estimate is right: it is <b>unbiased</b>.</div></li>
+        <li><div class="eq">\(\operatorname{Var}(\bar x)=\frac1{n^2}\sum_i\operatorname{Var}(x^{(i)})=\frac{\sigma^2}{n}\)</div><div class="why">Variances add for independent draws, and the \(\frac1n\) comes out squared.</div></li>
+        <li><div class="eq">\(\operatorname{SE}(\bar x)=\sigma/\sqrt n\)</div><div class="why">The <a class="term" data-t="standard-error">standard error</a>: the typical size of the estimate's error. Four times the data halves it.</div></li>
+      </ol>
+      <p>The <a class="term" data-t="clt">central limit theorem</a> adds the shape: whatever the population looks like, for large enough \(n\) the distribution of \(\bar x\) is close to the normal \(\mathcal N(\mu,\sigma^2/n)\). Pick the skewed or two-humped population with \(n=1\), then raise \(n\) and watch the bell appear. This is why the normal distribution is everywhere in statistics.</p>
+      <div class="ctl"><span class="lbl">Population</span><div class="seg" id="popSeg"><button data-v="skew" class="on">Skewed</button><button data-v="unif">Uniform</button><button data-v="bimod">Two humps</button><button data-v="coin">Coin (0/1)</button></div></div>
+      <div class="ctl"><label for="nS"><span>Sample size \(n\)</span><output id="nSOut"></output></label><input type="range" id="nS" min="1" max="60" step="1" value="5"></div>
+      <div class="stats" id="sStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="mle" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Maximum likelihood: choose the parameters that make the data least surprising</h2>
+    <p class="sub">Twelve data points (dots) and a Gaussian with your \(\mu\) and \(\sigma\). The lower plot is the log-likelihood as \(\mu\) varies, with \(\sigma\) held fixed.</p>
+    <div class="plot short" id="pFit"></div>
+    <div class="plot short" id="pLL" style="margin-top:8px"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Suppose we believe the data come from a Gaussian \(\mathcal N(\mu,\sigma^2)\) but do not know \(\mu,\sigma\). The <a class="term" data-t="likelihood">likelihood</a> of a guess is how probable the observed data would be under it. For independent points it is a product, so we work with its log, a sum:</p>
+      <div class="mathbox c1">$$\ell(\mu,\sigma)=\log\prod_{i=1}^{n}p(x^{(i)};\mu,\sigma)=-\frac{n}{2}\log(2\pi\sigma^2)-\frac{1}{2\sigma^2}\sum_{i}\big(x^{(i)}-\mu\big)^2 .$$</div>
+      <p>Maximising it is calculus:</p>
+      <ol class="derive">
+        <li><div class="eq">\(\dfrac{\partial\ell}{\partial\mu}=\dfrac1{\sigma^2}\sum_i(x^{(i)}-\mu)=0\;\Rightarrow\;\hat\mu=\bar x\)</div><div class="why">The best mean is the sample mean. Note that \(\mu\) only appears in a sum of squares: this is least squares in disguise.</div></li>
+        <li><div class="eq">\(\dfrac{\partial\ell}{\partial\sigma}=-\dfrac n\sigma+\dfrac1{\sigma^3}\sum_i(x^{(i)}-\hat\mu)^2=0\;\Rightarrow\;\hat\sigma^2=\dfrac1n\sum_i(x^{(i)}-\bar x)^2\)</div><div class="why">The best variance is the average squared deviation.</div></li>
+      </ol>
+      <p>Drag the sliders and watch the log-likelihood: it peaks exactly at \(\bar x\) and at \(\hat\sigma\). This is the same principle that justifies least-squares regression (Gaussian noise) and cross-entropy loss (Bernoulli or categorical labels).</p>
+      <p class="hint">The full story, with four models, Fisher information and Newton's method, is on the <a href="../mle/">maximum likelihood page</a>.</p>
+      <div class="ctl"><label for="mu"><span>\(\mu\)</span><output id="muOut"></output></label><input type="range" id="mu" min="0" max="10" step="0.05" value="3.5"></div>
+      <div class="ctl"><label for="sg"><span>\(\sigma\)</span><output id="sgOut"></output></label><input type="range" id="sg" min="0.3" max="4" step="0.05" value="2"></div>
+      <div class="stats" id="mStats"></div>
+      <details class="deeper"><summary>Going deeper: why \(n-1\), and how good MLE is</summary><div>
+        <p>\(\hat\sigma^2\) is slightly too small on average: \(\mathbb E[\hat\sigma^2]=\frac{n-1}{n}\sigma^2\). The reason is that \(\bar x\) is fitted to the same data, so deviations from \(\bar x\) are smaller than deviations from the true \(\mu\). Precisely, \(\sum_i(x^{(i)}-\mu)^2=\sum_i(x^{(i)}-\bar x)^2+n(\bar x-\mu)^2\), and taking expectations gives \(n\sigma^2=\mathbb E\sum_i(x^{(i)}-\bar x)^2+\sigma^2\). Dividing by \(n-1\) instead (Bessel's correction) makes it unbiased. One parameter estimated costs one "degree of freedom".</p>
+        <p>Under mild conditions MLE is <b>consistent</b> (it converges to the truth as \(n\to\infty\)) and <b>asymptotically normal</b>: \(\hat\theta\approx\mathcal N\big(\theta,\,I(\theta)^{-1}/n\big)\), where the Fisher information \(I(\theta)=-\mathbb E[\partial^2\log p/\partial\theta^2]\) measures how sharply peaked the log-likelihood is. A sharp peak means the data pin the parameter down well. No unbiased estimator can beat this variance (the Cramér–Rao bound). The standard errors reported for <a href="../../ml/logistic-regression/">logistic regression</a> coefficients come from the inverse Hessian of the log-likelihood, which is exactly this.</p>
+      </div></details>
+      <div class="algo"><h5 class="algo-h">Algorithm: maximum likelihood when there is no closed form</h5><ol>
+        <li><span class="kw">input</span> data \(x^{(1..n)}\), model density \(p(x;\theta)\), step size \(\alpha\)</li>
+        <li>\(\theta\leftarrow\) initial guess</li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1">\(g\leftarrow\sum_{i}\nabla_\theta\log p(x^{(i)};\theta)\) <span class="cm">gradient of the log-likelihood</span></li>
+        <li class="i1">\(\theta\leftarrow\theta+\alpha\,g\) <span class="cm">gradient ascent; equivalently descent on −ℓ, the "loss"</span></li>
+        <li><span class="kw">until</span> \(\ell(\theta)\) stops increasing</li>
+        <li><span class="kw">return</span> \(\hat\theta\); standard errors \(\approx\sqrt{\operatorname{diag}(-H^{-1})}\), with \(H\) the Hessian of \(\ell\) at \(\hat\theta\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="ci" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Confidence intervals: what "95%" really means</h2>
+    <p class="sub">Each bar is the interval from one fresh sample. The vertical line is the true mean. Red bars miss it.</p>
+    <div class="plot wide" id="pCI"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="ci50">Draw 50 new samples</button><span class="pos" id="ciPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>By the CLT, \(\bar x\) is within \(1.96\) standard errors of \(\mu\) in 95% of samples. Flip that sentence around: the interval</p>
+      <div class="mathbox c2">$$\bar x\pm z_{1-\alpha/2}\,\frac{s}{\sqrt n}\qquad\text{or, for small }n,\qquad \bar x\pm t_{n-1,\,1-\alpha/2}\,\frac{s}{\sqrt n}$$</div>
+      <p>contains \(\mu\) for 95% of samples. Here \(s\) is the sample standard deviation (with \(n-1\)). Because we estimate \(\sigma\) by \(s\), small samples use the slightly wider Student-\(t\) multiplier instead of 1.96.</p>
+      <p>The careful reading matters. The 95% is a property of the <i>procedure</i>, not of one interval. \(\mu\) is fixed. Each interval either contains it or does not, and over many repetitions 95% do. Draw batches of 50 and count the red ones.</p>
+      <div class="ctl"><label for="cl"><span>Confidence level</span><output id="clOut"></output></label><input type="range" id="cl" min="0.5" max="0.995" step="0.005" value="0.95"></div>
+      <div class="ctl"><label for="cn"><span>Sample size \(n\)</span><output id="cnOut"></output></label><input type="range" id="cn" min="3" max="100" step="1" value="10"></div>
+      <div class="stats" id="ciStats"></div>
+      <div class="algo"><h5 class="algo-h">Algorithm: bootstrap confidence interval (for any statistic)</h5><ol>
+        <li><span class="kw">input</span> data \(x^{(1..n)}\), statistic \(T\) (mean, median, accuracy, F1, …), \(B\approx2000\)</li>
+        <li><span class="kw">for</span> \(b=1\) <span class="kw">to</span> \(B\) <span class="kw">do</span></li>
+        <li class="i1">draw \(n\) points from the data <b>with replacement</b> <span class="cm">a pretend new sample</span></li>
+        <li class="i1">\(T_b\leftarrow T(\text{resample})\)</li>
+        <li><span class="kw">return</span> the 2.5th and 97.5th percentiles of \(T_1,\dots,T_B\) <span class="cm">no formula or normality needed</span></li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="test" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Hypothesis tests and p-values</h2>
+    <p class="sub">The curve is the distribution of the test statistic if \(H_0\) were true. Shaded tails: the rejection region (area \(\alpha\)). The solid line is what we observed; the purple area beyond it is the p-value.</p>
+    <div class="plot wide" id="pT"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Back to the opening example. On \(n\) test examples, record for each one the difference \(d^{(i)}\) between the new and old model's score (paired, because both saw the same example). Is the mean difference \(\bar d\) real? A test follows a fixed recipe:</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: a hypothesis test</h5><ol>
+        <li>State the <a class="term" data-t="null-hypothesis">null hypothesis</a> \(H_0\): "no real difference", \(\mu_d=0\). The alternative \(H_1\): \(\mu_d\ne0\) (two-sided) or \(\mu_d&gt;0\) (one-sided).</li>
+        <li>Choose the significance level \(\alpha\) (often 0.05) <b>before</b> looking.</li>
+        <li>Compute a test statistic that measures surprise: \(t=\dfrac{\bar d-0}{s_d/\sqrt n}\) <span class="cm">signal ÷ noise</span></li>
+        <li>Find its distribution assuming \(H_0\) is true: Student-\(t\) with \(n-1\) degrees of freedom.</li>
+        <li>p-value \(\leftarrow P_{H_0}(\text{a statistic at least as extreme as } t)\)</li>
+        <li><span class="kw">if</span> p-value \(\le\alpha\) <span class="kw">then</span> reject \(H_0\) <span class="kw">else</span> "not enough evidence" <span class="cm">never "H₀ is true"</span></li>
+      </ol></div>
+      <p>The <a class="term" data-t="p-value">p-value</a> answers one specific question: <i>if there were truly no effect, how often would chance alone produce data this extreme?</i> A small p-value says "chance alone would rarely do this", which is evidence against \(H_0\). It is <b>not</b> the probability that \(H_0\) is true. That would need Bayes' theorem and a prior (see the <a href="../probability/#bayes">medical test</a>).</p>
+      <div class="ctl"><label for="tm"><span>Observed mean difference \(\bar d\) (accuracy points)</span><output id="tmOut"></output></label><input type="range" id="tm" min="-3" max="3" step="0.05" value="1.4"></div>
+      <div class="ctl"><label for="ts"><span>Standard deviation of differences \(s_d\)</span><output id="tsOut"></output></label><input type="range" id="ts" min="1" max="20" step="0.5" value="8"></div>
+      <div class="ctl"><label for="tn"><span>Number of examples \(n\)</span><output id="tnOut"></output></label><input type="range" id="tn" min="5" max="2000" step="5" value="500"></div>
+      <div class="ctl"><label for="ta"><span>\(\alpha\)</span><output id="taOut"></output></label><input type="range" id="ta" min="0.001" max="0.2" step="0.001" value="0.05"></div>
+      <div class="ctl"><span class="lbl">Alternative</span><div class="seg" id="side"><button data-v="2" class="on">two-sided (≠)</button><button data-v="1">one-sided (&gt;)</button></div></div>
+      <div class="stats" id="tStats"></div>
+      <div class="note" id="tNote"></div>
+    </div>
+  </div>
+</section>
+
+<section id="power" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Two ways to be wrong, and power</h2>
+    <p class="sub">Grey: the statistic's distribution if \(H_0\) is true. Purple: its distribution if the true effect is \(\delta\). The dashed line is the cut-off.</p>
+    <div class="plot wide" id="pPow"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A test can go wrong in two ways:</p>
+      <div class="tblwrap"><table class="tbl txt"><tr><th></th><th>\(H_0\) true (no effect)</th><th>\(H_1\) true (real effect)</th></tr><tr><td>reject \(H_0\)</td><td><b><a class="term" data-t="type-i-error">Type I error</a></b> (false alarm), probability \(\alpha\)</td><td>correct: this probability is the <b><a class="term" data-t="power">power</a></b>, \(1-\beta\)</td></tr><tr><td>do not reject</td><td>correct, probability \(1-\alpha\)</td><td><b>Type II error</b> (missed effect), probability \(\beta\)</td></tr></table></div>
+      <p>Lowering \(\alpha\) moves the cut-off right: fewer false alarms but more misses. The way to get both down is more data. The standard error shrinks like \(1/\sqrt n\), so the two curves separate. For a one-sided z-test with standardised effect size \(\delta/\sigma\), the power is \(1-\Phi\big(z_{1-\alpha}-\tfrac{\delta}{\sigma}\sqrt n\big)\). Setting it to 80% and solving for \(n\) tells you how much data a study needs <i>before</i> you run it.</p>
+      <div class="ctl"><label for="pd"><span>True effect size \(\delta/\sigma\)</span><output id="pdOut"></output></label><input type="range" id="pd" min="0" max="1.5" step="0.01" value="0.3"></div>
+      <div class="ctl"><label for="pn"><span>Sample size \(n\)</span><output id="pnOut"></output></label><input type="range" id="pn" min="2" max="200" step="1" value="30"></div>
+      <div class="ctl"><label for="pa2"><span>\(\alpha\) (one-sided)</span><output id="pa2Out"></output></label><input type="range" id="pa2" min="0.001" max="0.2" step="0.001" value="0.05"></div>
+      <div class="stats" id="pStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="ml" class="card">
+  <h2><span class="num">6</span>Using this honestly in ML</h2>
+  <div class="grid2">
+    <div class="prose">
+      <h3>Comparing two models</h3>
+      <p>Use the <b>same</b> test examples for both and test the paired differences, as in section 4. Pairing removes the variation between easy and hard examples. For accuracy on one test set, McNemar's test looks only at the examples where the models disagree. Across cross-validation folds, remember that folds share training data, so the scores are not independent and naive t-tests are over-confident.</p>
+      <h3>Multiple comparisons</h3>
+      <p>Try 20 hyperparameter settings that are all truly useless, and on average one will look "significant" at \(\alpha=0.05\). The simplest fix (Bonferroni) tests each at \(\alpha/m\). The ML-specific version of this problem is tuning on the test set: every peek uses up its value as an unbiased check. Keep a final test set you touch once.</p>
+      <h3>Significant is not the same as important</h3>
+      <p>With a million examples, a 0.01% accuracy gain can be "highly significant" and still useless. Always report the effect size with a confidence interval, not just a p-value.</p>
+    </div>
+    <div class="prose">
+      <div class="algo"><h5 class="algo-h">Algorithm: permutation test for "is model B better than A?"</h5><ol>
+        <li><span class="kw">input</span> per-example scores \(a^{(i)}, b^{(i)}\) on the same \(n\) test examples, \(R\approx10{,}000\)</li>
+        <li>\(T_{\text{obs}}\leftarrow\operatorname{mean}(b-a)\)</li>
+        <li><span class="kw">for</span> \(r=1\) <span class="kw">to</span> \(R\) <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">for</span> each example, swap \(a^{(i)}\leftrightarrow b^{(i)}\) with probability ½ <span class="cm">under H₀ the labels "A" and "B" are interchangeable</span></li>
+        <li class="i1">\(T_r\leftarrow\operatorname{mean}(b-a)\) on the shuffled scores</li>
+        <li>p-value \(\leftarrow\big(1+\#\{r:|T_r|\ge|T_{\text{obs}}|\}\big)/(R+1)\)</li>
+        <li><span class="kw">return</span> p-value <span class="cm">no normality assumption; works for F1, BLEU, anything</span></li>
+      </ol></div>
+      <h3>Regression coefficients</h3>
+      <p>The "is this coefficient zero?" t-statistics in a regression table are exactly section 4 applied to \(\hat\theta_j/\operatorname{SE}(\hat\theta_j)\). The <a href="../../ml/linear-regression/">linear regression page</a> computes these live.</p>
+      <details class="deeper"><summary>Going deeper: frequentist vs Bayesian answers</summary><div>
+        <p>A confidence interval and a p-value are statements about procedures under repeated sampling, with the parameter fixed. A Bayesian <b>credible interval</b> (from the <a href="../probability/#update">posterior</a>) is a statement about the parameter given this data: "\(\theta\) is in this range with 95% probability". With a flat prior and lots of data the two often agree numerically, but they answer different questions.</p>
+        <p>To get from a p-value to "how likely is my effect real?" you need the prior probability that effects like it are real, and the test's power. If only 10% of the ideas you test work, and your power is 50%, then of the results with \(p&lt;0.05\) about \(\frac{0.1\cdot0.5}{0.1\cdot0.5+0.9\cdot0.05}\approx53\%\) are real. That is a coin flip, and it explains much of the replication crisis. The computation is the medical-test calculation again, with "ill" replaced by "the effect is real".</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">7</span>The same thing in Python (SciPy)</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> scipy <span class="k">import</span> stats
+rng = np.random.default_rng(<span class="s">0</span>)
+x = rng.exponential(<span class="s">2.0</span>, size=<span class="s">40</span>)
+x.mean(), x.std(ddof=<span class="s">1</span>) / np.sqrt(len(x))          <span class="c"># estimate and standard error</span>
+stats.t.interval(<span class="s">0.95</span>, df=len(x)-<span class="s">1</span>, loc=x.mean(), scale=stats.sem(x))   <span class="c"># 95% CI</span>
+mu_hat, sigma_hat = stats.norm.fit(x)                 <span class="c"># maximum likelihood (σ with 1/n)</span>
+a = rng.random(<span class="s">500</span>) &lt; <span class="s">0.826</span>; b = rng.random(<span class="s">500</span>) &lt; <span class="s">0.840</span>   <span class="c"># per-example correctness</span>
+stats.ttest_rel(b, a)                                 <span class="c"># paired t-test</span>
+stats.permutation_test((a, b), <span class="k">lambda</span> a, b: (b - a).mean(), permutation_type=<span class="s">'samples'</span>)
+boot = stats.bootstrap((b.astype(float),), np.mean); boot.confidence_interval
+<span class="k">from</span> statsmodels.stats.power <span class="k">import</span> TTestPower
+TTestPower().solve_power(effect_size=<span class="s">0.3</span>, alpha=<span class="s">0.05</span>, power=<span class="s">0.8</span>)   <span class="c"># n needed ≈ 90</span></pre>
+</section>
+<p class="foot">Part of the <a href="../">Mathematical concepts</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script>
+(function(){
+const {$} = ML;
+/* small helper: draw a density curve and optional histogram with ML.chart framing */
+function frame(plot,x0,x1,y1,xl){ return ML.chart(plot,[{pts:[[x0,0],[x1,y1]],color:'transparent',noline:true}],{x0,x1,y0:0,y1,xl}); }
+function curve(plot,fr,f,x0,x1,color,width=2.5,fill){ const c=plot.ctx,{fx,fy}=fr; c.save(); c.strokeStyle=color; c.lineWidth=width; c.beginPath(); for(let i=0;i<=300;i++){ const x=x0+(x1-x0)*i/300; i?c.lineTo(fx(x),fy(f(x))):c.moveTo(fx(x),fy(f(x))); } c.stroke(); c.restore(); }
+function shade(plot,fr,f,a,b,color,alpha=.35){ const c=plot.ctx,{fx,fy}=fr; if(b<=a) return; c.save(); c.fillStyle=color; c.globalAlpha=alpha; c.beginPath(); c.moveTo(fx(a),fy(0)); for(let i=0;i<=120;i++){ const x=a+(b-a)*i/120; c.lineTo(fx(x),fy(f(x))); } c.lineTo(fx(b),fy(0)); c.closePath(); c.fill(); c.restore(); }
+function vline(plot,fr,x,color,dash){ const c=plot.ctx,{fx,fy}=fr; c.save(); c.strokeStyle=color; c.lineWidth=2; if(dash) c.setLineDash(dash); c.beginPath(); c.moveTo(fx(x),fy(0)); c.lineTo(fx(x),12); c.stroke(); c.restore(); }
+
+/* ---- 1. sampling / CLT ---- */
+const pPop=new ML.Plot('#pPop',{equal:false}), pMeans=new ML.Plot('#pMeans',{equal:false}); const rng=ML.rng(9); let pop='skew', n=5, MEANS=[], last=null;
+const POP={skew:{d:x=>x<0?0:Math.exp(-x/2)/2,s:()=>-2*Math.log(1-rng()),mu:2,sd:2,r:[0,12]},unif:{d:x=>x>=0&&x<=10?0.1:0,s:()=>10*rng(),mu:5,sd:10/Math.sqrt(12),r:[-0.5,10.5]},
+ bimod:{d:x=>0.5*MX.normPdf(x,2.5,0.8)+0.5*MX.normPdf(x,7.5,0.8),s:()=>(rng()<0.5?2.5:7.5)+0.8*rng.gauss(),mu:5,sd:Math.sqrt(0.64+6.25),r:[0,10]},
+ coin:{disc:true,d:x=>x===0?0.7:x===1?0.3:0,s:()=>+(rng()<0.3),mu:0.3,sd:Math.sqrt(0.21),r:[-0.5,1.5]}};
+function sampleMean(){ const P=POP[pop], xs=[]; for(let i=0;i<n;i++) xs.push(P.s()); return {xs,m:xs.reduce((a,b)=>a+b,0)/n}; }
+function drawS(){ const P=ML.palette(), Q=POP[pop], [r0,r1]=Q.r;
+  let ym=Q.disc?0.8:Math.max(...[...Array(200).keys()].map(i=>Q.d(r0+(r1-r0)*i/199)))*1.2; let fr=frame(pPop,r0,r1,ym,'population');
+  if(Q.disc){ const c=pPop.ctx; [0,1].forEach(k=>{ c.fillStyle=P.c3; c.fillRect(fr.fx(k)-10,fr.fy(Q.d(k)),20,fr.fy(0)-fr.fy(Q.d(k))); }); } else curve(pPop,fr,Q.d,r0,r1,P.c3);
+  vline(pPop,fr,Q.mu,P.c4,[5,4]);
+  if(last) last.xs.forEach(x=>{ const c=pPop.ctx; c.fillStyle=P.c1; c.beginPath(); c.arc(fr.fx(x),fr.fy(0)-6,4,0,7); c.fill(); });
+  const se=Q.sd/Math.sqrt(n), nb=40, lo=r0, hi=r1, w=(hi-lo)/nb, cnt=new Array(nb).fill(0); MEANS.forEach(m=>{ const b=Math.floor((m-lo)/w); if(b>=0&&b<nb) cnt[b]++; });
+  const dens=cnt.map(c=>MEANS.length?c/MEANS.length/w:0), nd=x=>MX.normPdf(x,Q.mu,se); const ym2=Math.max(nd(Q.mu),...dens)*1.12;
+  fr=frame(pMeans,lo,hi,ym2,'sample means x̄'); const c=pMeans.ctx; c.save(); c.fillStyle=P.c1; c.globalAlpha=.45; dens.forEach((d,b)=>{ c.fillRect(fr.fx(lo+b*w)+0.5,fr.fy(d),fr.fx(lo+(b+1)*w)-fr.fx(lo+b*w)-1,fr.fy(0)-fr.fy(d)); }); c.restore();
+  curve(pMeans,fr,nd,lo,hi,P.c4,2); vline(pMeans,fr,Q.mu,P.c4,[5,4]); if(last) vline(pMeans,fr,last.m,P.c1);
+  const mm=MEANS.length?MEANS.reduce((a,b)=>a+b,0)/MEANS.length:NaN, msd=MEANS.length>1?Math.sqrt(MEANS.reduce((a,b)=>a+(b-mm)**2,0)/(MEANS.length-1)):NaN;
+  $('#sPos').textContent=`${MEANS.length} sample means`;
+  $('#sStats').innerHTML=`<div class="stat c4"><b>${Q.mu.toFixed(2)}</b><span>true mean μ</span></div><div class="stat c2"><b>${se.toFixed(3)}</b><span>σ/√n (theory)</span></div><div class="stat c1"><b>${isNaN(msd)?'–':msd.toFixed(3)}</b><span>spread of your x̄'s</span></div><div class="stat c3"><b>${last?last.m.toFixed(2):'–'}</b><span>last sample's x̄</span></div>`; }
+ML.bindSeg('popSeg',v=>{pop=v;MEANS=[];last=null;drawS();}); ML.bindRange('nS',v=>{n=v;MEANS=[];last=null;drawS();});
+$('#s1').addEventListener('click',()=>{ last=sampleMean(); MEANS.push(last.m); drawS(); }); $('#s1000').addEventListener('click',()=>{ for(let i=0;i<1000;i++){ last=sampleMean(); MEANS.push(last.m); } drawS(); }); $('#sR').addEventListener('click',()=>{ MEANS=[]; last=null; drawS(); });
+pPop.onResize=drawS; pMeans.onResize=drawS;
+
+/* ---- 2. MLE ---- */
+const DATA=[2.1,3.4,4.0,4.4,4.9,5.2,5.5,5.9,6.3,6.8,7.6,8.9], nD=DATA.length, xbar=DATA.reduce((a,b)=>a+b,0)/nD, sHat=Math.sqrt(DATA.reduce((a,b)=>a+(b-xbar)**2,0)/nD);
+const pFit=new ML.Plot('#pFit',{equal:false}), pLL=new ML.Plot('#pLL',{equal:false}); let mu=3.5, sg=2;
+const LL=(m,s)=>DATA.reduce((a,x)=>a+Math.log(MX.normPdf(x,m,s)),0);
+function drawM(){ const P=ML.palette(); let fr=frame(pFit,0,11,0.45,'x'); curve(pFit,fr,x=>MX.normPdf(x,xbar,sHat),0,11,P.muted,1.5); curve(pFit,fr,x=>MX.normPdf(x,mu,sg),0,11,P.c1,2.5);
+  DATA.forEach(x=>{ const c=pFit.ctx, y=MX.normPdf(x,mu,sg); c.save(); c.strokeStyle=P.c1; c.globalAlpha=.5; c.beginPath(); c.moveTo(fr.fx(x),fr.fy(0)); c.lineTo(fr.fx(x),fr.fy(y)); c.stroke(); c.globalAlpha=1; c.fillStyle=P.ink; c.beginPath(); c.arc(fr.fx(x),fr.fy(0)-5,4,0,7); c.fill(); c.restore(); });
+  const ms=[...Array(201).keys()].map(i=>i*10/200), ll=ms.map(m=>[m,LL(m,sg)]), lmin=Math.max(-120,Math.min(...ll.map(p=>p[1])));
+  const fr2=ML.chart(pLL,[{pts:ll,color:P.c2,width:2.5}],{x0:0,x1:10,y0:lmin,y1:Math.max(...ll.map(p=>p[1]))+2,xl:'μ'});
+  const c=pLL.ctx; c.save(); c.fillStyle=P.c1; c.beginPath(); c.arc(fr2.fx(mu),fr2.fy(Math.max(lmin,LL(mu,sg))),6,0,7); c.fill(); c.strokeStyle=P.c4; c.setLineDash([5,4]); c.beginPath(); c.moveTo(fr2.fx(xbar),12); c.lineTo(fr2.fx(xbar),pLL.h-28); c.stroke(); c.restore();
+  $('#mStats').innerHTML=`<div class="stat c1"><b>${LL(mu,sg).toFixed(2)}</b><span>your log-likelihood</span></div><div class="stat c5"><b>${LL(xbar,sHat).toFixed(2)}</b><span>maximum, at μ̂, σ̂</span></div><div class="stat c4"><b>${xbar.toFixed(3)}</b><span>μ̂ = x̄</span></div><div class="stat c2"><b>${sHat.toFixed(3)}</b><span>σ̂ (1/n)</span></div>`; }
+ML.bindRange('mu',v=>{mu=v;drawM();},v=>v.toFixed(2)); ML.bindRange('sg',v=>{sg=v;drawM();},v=>v.toFixed(2)); pFit.onResize=drawM; pLL.onResize=drawM;
+
+/* ---- 3. confidence intervals ---- */
+const pCI=new ML.Plot('#pCI',{equal:false}); const crng=ML.rng(33); let cl=0.95, cn=10, IV=[], tot=0, miss=0; const MU=50, SD=10;
+function newBatch(){ IV=[]; const tq=MX.tq(1-(1-cl)/2,cn-1); for(let k=0;k<50;k++){ let s=0,s2=0; const xs=[]; for(let i=0;i<cn;i++){ const x=MU+SD*crng.gauss(); xs.push(x); s+=x; } const m=s/cn; xs.forEach(x=>s2+=(x-m)**2); const sd=Math.sqrt(s2/(cn-1)), h=tq*sd/Math.sqrt(cn); const hit=Math.abs(m-MU)<=h; IV.push([m,h,hit]); tot++; if(!hit) miss++; } drawCI(); }
+function drawCI(){ const P=ML.palette(); pCI.clear(); const c=pCI.ctx, W=pCI.w, H=pCI.h, x0=MU-22, x1=MU+22, fx=x=>20+(x-x0)/(x1-x0)*(W-40);
+  c.save(); c.strokeStyle=P.c4; c.lineWidth=2; c.beginPath(); c.moveTo(fx(MU),4); c.lineTo(fx(MU),H-18); c.stroke(); c.fillStyle=P.muted; c.font='11px Inter,system-ui'; c.textAlign='center'; [30,40,50,60,70].forEach(v=>c.fillText(v,fx(v),H-4));
+  IV.forEach(([m,h,hit],k)=>{ const y=8+k*(H-30)/50; c.strokeStyle=hit?P.c1:P.c4; c.lineWidth=hit?2:3; c.beginPath(); c.moveTo(fx(Math.max(x0,m-h)),y); c.lineTo(fx(Math.min(x1,m+h)),y); c.stroke(); c.fillStyle=hit?P.c1:P.c4; c.beginPath(); c.arc(fx(m),y,2.5,0,7); c.fill(); }); c.restore();
+  const bm=IV.filter(v=>!v[2]).length;
+  $('#ciPos').textContent=`${bm} of 50 miss in this batch`;
+  $('#ciStats').innerHTML=`<div class="stat c1"><b>${tot?(100*(1-miss/tot)).toFixed(1):'–'}%</b><span>coverage so far (${tot} intervals)</span></div><div class="stat c2"><b>${(100*cl).toFixed(1)}%</b><span>promised</span></div><div class="stat c3"><b>±${IV.length?(IV.reduce((a,v)=>a+v[1],0)/IV.length).toFixed(2):'–'}</b><span>average half-width</span></div><div class="stat c4"><b>${MX.tq(1-(1-cl)/2,cn-1).toFixed(3)}</b><span>t multiplier (z = ${MX.zq(1-(1-cl)/2).toFixed(3)})</span></div>`; }
+ML.bindRange('cl',v=>{cl=v;tot=0;miss=0;newBatch();},v=>(100*v).toFixed(1)+'%'); ML.bindRange('cn',v=>{cn=v;tot=0;miss=0;newBatch();}); $('#ci50').addEventListener('click',newBatch); pCI.onResize=drawCI;
+
+/* ---- 4. hypothesis test ---- */
+const pT=new ML.Plot('#pT',{equal:false}); let tm=1.4, ts=8, tn=500, ta=0.05, side=2;
+function drawT(){ const P=ML.palette(), df=tn-1, t=tm/(ts/Math.sqrt(tn)), f=x=>MX.tPdf(x,df), L=Math.max(4.5,Math.abs(t)+0.8);
+  const crit=side===2?MX.tq(1-ta/2,df):MX.tq(1-ta,df); const p=side===2?2*(1-MX.tCdf(Math.abs(t),df)):1-MX.tCdf(t,df);
+  const fr=frame(pT,-L,L,0.45,'t statistic'); shade(pT,fr,f,crit,L,P.c4,.3); if(side===2) shade(pT,fr,f,-L,-crit,P.c4,.3);
+  if(side===2){ shade(pT,fr,f,Math.abs(t),L,P.c1,.45); shade(pT,fr,f,-L,-Math.abs(t),P.c1,.45); } else shade(pT,fr,f,t,L,P.c1,.45);
+  curve(pT,fr,f,-L,L,P.ink,2); vline(pT,fr,t,P.c1); vline(pT,fr,crit,P.c4,[5,4]); if(side===2) vline(pT,fr,-crit,P.c4,[5,4]);
+  const rej=p<=ta, se=ts/Math.sqrt(tn), tq=MX.tq(0.975,df);
+  $('#tStats').innerHTML=`<div class="stat c1"><b>${t.toFixed(3)}</b><span>t = d̄ / (s/√n)</span></div><div class="stat ${rej?'c5':'c4'}"><b>${p<1e-4?p.toExponential(2):p.toFixed(4)}</b><span>p-value</span></div><div class="stat c4"><b>±${crit.toFixed(3)}</b><span>cut-off at α</span></div><div class="stat c2"><b>[${(tm-tq*se).toFixed(2)}, ${(tm+tq*se).toFixed(2)}]</b><span>95% CI for the difference</span></div>`;
+  $('#tNote').className='note'+(rej?' ok':' warn'); $('#tNote').innerHTML=rej?`<b>Reject H₀ at α = ${ta}.</b> If the models were truly equal, a difference this large would turn up only ${(100*p).toFixed(2)}% of the time.`:`<b>Not enough evidence.</b> Chance alone would produce a difference at least this large ${(100*p).toFixed(1)}% of the time, which is more than α = ${(100*ta).toFixed(1)}%. That does not prove the models are equal.`; }
+ML.bindRange('tm',v=>{tm=v;drawT();},v=>v.toFixed(2)); ML.bindRange('ts',v=>{ts=v;drawT();}); ML.bindRange('tn',v=>{tn=v;drawT();}); ML.bindRange('ta',v=>{ta=v;drawT();},v=>v.toFixed(3)); ML.bindSeg('side',v=>{side=+v;drawT();}); pT.onResize=drawT;
+
+/* ---- 5. power ---- */
+const pPow=new ML.Plot('#pPow',{equal:false}); let pd=0.3, pn=30, pa=0.05;
+function drawPow(){ const P=ML.palette(), sh=pd*Math.sqrt(pn), z=MX.zq(1-pa), f0=x=>MX.phi(x), f1=x=>MX.phi(x-sh), L0=-4, L1=Math.max(5,sh+4);
+  const fr=frame(pPow,L0,L1,0.45,'z statistic'); shade(pPow,fr,f1,z,L1,P.c1,.35); shade(pPow,fr,f1,L0,z,P.c1,.12); shade(pPow,fr,f0,z,L1,P.c4,.5);
+  curve(pPow,fr,f0,L0,L1,P.muted,2); curve(pPow,fr,f1,L0,L1,P.c1,2.5); vline(pPow,fr,z,P.ink,[5,4]);
+  const pow=1-MX.Phi(z-sh), need=pd>0?Math.ceil(((z+MX.zq(0.8))/pd)**2):Infinity;
+  $('#pStats').innerHTML=`<div class="stat c4"><b>${(100*pa).toFixed(1)}%</b><span>α: false-alarm rate (red)</span></div><div class="stat c1"><b>${(100*pow).toFixed(1)}%</b><span>power 1 − β (purple, right of line)</span></div><div class="stat c3"><b>${(100*(1-pow)).toFixed(1)}%</b><span>β: miss rate</span></div><div class="stat c2"><b>${isFinite(need)?need:'∞'}</b><span>n for 80% power</span></div>`; }
+ML.bindRange('pd',v=>{pd=v;drawPow();},v=>v.toFixed(2)); ML.bindRange('pn',v=>{pn=v;drawPow();}); ML.bindRange('pa2',v=>{pa=v;drawPow();},v=>v.toFixed(3)); pPow.onResize=drawPow;
+ML.onTheme(()=>{ drawS(); drawM(); drawCI(); drawT(); drawPow(); });
+drawS(); drawM(); newBatch(); drawT(); drawPow();
+})();
+</script>
+<script>NLP.nav('math','inference'); ML.renderMath(document.body);</script>
+</body>
+</html>

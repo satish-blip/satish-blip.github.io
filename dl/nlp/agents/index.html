@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI agents & LLM evaluation: tools, loops, memory, RAG metrics, LLM-as-a-judge</title>
+<meta name="description" content="How a language model becomes an agent and how to tell whether it works: tool calling with JSON schemas you can break, the agent loop and why small error rates compound, memory strategies compared, RAG metrics (faithfulness, context recall and precision) computed claim by claim, and LLM-as-a-judge with position bias and the swap test.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<style>
+.src{font-size:12.5px;color:var(--muted);margin:10px 0 0;border-left:3px solid var(--line);padding-left:10px}
+.src a{color:inherit;text-decoration:underline;text-decoration-color:var(--line)}
+.ag-ta{width:100%;min-height:84px;font:12.5px/1.5 "JetBrains Mono",ui-monospace,monospace;background:var(--soft);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;resize:vertical;box-sizing:border-box}
+.ag-out{font:12.5px/1.55 "JetBrains Mono",ui-monospace,monospace;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;white-space:pre-wrap;word-break:break-word;min-height:96px}
+.ag-out .ok{color:var(--c5)} .ag-out .bad{color:var(--c2)} .ag-out .k{color:var(--muted)}
+.ag-flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0;font-size:12.5px}
+.ag-flow span{padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--soft)}
+.ag-flow span.on{border-color:var(--c1);background:color-mix(in srgb,var(--c1) 18%,transparent)}
+.ag-flow span.err{border-color:var(--c2);background:color-mix(in srgb,var(--c2) 18%,transparent)}
+.ag-flow i{font-style:normal;color:var(--muted)}
+.ag-grid{display:grid;gap:2px;margin:8px 0;min-height:120px;align-content:start}
+.ag-grid b{display:block;aspect-ratio:1;border-radius:2px}
+.ag-list{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.ag-item{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--soft);font-size:13px;cursor:pointer;line-height:1.45}
+.ag-item input{margin-top:3px;flex:none}
+.ag-item .tag{margin-left:auto;flex:none;font-size:11px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.ag-item.off{opacity:.55}
+.ag-h{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 2px}
+.ag-cm{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0}
+.ag-cm td,.ag-cm th{border:1px solid var(--line);padding:4px 6px;text-align:center}
+.ag-cm th{background:var(--soft);font-weight:600}
+</style>
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP &middot; Large language models</p>
+  <h1>AI agents <span class="grad">and how to evaluate them</span></h1>
+  <p class="lede">A chat model answers once. An agent is the same model put in a loop: it decides which tool to call, your code runs the tool, the result goes back in, and the model decides again, until the job is done. This page builds that loop from its parts: tool calls checked against a schema, the loop itself and the maths of why long tasks fail, how an agent remembers, and then the harder question of measuring any of it, with retrieval metrics computed claim by claim and an LLM judge whose biases you can switch on.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#tools">1 · Tool calling</a><a href="#loop">2 · The agent loop</a><a href="#memory">3 · Memory</a><a href="#rageval">4 · RAG metrics</a><a href="#judge">5 · LLM-as-a-judge</a><a href="#py">6 · Python</a><a href="#credits">7 · Sources &amp; credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is an agent, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A language model only produces text. It cannot look up today's weather, run code, read your files or book a meeting, and whatever it knows stops at its training date. Many useful jobs also take several steps whose order is not known in advance: search, read, notice something is missing, search again. How do we let a text predictor act in the world, and how do we know whether it is doing a good job?</p>
+      <h3>The idea</h3><p>Describe each tool to the model with a name, a sentence and a <a class="term" data-t="json-schema">JSON schema</a> for its arguments. When the model wants a tool it writes a structured <a class="term" data-t="tool-calling">tool call</a> instead of an answer; your program runs it and sends back the result. Repeat in a loop, and you have an <a class="term" data-t="ai-agent">agent</a>. Measuring it needs new metrics too, because answers are free text: <a class="term" data-t="faithfulness">faithfulness</a> and <a class="term" data-t="context-recall">context recall</a> for retrieval, and often another model acting as <a class="term" data-t="llm-judge">judge</a>.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Give the model a task and the list of tools it may use.</li><li>The model replies with text, or with one or more tool calls.</li><li>Your code checks the arguments, runs the tools and returns the results.</li><li>Loop until the model answers without calling a tool, or a step limit is hit.</li><li>Evaluate whole runs, not just single replies: did it finish, was it right, was it grounded?</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A new assistant on their first day with a phone, a calculator and a filing cabinet. You give them a job (“find out what we spent on travel last quarter”). They decide whom to ring, read what they get back, do the sums and come back with an answer. They are only as good as the instructions on each tool, they forget things unless they write them down, and you check their work by asking whether every number in the report came from a document they actually read.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Fresh or private information through search and databases</li><li>Exact work handed to real tools (code, maths, APIs)</li><li>Open-ended tasks where the steps are not known in advance</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Small per-step error rates multiply over long tasks</li><li>Hallucinated tools or arguments; actions that cannot be undone</li><li>Judging free text is hard, and LLM judges have biases of their own</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="ai-agent">Agent</a><a class="term" data-t="tool-calling">Tool calling</a><a class="term" data-t="json-schema">JSON schema</a><a class="term" data-t="react-agent">ReAct</a><a class="term" data-t="compounding-error">Compounding error</a><a class="term" data-t="agent-memory">Agent memory</a><a class="term" data-t="context-window">Context window</a><a class="term" data-t="faithfulness">Faithfulness</a><a class="term" data-t="context-recall">Context recall</a><a class="term" data-t="context-precision">Context precision</a><a class="term" data-t="ragas">RAGAS</a><a class="term" data-t="llm-judge">LLM-as-a-judge</a><a class="term" data-t="position-bias">Position bias</a><a class="term" data-t="cohens-kappa">Cohen's κ</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. This chapter builds on <a href="../prompt-engineering/#agents">chains, tools and ReAct</a> in Prompt engineering and on <a href="../rag/">retrieval-augmented generation</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="tools" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Tool calling: a contract written in JSON</h2>
+    <p class="sub">The tool below is described to the model by its schema. Pick a call the model might write, or edit it yourself, and watch your code's validator decide what goes back.</p>
+    <div class="ag-h">Tool definition sent with the request</div>
+    <div class="ag-out" id="tlSchema" style="min-height:0"></div>
+    <div class="ctl"><div class="seg" id="tlPre"><button data-v="ok" class="on">Valid call</button><button data-v="miss">Missing field</button><button data-v="type">Wrong type</button><button data-v="enum">Bad enum</button><button data-v="ghost">Made-up tool</button></div></div>
+    <div class="ag-h">Tool call written by the model (editable)</div>
+    <textarea class="ag-ta" id="tlCall" spellcheck="false" aria-label="Tool call JSON"></textarea>
+    <div class="ag-flow" id="tlFlow"></div>
+    <div class="ag-h">What your code sends back</div>
+    <div class="ag-out" id="tlOut"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Modern chat APIs let you pass a list of tools with every request. Each tool has a <b>name</b>, a <b>description</b> written for the model, and an <b>input schema</b> in <a class="term" data-t="json-schema">JSON Schema</a>: which arguments exist, their types, which are required, and allowed values. The model never runs anything. It replies with a <a class="term" data-t="tool-calling">tool call</a>, a block such as <code>{"name": "get_weather", "input": {"city": "Paris"}}</code> with an id, and stops. Your program runs the function and replies with a <b>tool result</b> carrying the same id. The model then continues, now knowing the answer.</p>
+      <p>Why a schema? Because the call is text produced by sampling, so it can be wrong in every way text can: a missing field, a number written as a word, a value outside the list, or a tool that does not exist. Constrained decoding (some APIs offer a “strict” mode that only lets the model produce tokens that keep the JSON valid against the schema) removes the format errors, but not the wrong <i>choices</i>: calling the right tool with the wrong city is still valid JSON.</p>
+      <p>Let a call fail <b>loudly and usefully</b>. When validation fails, send a tool result marked as an error with a message the model can act on (“unit must be one of celsius, fahrenheit”). Models are good at repairing a call from a clear error, so one retry usually fixes it. Silent failures, where the tool returns an empty string or a default, are the dangerous ones, because the model carries on as if they succeeded.</p>
+      <div class="mathbox c1">$$\big(\text{messages},\ \{\text{name}_j,\text{desc}_j,\text{schema}_j\}\big)\ \longrightarrow\ \text{text}\ \ \text{or}\ \ \text{call}(\text{name},\text{args},\text{id})$$</div>
+      <details class="deeper"><summary>Going deeper: how a model learns to call tools at all</summary><div>
+        <p>Tool use is taught in post-training. Toolformer (Schick et al., 2023) showed a model can label its own training text with API calls, keeping only those that lowered the loss on the following tokens. Today's assistants are fine-tuned on many conversations that contain tool definitions, calls and results, using a <a class="term" data-t="chat-template">chat template</a> with special tokens for each part, and then trained further with preferences or reinforcement learning on tasks that need tools.</p>
+        <p>Because the definitions sit in the prompt, every tool costs tokens on every call, and the model's choice depends on how clearly the descriptions separate tools. Good descriptions say when to use the tool and when not to, what each argument means, and what the result looks like. Ten well-described tools often beat fifty vague ones.</p>
+      </div></details>
+      <p class="src">Adapted from: Anthropic, <a href="https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview" target="_blank" rel="noopener">Tool use with Claude</a> documentation; Schick et al., <a href="https://arxiv.org/abs/2302.04761" target="_blank" rel="noopener">Toolformer</a> (2023); <a href="https://json-schema.org/understanding-json-schema/" target="_blank" rel="noopener">Understanding JSON Schema</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="loop" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>The agent loop, and why long tasks fail</h2>
+    <p class="sub">A task needs n steps; each succeeds with probability p. A failed step may be noticed (an error comes back) and retried. Watch task success fall with length, then see how much error detection buys back.</p>
+    <div class="plot wide" id="lpPlot"></div>
+    <div class="ctl"><label for="lpN"><span>Steps in the task, n</span><output id="lpNOut"></output></label><input type="range" id="lpN" min="1" max="50" step="1" value="10"></div>
+    <div class="ctl"><label for="lpP"><span>Per-step success, p</span><output id="lpPOut"></output></label><input type="range" id="lpP" min="0.8" max="0.999" step="0.001" value="0.95"></div>
+    <div class="ctl"><label for="lpD"><span>Share of failures detected, d</span><output id="lpDOut"></output></label><input type="range" id="lpD" min="0" max="1" step="0.05" value="0.6"></div>
+    <div class="ctl"><label for="lpR"><span>Retries allowed per step, r</span><output id="lpROut"></output></label><input type="range" id="lpR" min="0" max="3" step="1" value="1"></div>
+    <div class="stats" id="lpStats"></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="lpGo">Run 40 new agents</button></div>
+    <div class="ag-grid" id="lpGrid"></div>
+    <p class="hint">Each row is one simulated run, each square a step: green succeeded first time, amber succeeded after a retry, red failed (the run stops), grey never reached.</p>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The loop is short enough to write in full. Everything interesting lives in what the model decides at line 4 and what your code does at line 6.</p>
+      <div class="algo" data-anim="agentloop"><h5 class="algo-h">Algorithm: a tool-using agent</h5><ol>
+        <li><span class="kw">input</span> task \(q\); tools \(\mathcal T\) with schemas; step limit \(K\)</li>
+        <li>\(M\leftarrow[\text{system prompt},\,q]\) <span class="cm">the message history</span></li>
+        <li><span class="kw">for</span> \(k=1,\dots,K\)</li>
+        <li class="i1">\(y\leftarrow\text{LLM}(M,\mathcal T)\)</li>
+        <li class="i1"><span class="kw">if</span> \(y\) has no tool call: <span class="kw">return</span> \(y\) <span class="cm">final answer</span></li>
+        <li class="i1"><span class="kw">for</span> each call \((t,a,\text{id})\in y\): validate \(a\) against \(t\)'s schema, run \(t(a)\) or build an error</li>
+        <li class="i1">append \(y\) and every result (matched by id) to \(M\)</li>
+        <li><span class="kw">return</span> “step limit reached” <span class="cm">always have a stop</span></li>
+      </ol></div>
+      <p>Now the arithmetic. If each step succeeds independently with probability \(p\), a task of \(n\) steps succeeds with \(p^n\). At \(p=0.95\), ten steps succeed 60% of the time and fifty steps 8%. This is <a class="term" data-t="compounding-error">compounding error</a>, and it is why agents that look good in a demo struggle on long jobs.</p>
+      <p>Retries help only when a failure is <b>noticed</b>. Let a fraction \(d\) of failures come back as visible errors (a schema check, an exception, a failing test) and allow up to \(r\) retries. A step then succeeds if attempt \(k+1\) succeeds after \(k\) detected failures:</p>
+      <div class="mathbox c1">$$P_{\text{step}}=p\sum_{k=0}^{r}\big((1-p)\,d\big)^k,$$$$P_{\text{task}}=P_{\text{step}}^{\,n},\qquad \mathbb E[\text{calls per step}]=\sum_{k=0}^{r}\big((1-p)\,d\big)^k .$$</div>
+      <p>Set \(d=0\) in the lab and retries do nothing; raise \(d\) and the curve lifts sharply for a small rise in calls. That is the case for strict schemas, tests, assertions and tools that return clear errors: they turn silent failures into detected ones.</p>
+      <details class="deeper"><summary>Going deeper: workflows versus agents, and the independence assumption</summary><div>
+        <p>Independence is an approximation. Real errors are correlated (one misunderstanding spoils many steps), and a good agent can also recover from an earlier mistake it notices later, which this model ignores. The lesson still holds: fewer, more reliable steps beat many fragile ones.</p>
+        <p>That is why many production systems are <b>workflows</b> rather than free agents: the code fixes the sequence of steps (classify, retrieve, draft, check) and the model fills each one in. Agents earn their cost when the path really cannot be known in advance. Useful patterns in between are routing (a cheap call picks which workflow runs), orchestrator–workers (one call splits a task, others do the parts), and evaluator–optimiser (one call drafts, another critiques, repeat).</p>
+      </div></details>
+      <p class="src">Adapted from: Yao et al., <a href="https://arxiv.org/abs/2210.03629" target="_blank" rel="noopener">ReAct: Synergizing Reasoning and Acting in Language Models</a> (2022); Anthropic, <a href="https://www.anthropic.com/engineering/building-effective-agents" target="_blank" rel="noopener">Building effective agents</a> (2024). The retry formula is this page's own simple model.</p>
+    </div>
+  </div>
+</section>
+
+<section id="memory" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Memory: what the agent can still see</h2>
+    <p class="sub">A long conversation, one fact mentioned some turns ago, and a question about it now. Compare four ways of deciding what goes into the next prompt: how likely is the fact to be there, and how many tokens does each call cost?</p>
+    <div class="ctl"><div class="seg" id="mmV"><button data-v="recall" class="on">Recall by age of fact</button><button data-v="cost">Tokens per call</button></div></div>
+    <div class="plot wide" id="mmPlot"></div>
+    <div class="ctl"><label for="mmK"><span>Recent turns kept word for word, k</span><output id="mmKOut"></output></label><input type="range" id="mmK" min="2" max="40" step="1" value="10"></div>
+    <div class="ctl"><label for="mmS"><span>Chance a fact survives one summary</span><output id="mmSOut"></output></label><input type="range" id="mmS" min="0.5" max="1" step="0.01" value="0.85"></div>
+    <div class="ctl"><label for="mmR"><span>Retrieved memories per call</span><output id="mmROut"></output></label><input type="range" id="mmR" min="1" max="10" step="1" value="3"></div>
+    <div class="stats" id="mmStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The model itself remembers nothing between calls. Everything it knows about the conversation is in the prompt, and the prompt must fit the <a class="term" data-t="context-window">context window</a>. Long chats and long agent runs outgrow it, and even when they fit, every call pays for every token again. So <a class="term" data-t="agent-memory">agent memory</a> is really a policy for building the next prompt. Four common ones (assume about 300 tokens per turn and a 128k-token window):</p>
+      <ul>
+        <li><b>Full history.</b> Send everything. Perfect recall until the window fills, after which the call simply fails. Cost grows linearly with the length of the chat, so total cost grows with its square.</li>
+        <li><b>Sliding window.</b> Keep the last \(k\) turns. Cheap and predictable, but anything older is gone completely.</li>
+        <li><b>Summary.</b> Keep the last \(k\) turns and a running summary of the rest, rewritten every \(k\) turns. A fact that has been through \(m\) rewrites survives with probability \(s^m\), so old details fade.</li>
+        <li><b>Retrieval.</b> Store every turn (or extracted facts) in a vector index, embed the current question and fetch the most similar items, as in <a href="../rag/">RAG</a>. Recall no longer depends on age, only on whether the search finds it.</li>
+      </ul>
+      <div class="mathbox c1">$$\text{recall}_{\text{summary}}(a)=\begin{cases}1,&amp;a\le k\\ s^{\lceil (a-k)/k\rceil},&amp;a&gt;k\end{cases}$$$$\text{recall}_{\text{retrieval}}(a)=1-(1-\rho)^{m}$$</div>
+      <p>Here \(a\) is the fact's age in turns and, for retrieval, \(m\) is the number of memories fetched and \(\rho\) a per-item chance of hitting the right one (0.35 in the lab: a toy number). Real systems mix them: a short verbatim window, a summary for the gist, retrieval for details, and explicit notes the agent writes to a file or scratchpad for facts it knows it will need.</p>
+      <details class="deeper"><summary>Going deeper: lost in the middle, and memory the agent writes itself</summary><div>
+        <p>Fitting in the window is not the same as being used. Liu et al. (2023) found models answer best when the relevant passage sits at the start or end of a long prompt and worst when it is in the middle. Putting retrieved facts close to the question, and keeping prompts lean, often helps more than a bigger window.</p>
+        <p>Agents that run for hours work better with <b>structured</b> memory: a to-do list, a progress file, notes on decisions. MemGPT (Packer et al., 2023) treats the window like RAM and an external store like disk, with tools to page facts in and out. Some APIs also clear old tool results automatically once they have been used.</p>
+      </div></details>
+      <p class="src">Adapted from: Liu et al., <a href="https://arxiv.org/abs/2307.03172" target="_blank" rel="noopener">Lost in the Middle</a> (2023); Packer et al., <a href="https://arxiv.org/abs/2310.08560" target="_blank" rel="noopener">MemGPT</a> (2023). Recall curves are a simplified model for teaching, not measurements.</p>
+    </div>
+  </div>
+</section>
+
+<section id="rageval" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>RAG metrics, claim by claim</h2>
+    <p class="sub">Question: <b>When was the Eiffel Tower completed, and how tall is it?</b> Reference answer: <i>completed in 1889; about 330 m tall.</i> Choose which chunks the retriever returned, in which order, and which claims the answer makes.</p>
+    <div class="ctl"><div class="seg" id="rgOrd"><button data-v="good" class="on">Relevant chunks ranked first</button><button data-v="mix">Mixed</button><button data-v="bad">Relevant ranked last</button></div></div>
+    <div class="ag-h">Retrieved chunks (rank order)</div>
+    <div class="ag-list" id="rgCtx"></div>
+    <div class="ag-h">Claims in the generated answer</div>
+    <div class="ag-list" id="rgAns"></div>
+    <div class="plot pe-vis" id="rgBars" style="padding:10px 12px"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A RAG answer can go wrong in two places: the retriever fetched the wrong passages, or the generator ignored or embellished them. Exact-match scores (used in <a href="../rag/#eval">the RAG papers</a>) need a single right string. For free-text answers the <a class="term" data-t="ragas">RAGAS</a> family of metrics breaks the text into <b>claims</b> (short factual statements) and asks, one claim at a time, whether it is supported. An LLM usually does the splitting and checking; here the verdicts are fixed so you can see the arithmetic.</p>
+      <p><a class="term" data-t="faithfulness">Faithfulness</a> checks the generator: what share of the answer's claims can be inferred from the retrieved context?</p>
+      <div class="mathbox c1">$$\text{faithfulness}=\frac{\#\{\text{answer claims supported by the context}\}}{\#\{\text{answer claims}\}}$$</div>
+      <p><a class="term" data-t="context-recall">Context recall</a> checks the retriever against the reference answer: what share of the reference's claims appear in what was retrieved? <a class="term" data-t="context-precision">Context precision</a> checks the ranking: are the useful chunks near the top? With \(v_k=1\) if the chunk at rank \(k\) is relevant,</p>
+      <div class="mathbox c1">$$\text{context precision@}K=\frac{\sum_{k=1}^{K}\text{precision@}k\cdot v_k}{\#\{\text{relevant in the top }K\}}$$$$\text{precision@}k=\frac{1}{k}\sum_{i\le k}v_i$$</div>
+      <p>Two lessons from the lab. First, <b>faithful is not the same as true</b>: “it was the tallest structure in the world until 1930” is correct, but it is not in the context, so it lowers faithfulness; in a RAG system, an unsupported true claim is a claim you cannot check. Second, the metrics separate the blame: low recall means fix retrieval, low faithfulness with good recall means fix the prompt or the model.</p>
+      <details class="deeper"><summary>Going deeper: answer relevancy, and checking the checker</summary><div>
+        <p><b>Answer relevancy</b> asks whether the answer addresses the question at all: an LLM writes several questions the answer would fit, and the score is their average embedding similarity to the real question. A faithful answer to a different question scores low.</p>
+        <p>Every one of these metrics is computed by a model, so it has its own error rate. Before trusting a dashboard, label 50–100 examples by hand and measure how often the metric agrees with you, exactly as in the next section. Keep a fixed test set, compare systems on the same questions, and report the spread across questions, not just the mean.</p>
+      </div></details>
+      <p class="src">Adapted from: Es et al., <a href="https://arxiv.org/abs/2309.15217" target="_blank" rel="noopener">RAGAS: Automated Evaluation of Retrieval Augmented Generation</a> (2023) and the <a href="https://docs.ragas.io/" target="_blank" rel="noopener">ragas documentation</a> (metric definitions).</p>
+    </div>
+  </div>
+</section>
+
+<section id="judge" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>LLM-as-a-judge, and its biases</h2>
+    <p class="sub">300 simulated questions, each with two answers of hidden quality and a human verdict. A judge model compares them, but it also leans towards whichever answer it reads first and towards the longer one. Turn the biases up, then try the swap test.</p>
+    <div class="ctl"><label for="jgPos"><span>Position bias (prefers the first answer)</span><output id="jgPosOut"></output></label><input type="range" id="jgPos" min="0" max="2" step="0.05" value="0.6"></div>
+    <div class="ctl"><label for="jgLen"><span>Verbosity bias (prefers the longer answer)</span><output id="jgLenOut"></output></label><input type="range" id="jgLen" min="0" max="2" step="0.05" value="0.4"></div>
+    <div class="ctl"><label for="jgNoise"><span>Judge noise</span><output id="jgNoiseOut"></output></label><input type="range" id="jgNoise" min="0.1" max="2" step="0.05" value="0.6"></div>
+    <div class="ctl"><div class="seg" id="jgMode"><button data-v="one" class="on">Judge once (A shown first)</button><button data-v="swap">Swap and combine</button></div></div>
+    <div class="plot pe-vis" id="jgBars" style="padding:10px 12px"></div>
+    <table class="ag-cm" id="jgCm"></table>
+    <div class="stats" id="jgStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Grading free text by hand does not scale, so a strong model is often asked to do it: “Here is a question and two answers. Which is better? Explain, then say A, B or tie.” This <a class="term" data-t="llm-judge">LLM-as-a-judge</a> setup agrees with human raters about as often as humans agree with each other on many chat benchmarks (around 80% in the MT-Bench study), but it has systematic biases:</p>
+      <ul><li><a class="term" data-t="position-bias">Position bias</a>: preferring the answer shown first (or second).</li><li><b>Verbosity bias</b>: preferring longer answers even when they add nothing.</li><li><b>Self-preference</b>: preferring answers written in its own style or by its own model family.</li></ul>
+      <p>The cheapest fix is the <b>swap test</b>: judge every pair twice with the order reversed, and accept a winner only if both verdicts agree; otherwise call it a tie. Position bias then cancels by construction: in the lab the judge stops favouring A (among the pairs it decides, A and B win about equally often, as with the humans), and agreement on those pairs rises. The price is more ties (the close calls the judge could not separate) and twice the cost, and the share of pairs that flip is itself a useful warning light.</p>
+      <div class="algo" data-anim="judgeswap"><h5 class="algo-h">Algorithm: pairwise judging with the swap test</h5><ol>
+        <li><span class="kw">input</span> question \(q\), answers \(A, B\), judge prompt</li>
+        <li>\(v_1\leftarrow\text{judge}(q, A, B)\) <span class="cm">A shown first</span></li>
+        <li>\(v_2\leftarrow\text{judge}(q, B, A)\) <span class="cm">B shown first; map back to A/B</span></li>
+        <li><span class="kw">if</span> \(v_1=v_2\): <span class="kw">return</span> \(v_1\)</li>
+        <li><span class="kw">else</span>: <span class="kw">return</span> tie <span class="cm">the verdict depended on order</span></li>
+        <li>over all questions: win rate, consistency, and agreement with human labels (κ)</li>
+      </ol></div>
+      <p>How do we know the judge is any good? Compare it with human labels on a sample. Raw agreement flatters a judge that always says “A” when A usually wins, so we use <a class="term" data-t="cohens-kappa">Cohen's kappa</a>, which subtracts the agreement expected by chance:</p>
+      <div class="mathbox c1">$$\kappa=\frac{p_o-p_e}{1-p_e},\qquad p_e=\sum_{c}p_{\text{judge}}(c)\,p_{\text{human}}(c),$$</div>
+      <p>where \(p_o\) is the observed agreement and \(p_e\) the agreement two raters would reach by chance with the same label frequencies. \(\kappa=1\) is perfect, 0 is chance. In the lab, the simulation draws a hidden quality gap \(\Delta\) for each pair and a length gap \(\ell\); humans see \(\Delta\) plus noise, and the judge prefers the first-shown answer with log-odds \(\Delta+b_{\text{pos}}+b_{\text{len}}\ell+\varepsilon\).</p>
+      <details class="deeper"><summary>Going deeper: rubrics, reference answers and single-answer grading</summary><div>
+        <p>Pairwise comparison is the most reliable format, but you can also grade one answer on a 1–10 scale against a rubric, or against a reference answer for questions with a right answer. Rubrics with concrete criteria (“mentions the dosage; cites a source; no unsupported claims”) are more stable than “rate the quality”. Asking the judge to reason before giving its verdict helps; so does a stronger judge than the model being judged.</p>
+        <p>For agents, judge the <b>trajectory</b> too: did it use the right tools, did it stop, did it take any action it should not have? Many agent benchmarks avoid judges altogether by checking the final state of an environment (the test suite passes, the booking exists), which is the most trustworthy signal when you can get it.</p>
+      </div></details>
+      <p class="src">Adapted from: Zheng et al., <a href="https://arxiv.org/abs/2306.05685" target="_blank" rel="noopener">Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena</a> (2023); Cohen (1960), A coefficient of agreement for nominal scales.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+  <p class="sub">A complete tool-using agent loop with the Anthropic Python SDK, then a pairwise judge with the swap test. Needs an API key in <code>ANTHROPIC_API_KEY</code>.</p>
+<pre class="code"><span class="c"># pip install anthropic</span>
+<span class="k">import</span> json
+<span class="k">import</span> anthropic
+
+client = anthropic.Anthropic()
+MODEL = <span class="s">"claude-opus-5-5"</span>
+
+<span class="c"># ---- 1. Tools: a schema the model sees, and the Python that runs it ----</span>
+tools = [{
+    <span class="s">"name"</span>: <span class="s">"get_weather"</span>,
+    <span class="s">"description"</span>: <span class="s">"Current weather for a city. Use when the user asks about weather now."</span>,
+    <span class="s">"input_schema"</span>: {
+        <span class="s">"type"</span>: <span class="s">"object"</span>,
+        <span class="s">"properties"</span>: {
+            <span class="s">"city"</span>: {<span class="s">"type"</span>: <span class="s">"string"</span>, <span class="s">"description"</span>: <span class="s">"City name, e.g. Paris"</span>},
+            <span class="s">"unit"</span>: {<span class="s">"type"</span>: <span class="s">"string"</span>, <span class="s">"enum"</span>: [<span class="s">"celsius"</span>, <span class="s">"fahrenheit"</span>]},
+        },
+        <span class="s">"required"</span>: [<span class="s">"city"</span>],
+    },
+}]
+
+<span class="k">def</span> <span class="f">get_weather</span>(city, unit=<span class="s">"celsius"</span>):
+    fake = {<span class="s">"paris"</span>: 14, <span class="s">"london"</span>: 11, <span class="s">"delhi"</span>: 31}           <span class="c"># stand-in for a real API</span>
+    <span class="k">if</span> city.lower() <span class="k">not</span> <span class="k">in</span> fake:
+        <span class="k">raise</span> <span class="f">ValueError</span>(<span class="s">f"Unknown city '{city}'. Try a major city name."</span>)
+    t = fake[city.lower()]
+    <span class="k">return</span> json.dumps({<span class="s">"city"</span>: city, <span class="s">"temp"</span>: t <span class="k">if</span> unit == <span class="s">"celsius"</span> <span class="k">else</span> t * 9 / 5 + 32, <span class="s">"unit"</span>: unit})
+
+RUN = {<span class="s">"get_weather"</span>: get_weather}
+
+<span class="c"># ---- 2. The agent loop ----</span>
+<span class="k">def</span> <span class="f">agent</span>(task, max_steps=8):
+    messages = [{<span class="s">"role"</span>: <span class="s">"user"</span>, <span class="s">"content"</span>: task}]
+    <span class="k">for</span> step <span class="k">in</span> <span class="f">range</span>(max_steps):
+        response = client.messages.create(model=MODEL, max_tokens=4096,
+                                          tools=tools, messages=messages)
+        <span class="k">if</span> response.stop_reason != <span class="s">"tool_use"</span>:                <span class="c"># end_turn, refusal, max_tokens...</span>
+            <span class="k">return</span> <span class="s">""</span>.join(b.text <span class="k">for</span> b <span class="k">in</span> response.content <span class="k">if</span> b.type == <span class="s">"text"</span>)
+        messages.append({<span class="s">"role"</span>: <span class="s">"assistant"</span>, <span class="s">"content"</span>: response.content})
+        results = []
+        <span class="k">for</span> block <span class="k">in</span> response.content:
+            <span class="k">if</span> block.type != <span class="s">"tool_use"</span>:
+                <span class="k">continue</span>
+            <span class="k">try</span>:
+                out, err = RUN[block.name](**block.input), <span class="k">False</span>
+            <span class="k">except</span> Exception <span class="k">as</span> e:                            <span class="c"># unknown tool, bad args, API error</span>
+                out, err = <span class="s">f"Error: {e}"</span>, <span class="k">True</span>
+            results.append({<span class="s">"type"</span>: <span class="s">"tool_result"</span>, <span class="s">"tool_use_id"</span>: block.id,
+                            <span class="s">"content"</span>: out, <span class="s">"is_error"</span>: err})
+        messages.append({<span class="s">"role"</span>: <span class="s">"user"</span>, <span class="s">"content"</span>: results})  <span class="c"># all results in one message</span>
+    <span class="k">return</span> <span class="s">"Stopped: step limit reached."</span>
+
+<span class="f">print</span>(<span class="f">agent</span>(<span class="s">"Is it warmer in Paris or London right now, in fahrenheit?"</span>))
+
+<span class="c"># ---- 3. LLM-as-a-judge with the swap test ----</span>
+JUDGE = (<span class="s">"You are comparing two answers to the same question. Judge accuracy and "</span>
+         <span class="s">"helpfulness only; ignore length and order. Think briefly, then end with a "</span>
+         <span class="s">"final line containing exactly one of: WINNER: 1, WINNER: 2, WINNER: TIE."</span>)
+
+<span class="k">def</span> <span class="f">judge_once</span>(question, first, second):
+    msg = client.messages.create(model=MODEL, max_tokens=1024, system=JUDGE, messages=[{
+        <span class="s">"role"</span>: <span class="s">"user"</span>,
+        <span class="s">"content"</span>: <span class="s">f"Question:\n{question}\n\nAnswer 1:\n{first}\n\nAnswer 2:\n{second}"</span>}])
+    text = <span class="s">""</span>.join(b.text <span class="k">for</span> b <span class="k">in</span> msg.content <span class="k">if</span> b.type == <span class="s">"text"</span>)
+    last = text.strip().splitlines()[-1].upper()
+    <span class="k">return</span> <span class="s">"1"</span> <span class="k">if</span> <span class="s">"WINNER: 1"</span> <span class="k">in</span> last <span class="k">else</span> <span class="s">"2"</span> <span class="k">if</span> <span class="s">"WINNER: 2"</span> <span class="k">in</span> last <span class="k">else</span> <span class="s">"tie"</span>
+
+<span class="k">def</span> <span class="f">judge_pair</span>(question, a, b):
+    v1 = {<span class="s">"1"</span>: <span class="s">"A"</span>, <span class="s">"2"</span>: <span class="s">"B"</span>}.get(<span class="f">judge_once</span>(question, a, b), <span class="s">"tie"</span>)   <span class="c"># A shown first</span>
+    v2 = {<span class="s">"1"</span>: <span class="s">"B"</span>, <span class="s">"2"</span>: <span class="s">"A"</span>}.get(<span class="f">judge_once</span>(question, b, a), <span class="s">"tie"</span>)   <span class="c"># B shown first</span>
+    <span class="k">return</span> v1 <span class="k">if</span> v1 == v2 <span class="k">else</span> <span class="s">"tie"</span>                                    <span class="c"># order-dependent: tie</span>
+
+<span class="c"># ---- 4. Agreement with your own labels: Cohen's kappa ----</span>
+<span class="k">from</span> sklearn.metrics <span class="k">import</span> cohen_kappa_score
+human = [<span class="s">"A"</span>, <span class="s">"B"</span>, <span class="s">"A"</span>, <span class="s">"A"</span>, <span class="s">"B"</span>, <span class="s">"tie"</span>]
+judged = [<span class="s">"A"</span>, <span class="s">"B"</span>, <span class="s">"tie"</span>, <span class="s">"A"</span>, <span class="s">"B"</span>, <span class="s">"tie"</span>]                  <span class="c"># from judge_pair over the same items</span>
+<span class="f">print</span>(<span class="s">"kappa ="</span>, <span class="f">round</span>(<span class="f">cohen_kappa_score</span>(human, judged), 3))
+</pre>
+  <p class="hint">For RAG metrics, the <a href="https://docs.ragas.io/" target="_blank" rel="noopener">ragas</a> library implements faithfulness, context recall, context precision and answer relevancy over a dataset of questions, retrieved contexts, answers and references; its API changes between versions, so follow the docs for the version you install.</p>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">7</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page is written for this site in its own words, with its own labs and simulations. The methods and definitions come from these papers and documentation:</p>
+    <ul>
+      <li>Yao et al., <a href="https://arxiv.org/abs/2210.03629" target="_blank" rel="noopener">ReAct</a> (2022); Schick et al., <a href="https://arxiv.org/abs/2302.04761" target="_blank" rel="noopener">Toolformer</a> (2023).</li>
+      <li>Anthropic, <a href="https://www.anthropic.com/engineering/building-effective-agents" target="_blank" rel="noopener">Building effective agents</a> (2024) and the <a href="https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview" target="_blank" rel="noopener">tool use documentation</a>, for the loop and the Python section.</li>
+      <li>Liu et al., <a href="https://arxiv.org/abs/2307.03172" target="_blank" rel="noopener">Lost in the Middle</a> (2023); Packer et al., <a href="https://arxiv.org/abs/2310.08560" target="_blank" rel="noopener">MemGPT</a> (2023).</li>
+      <li>Es et al., <a href="https://arxiv.org/abs/2309.15217" target="_blank" rel="noopener">RAGAS</a> (2023) and the <a href="https://docs.ragas.io/" target="_blank" rel="noopener">ragas documentation</a>.</li>
+      <li>Zheng et al., <a href="https://arxiv.org/abs/2306.05685" target="_blank" rel="noopener">Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena</a> (2023); Cohen, J. (1960), A coefficient of agreement for nominal scales, <i>Educational and Psychological Measurement</i>.</li>
+    </ul>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"When a model “calls a tool”, who actually runs the tool?","o":["The model, inside its forward pass","Your program, which then sends the result back to the model","The tokenizer","Nobody: the model imagines the result"],"a":1,"e":"The model only writes a structured request (name, arguments, id). Your code validates and runs it, then replies with a tool result carrying the same id."},
+{"q":"Each step of a 20-step agent task succeeds independently with probability 0.95, with no retries. Roughly how often does the whole task succeed?","o":["95%","about 75%","about 36%","about 5%"],"a":2,"e":"0.95^20 ≈ 0.358. Small per-step error rates compound over long tasks."},
+{"q":"Retries are allowed but no failures are ever detected (d = 0). What do retries add?","o":["They double the success rate","Nothing: an unnoticed failure is never retried","They make every step succeed","They only add cost"],"a":1,"e":"P_step = p·Σ((1−p)d)^k reduces to p when d = 0. Detection, through schemas, tests or clear errors, is what makes retries pay off."},
+{"q":"An answer contains a correct fact that is not in any retrieved chunk. What happens to RAGAS faithfulness?","o":["It rises, because the fact is true","It falls, because that claim cannot be inferred from the context","It is unchanged","Faithfulness only measures retrieval"],"a":1,"e":"Faithfulness counts claims supported by the retrieved context, not claims that are true in the world."},
+{"q":"Why judge each pair twice with the answers swapped?","o":["To halve the cost","To cancel position bias: a winner is accepted only if both orders agree","To raise verbosity bias","Because the model forgets the first verdict"],"a":1,"e":"If the verdict flips when the order flips, the preference came from position, not quality, so the pair is scored as a tie."}
+]</script>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/gen.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette(); const esc=NLP.esc;
+const pct=x=>(100*x).toFixed(x<0.1&&x>0?1:0)+'%';
+
+/* ---------- 1. tool calling ---------- */
+const SCHEMA={name:'get_weather',description:'Current weather for a city.',input_schema:{type:'object',properties:{city:{type:'string',description:'City name, e.g. Paris'},unit:{type:'string',enum:['celsius','fahrenheit']}},required:['city']}};
+const PRE={ok:{name:'get_weather',input:{city:'Paris',unit:'celsius'}},miss:{name:'get_weather',input:{unit:'celsius'}},type:{name:'get_weather',input:{city:75001,unit:'celsius'}},enum:{name:'get_weather',input:{city:'Paris',unit:'kelvin'}},ghost:{name:'get_forecast_10day',input:{city:'Paris'}}};
+const WX={paris:14,london:11,delhi:31,tokyo:17,'new york':9,sydney:22,mumbai:30};
+$('#tlSchema').textContent='{"name": "get_weather",\n "description": "Current weather for a city.",\n "input_schema": {"type": "object",\n  "properties": {\n   "city": {"type": "string", "description": "City name, e.g. Paris"},\n   "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}},\n  "required": ["city"]}}';
+function validate(call){ const errs=[];
+  if(!call||typeof call!=='object') return ['the call must be a JSON object'];
+  if(call.name!==SCHEMA.name) return [`unknown tool '${call.name}'. Available tools: get_weather`];
+  const a=call.input; if(!a||typeof a!=='object'||Array.isArray(a)) return ['input must be an object'];
+  const pr=SCHEMA.input_schema.properties;
+  SCHEMA.input_schema.required.forEach(k=>{ if(!(k in a)) errs.push(`missing required field '${k}'`); });
+  Object.keys(a).forEach(k=>{ const s=pr[k]; if(!s){ errs.push(`unexpected field '${k}'`); return; }
+    if(s.type==='string'&&typeof a[k]!=='string') errs.push(`'${k}' must be a string, got ${typeof a[k]}`);
+    else if(s.enum&&!s.enum.includes(a[k])) errs.push(`'${k}' must be one of ${s.enum.join(', ')}`); });
+  return errs; }
+function runTool(){ const box=$('#tlCall'), P=P0(); let call=null, errs;
+  try{ call=JSON.parse(box.value); errs=validate(call); }catch(e){ errs=['invalid JSON: '+e.message.replace(/^JSON\.parse: /,'')]; }
+  let res, isErr=errs.length>0;
+  if(!isErr){ const c=String(call.input.city), t=WX[c.toLowerCase()];
+    if(t==null){ isErr=true; errs=[`no weather data for '${c}'`]; }
+    else { const u=call.input.unit||'celsius'; res={city:c,temp:u==='celsius'?t:+(t*9/5+32).toFixed(1),unit:u,sky:'partly cloudy'}; } }
+  const out={type:'tool_result',tool_use_id:'toolu_01',content:isErr?'Error: '+errs.join('; '):JSON.stringify(res)}; if(isErr) out.is_error=true;
+  $('#tlOut').innerHTML=`<span class="${isErr?'bad':'ok'}">${isErr?'✗ validation failed':'✓ arguments valid, tool ran'}</span>\n`+esc(JSON.stringify(out,null,1).replace(/\n\s*/g,' '))+`\n<span class="k">${isErr?'The model reads the error and usually repairs the call on its next turn.':'The model now answers in words, using this result.'}</span>`;
+  $('#tlFlow').innerHTML=['user asks','model: tool_use','your code: validate & run',isErr?'tool_result (is_error)':'tool_result','model: '+(isErr?'retry call':'final answer')].map((s,i)=>`<span class="${i===3||i===4?(isErr?'err':'on'):'on'}">${esc(s)}</span>`).join('<i>→</i>'); }
+function setPre(v){ const c=PRE[v]; $('#tlCall').value='{"type": "tool_use", "id": "toolu_01",\n "name": '+JSON.stringify(c.name)+',\n "input": '+JSON.stringify(c.input).replace(/,/g,', ').replace(/:/g,': ')+'}'; runTool(); }
+ML.bindSeg('tlPre',setPre); $('#tlCall').addEventListener('input',runTool); setPre('ok');
+
+/* ---------- 2. agent loop ---------- */
+const lpP=new ML.Plot('#lpPlot',{equal:false}); let lpRuns=null;
+const stepP=(p,d,r)=>{ let s=0; for(let k=0;k<=r;k++) s+=Math.pow((1-p)*d,k); return [p*s,s]; };
+function drawLp(){ const P=P0(), n=+$('#lpN').value, p=+$('#lpP').value, d=+$('#lpD').value, r=+$('#lpR').value;
+  const [ps,ec]=stepP(p,d,r), [ps3]=stepP(p,1,3), N=[...Array(50)].map((_,i)=>i+1);
+  GX.chart(lpP,[{pts:N.map(k=>[k,Math.pow(p,k)]),color:P.c2,width:2.5,label:'no retries'},{pts:N.map(k=>[k,Math.pow(ps,k)]),color:P.c5,width:2.5,label:'with retries'},{pts:N.map(k=>[k,Math.pow(ps3,k)]),color:P.c4,width:1.5,dash:[5,4],label:'d = 1, r = 3'}],{x0:1,x1:50,y0:0,y1:1,xl:'steps in the task, n',yl:'P(task succeeds)',vline:n,yfmt:v=>Math.round(v*100)+'%'});
+  GX.stats('#lpStats',[[pct(Math.pow(p,n)),'task success, no retries','c2'],[pct(Math.pow(ps,n)),'task success with retries','c5'],[ps.toFixed(4),'per-step success','c1'],[(n*ec).toFixed(1),'expected tool calls','c3']]);
+  drawGrid(); }
+function simulate(){ const n=+$('#lpN').value, p=+$('#lpP').value, d=+$('#lpD').value, r=+$('#lpR').value, rng=ML.rng(Date.now()%100000);
+  lpRuns=[...Array(40)].map(()=>{ const row=[]; for(let i=0;i<n;i++){ let st='r', k=0;
+      for(;k<=r;k++){ if(rng()<p){ st=k?'a':'g'; break; } if(rng()>=d){ k=r+1; break; } }
+      row.push(st); if(st==='r'){ while(row.length<n) row.push('x'); break; } } return row; }); lpRuns.n=n; drawGrid(); }
+function drawGrid(){ const P=P0(), el=$('#lpGrid'); if(!lpRuns){ el.innerHTML='<p class="hint" style="grid-column:1/-1">Press the button to simulate 40 runs with the current settings.</p>'; el.style.gridTemplateColumns='1fr'; return; }
+  const n=lpRuns.n, col={g:P.c5,a:P.c4,r:P.c2,x:P.line}; el.style.gridTemplateColumns=`repeat(${n},minmax(0,1fr))`; el.style.maxWidth=Math.min(100,n*4)+'%';
+  el.innerHTML=lpRuns.map(row=>row.map(s=>`<b style="background:${col[s]};opacity:${s==='x'?.5:.9}"></b>`).join('')).join('');
+  const ok=lpRuns.filter(r=>r[r.length-1]!=='r'&&r[r.length-1]!=='x').length;
+  el.insertAdjacentHTML('beforeend',`<p class="hint" style="grid-column:1/-1;margin:4px 0 0">${ok} of 40 runs finished (${pct(ok/40)}); n = ${n}.</p>`); }
+['lpN','lpP','lpD','lpR'].forEach(id=>ML.bindRange(id,()=>{ drawLp(); simulate(); },id==='lpP'?v=>(+v).toFixed(3):id==='lpD'?v=>(+v).toFixed(2):null));
+$('#lpGo').onclick=simulate; lpP.onResize=drawLp; drawLp(); simulate();
+
+/* ---------- 3. memory ---------- */
+const mmP=new ML.Plot('#mmPlot',{equal:false}); let mmV='recall'; const TOK=300, WIN=128000, RHO=0.35;
+function drawMm(){ const P=P0(), k=+$('#mmK').value, s=+$('#mmS').value, m=+$('#mmR').value, A=[...Array(200)].map((_,i)=>i+1);
+  const full=a=>a*TOK<=WIN?1:0, win=a=>a<=k?1:0, sum=a=>a<=k?1:Math.pow(s,Math.ceil((a-k)/k)), ret=a=>a<=4?1:1-Math.pow(1-RHO,m);
+  if(mmV==='recall') GX.chart(mmP,[{pts:A.map(a=>[a,full(a)]),color:P.c3,width:2.5,label:'full'},{pts:A.map(a=>[a,win(a)]),color:P.c2,width:2.5,label:'window'},{pts:A.map(a=>[a,sum(a)]),color:P.c4,width:2.5,label:'summary'},{pts:A.map(a=>[a,ret(a)]),color:P.c5,width:2.5,label:'retrieval'}],{x0:1,x1:200,y0:0,y1:1.05,xl:'age of the fact (turns ago)',yl:'P(fact in prompt)',yfmt:v=>Math.round(v*100)+'%'});
+  else { const T=[...Array(600)].map((_,i)=>i+1); GX.chart(mmP,[{pts:T.filter(t=>t*TOK<=WIN).map(t=>[t,t*TOK/1000]),color:P.c3,width:2.5,label:'full'},{pts:T.map(t=>[t,Math.min(t,k)*TOK/1000]),color:P.c2,width:2.5,label:'window'},{pts:T.map(t=>[t,(Math.min(t,k)*TOK+(t>k?400:0))/1000]),color:P.c4,width:2.5,dash:[6,4],label:'summary'},{pts:T.map(t=>[t,(Math.min(t,4)*TOK+(t>4?m*TOK:0))/1000]),color:P.c5,width:2.5,label:'retrieval'}],{x0:1,x1:600,y0:0,y1:WIN/1000*1.05,xl:'turns so far',yl:'thousand tokens per call',hline:WIN/1000}); }
+  const at=60; GX.stats('#mmStats',[[pct(sum(at)),'summary: recall of a fact 60 turns old','c4'],[pct(ret(at)),'retrieval: same fact','c5'],[Math.floor(WIN/TOK)+' turns','full history fits until','c3'],[(k*TOK/1000).toFixed(1)+'k','window tokens per call','c2']]); }
+ML.bindRange('mmK',drawMm); ML.bindRange('mmS',drawMm,v=>(+v).toFixed(2)); ML.bindRange('mmR',drawMm); ML.bindSeg('mmV',v=>{ mmV=v; drawMm(); }); mmP.onResize=drawMm; drawMm();
+
+/* ---------- 4. RAG metrics ---------- */
+const CH=[{id:'c1',t:'The Eiffel Tower was completed in March 1889 as the entrance arch to the World’s Fair.',rel:1,gt:'g1'},{id:'c2',t:'Paris is the capital of France and has about 2.1 million inhabitants.',rel:0},{id:'c3',t:'Including its antennas, the tower now stands about 330 metres tall.',rel:1,gt:'g2'},{id:'c4',t:'Gustave Eiffel’s company also built the internal frame of the Statue of Liberty.',rel:0}];
+const ORD={good:['c1','c3','c2','c4'],mix:['c2','c1','c4','c3'],bad:['c2','c4','c1','c3']};
+const CL=[{t:'It was completed in 1889.',by:'c1',true:1},{t:'It is about 330 metres tall.',by:'c3',true:1},{t:'It was the tallest structure in the world until 1930.',by:null,true:1},{t:'It is built from steel.',by:null,true:0}];
+const GT=[{id:'g1',t:'completed in 1889'},{id:'g2',t:'about 330 m tall'}];
+let rgOn={c1:1,c2:1,c3:1,c4:0}, rgCl=[1,1,1,0], rgOrd='good';
+function drawRg(){ const P=P0(), ord=ORD[rgOrd];
+  $('#rgCtx').innerHTML=ord.map((id,i)=>{ const c=CH.find(x=>x.id===id); return `<label class="ag-item${rgOn[id]?'':' off'}"><input type="checkbox" data-c="${id}"${rgOn[id]?' checked':''}><span><b>#${i+1}</b> ${esc(c.t)}</span><span class="tag" style="${c.rel?'color:'+P.c5+';border-color:'+P.c5:''}">${c.rel?'relevant':'not relevant'}</span></label>`; }).join('');
+  $('#rgAns').innerHTML=CL.map((c,i)=>{ const sup=c.by&&rgOn[c.by]; return `<label class="ag-item${rgCl[i]?'':' off'}"><input type="checkbox" data-a="${i}"${rgCl[i]?' checked':''}><span>${esc(c.t)}</span><span class="tag" style="color:${sup?P.c5:P.c2};border-color:${sup?P.c5:P.c2}">${sup?'supported':'not in context'}${c.true?'':' · false'}</span></label>`; }).join('');
+  const ret=ord.filter(id=>rgOn[id]), claims=CL.filter((c,i)=>rgCl[i]);
+  const faith=claims.length?claims.filter(c=>c.by&&rgOn[c.by]).length/claims.length:0;
+  const recall=GT.filter(g=>ret.some(id=>CH.find(x=>x.id===id).gt===g.id)).length/GT.length;
+  let hits=0, sum=0; ret.forEach((id,i)=>{ const v=CH.find(x=>x.id===id).rel; if(v){ hits++; sum+=hits/(i+1); } }); const prec=hits?sum/hits:0;
+  const correct=claims.length?claims.filter(c=>c.true).length/claims.length:0;
+  $('#rgBars').innerHTML=NLP.bars([{label:'Faithfulness',value:faith,color:P.c1},{label:'Context recall',value:recall,color:P.c5},{label:'Context precision',value:prec,color:P.c3},{label:'True in the world (contrast)',value:correct,color:P.muted}],{max:1,lw:'minmax(150px,55%)',fmt:v=>v.toFixed(2)});
+  $('#rgCtx').querySelectorAll('input').forEach(b=>b.onchange=()=>{ rgOn[b.dataset.c]=b.checked?1:0; drawRg(); });
+  $('#rgAns').querySelectorAll('input').forEach(b=>b.onchange=()=>{ rgCl[+b.dataset.a]=b.checked?1:0; drawRg(); }); }
+ML.bindSeg('rgOrd',v=>{ rgOrd=v; drawRg(); }); drawRg();
+
+/* ---------- 5. LLM-as-a-judge ---------- */
+const NQ=300, JR=ML.rng(42), gs=()=>{ let u=0,v=0; while(!u) u=JR(); v=JR(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
+const Q=[...Array(NQ)].map(()=>{ const dq=gs()*1.2, dl=gs(); const h=dq+gs()*0.5; return {dq,dl,h:h>0?'A':'B',e1:gs(),e2:gs()}; });
+let jgMode='one';
+function drawJg(){ const P=P0(), bp=+$('#jgPos').value, bl=+$('#jgLen').value, sn=+$('#jgNoise').value;
+  /* verdict for "first shown wins" with log-odds z; tie band |z|<0.25 */
+  const vd=z=>z>0.25?1:z<-0.25?-1:0;
+  const rows=Q.map(q=>{ const v1=vd(q.dq+bp+bl*q.dl+sn*q.e1); const a1=v1>0?'A':v1<0?'B':'tie';
+    const v2=vd(-q.dq+bp-bl*q.dl+sn*q.e2); const a2=v2>0?'B':v2<0?'A':'tie';
+    return {h:q.h,j:jgMode==='one'?a1:(a1===a2?a1:'tie'),cons:a1===a2}; });
+  const L=['A','B','tie'], cm=L.map(j=>['A','B'].map(h=>rows.filter(r=>r.j===j&&r.h===h).length));
+  const nd=cm[0][0]+cm[0][1]+cm[1][0]+cm[1][1], po=nd?(cm[0][0]+cm[1][1])/nd:0, pj=[0,1].map(i=>(cm[i][0]+cm[i][1])/nd), ph=[0,1].map(c=>(cm[0][c]+cm[1][c])/nd), pe=pj[0]*ph[0]+pj[1]*ph[1], kap=nd?(po-pe)/(1-pe):0;
+  const aw=rows.filter(r=>r.j==='A').length/NQ, hA=rows.filter(r=>r.h==='A').length/NQ, cons=rows.filter(r=>r.cons).length/NQ, ties=1-nd/NQ;
+  $('#jgBars').innerHTML=NLP.bars([{label:'Agreement (decided pairs)',value:po,color:P.c5},{label:'Cohen’s κ (decided pairs)',value:Math.max(0,kap),color:P.c1},{label:'Judge says A wins',value:aw,color:P.c2},{label:'Humans say A wins',value:hA,color:P.c3},{label:'Called a tie',value:ties,color:P.muted}],{max:1,lw:'minmax(150px,55%)',fmt:v=>v.toFixed(2)});
+  $('#jgCm').innerHTML='<tr><th>judge ↓ / human →</th><th>A better</th><th>B better</th></tr>'+L.map((l,i)=>`<tr><th>${l==='tie'?'tie':l+' better'}</th><td>${cm[i][0]}</td><td>${cm[i][1]}</td></tr>`).join('');
+  GX.stats('#jgStats',[[kap.toFixed(2),'κ vs humans, decided pairs','c1'],[pct(aw),'A win rate (humans: '+pct(hA)+')','c2'],[pct(1-cons),'pairs that flip when swapped','c4']]); }
+['jgPos','jgLen','jgNoise'].forEach(id=>ML.bindRange(id,drawJg,v=>(+v).toFixed(2))); ML.bindSeg('jgMode',v=>{ jgMode=v; drawJg(); }); drawJg();
+})();
+</script>
+<script>NLP.nav('nlp','agents'); ML.renderMath(document.body);</script>
+</body>
+</html>

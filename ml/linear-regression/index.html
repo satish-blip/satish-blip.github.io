@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Linear Regression Lab</title>
+<meta name="description" content="Interactive linear regression in the browser: drag points, watch least squares refit, see residual squares, gradient descent on the loss surface, R², standard errors, polynomial features, bias–variance, ridge and lasso.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Algorithms"></nav></div></header>
+
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Regression</p>
+  <h1>Linear <span class="grad">Regression</span></h1>
+  <p class="lede">Given a few houses with their sizes and prices, how would you predict the price of the next one? Linear regression answers with the simplest reasonable guess, a straight line, and a precise rule for choosing the best line. This page builds that rule from scratch: you can drag the data and watch every quantity update, then walk down the error surface with gradient descent and see how adding curves, ridge and lasso trade bias for variance.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#lab">1 · Live fit</a><a href="#maths">2 · The maths</a><a href="#gd">3 · Gradient descent</a><a href="#bv">4 · Bias–variance</a><a href="#shrink">5 · Ridge &amp; lasso</a><a href="#code">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is linear regression, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>Suppose we have the living area and selling price of 47 houses, and we want to predict the price of a house that is about to go on sale. Plot price against area and the points drift upwards in a rough band. A natural first model is a straight line through that band: price \(\approx\beta_0+\beta_1\times\text{area}\). Linear <a class="term" data-t="regression">regression</a> is the method for choosing the two numbers \(\beta_0\) (the intercept) and \(\beta_1\) (the slope).</p>
+      <p>What makes a line "good"? For each house, the line's prediction \(\hat y_i\) misses the true price \(y_i\) by a <a class="term" data-t="residual-reg">residual</a> \(e_i=y_i-\hat y_i\). We want the residuals small overall, and the standard way to say "small overall" is: make the sum of their squares as small as possible. That is <a class="term" data-t="least-squares">least squares</a>. Squaring treats over- and under-predictions alike, punishes big misses more than small ones, and, as we will see, makes the best line easy to compute.</p>
+      <p>The same recipe goes much further than straight lines. Use several inputs (area, bedrooms, age) and the line becomes a flat surface. Add \(x^2, x^3,\dots\) as extra inputs (<a class="term" data-t="polynomial-features">polynomial features</a>) and it fits curves. Add a <a class="term" data-t="regularisation">penalty</a> on large <a class="term" data-t="coefficient">coefficients</a> and it becomes <a class="term" data-t="ridge">ridge</a> or the <a class="term" data-t="lasso">lasso</a>, which resist <a class="term" data-t="overfitting">overfitting</a>.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Choose the form of the prediction: \(\hat y=\beta_0+\beta_1x_1+\dots+\beta_dx_d\).</li><li>Choose how to measure error: the sum (or mean) of squared residuals.</li><li>Find the <a class="term" data-t="parameter">weights</a> that make the error smallest: in one shot with the <a class="term" data-t="normal-equations">normal equations</a>, or step by step with <a class="term" data-t="gradient-descent">gradient descent</a>.</li><li>Check the fit with <a class="term" data-t="r2">R²</a>, the residuals and, most importantly, on <a class="term" data-t="test-set">new data</a>.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Predicting sales from TV advertising spend (the classic Advertising dataset in the lab below). Each extra $1,000 of TV spend adds roughly the same number of sales, so a straight line through the scatter tells you both the trend and the typical return per dollar: that return is the slope.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Fast, exact solution</li><li>Easy to read: each weight is an effect size</li><li>A strong baseline for any number-prediction task</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Outliers pull the line hard (squares magnify big misses)</li><li>Curves need extra features</li><li>High-degree polynomials overfit wildly</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="regression">Regression</a><a class="term" data-t="least-squares">Least squares</a><a class="term" data-t="residual-reg">Residual</a><a class="term" data-t="mse">Mean squared error</a><a class="term" data-t="r2">R²</a><a class="term" data-t="normal-equations">Normal equations</a><a class="term" data-t="gradient-descent">Gradient descent</a><a class="term" data-t="learning-rate">Learning rate</a><a class="term" data-t="polynomial-features">Polynomial features</a><a class="term" data-t="overfitting">Overfitting</a><a class="term" data-t="bias-variance">Bias–variance</a><a class="term" data-t="ridge">Ridge</a><a class="term" data-t="lasso">Lasso</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. Background maths: <a href="../../math/vectors/">dot products</a>, <a href="../../math/matrices/">matrices and inverses</a>, <a href="../../math/projections/">projections</a>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 1. LAB -->
+<section id="lab" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Least squares, live</h2>
+    <p class="sub">Drag a point to move it. Click empty space to add a point. Right-click (or long-press) a point to delete it. The shaded squares are the squared residuals: least squares makes their total area as small as possible.</p>
+    <div class="plot wide" id="fitPlot"></div>
+    <div class="legend"><span><i class="sw" style="background:var(--c1)"></i>fitted model</span><span><i class="sw sq" style="background:var(--c2);opacity:.5"></i>squared residuals</span><span><i class="sw" style="background:var(--muted)"></i>true function (dashed)</span></div>
+    <div class="mathbox c1" id="eqBox"></div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="controls">
+        <div class="ctl"><span class="lbl">Dataset</span><select id="dsSel"></select><span class="hint" id="dsDesc"></span></div>
+        <div class="grid2" style="gap:12px">
+          <div class="ctl"><label for="nPts">Points <output id="nPtsOut"></output></label><input type="range" id="nPts" min="5" max="120" value="30"></div>
+          <div class="ctl"><label for="noise">Noise <output id="noiseOut"></output></label><input type="range" id="noise" min="0" max="1" step="0.05" value="0.4"></div>
+        </div>
+        <div class="ctl"><label for="deg">Polynomial degree <output id="degOut"></output></label><input type="range" id="deg" min="1" max="12" value="1"></div>
+        <div class="ctl"><span class="lbl">Penalty</span><div class="seg" id="penSeg" role="radiogroup"><button data-v="none" class="on">None (OLS)</button><button data-v="ridge">Ridge (L2)</button><button data-v="lasso">Lasso (L1)</button></div></div>
+        <div class="ctl"><label for="lam">λ (penalty strength) <output id="lamOut"></output></label><input type="range" id="lam" min="-4" max="1.5" step="0.05" value="-1"></div>
+        <div class="row"><label class="toggle"><input type="checkbox" id="showSq" checked>Residual squares</label><label class="toggle"><input type="checkbox" id="showTrue" checked>True function</label></div>
+        <div class="row"><button class="btn" id="resample">New sample</button><button class="btn" id="reset">Reset points</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Fit quality</h3>
+      <div class="stats" id="stats"></div>
+      <p class="hint" id="statHint"></p>
+    </div>
+  </div>
+</section>
+
+<!-- 2. MATHS -->
+<section id="maths" class="card">
+  <h2><span class="num">2</span>The maths, with your numbers</h2>
+  <p class="sub">Everything below is computed from the points currently on the plot, using a straight line (degree 1). We go in three steps: write down what we are minimising, find where it is smallest, then ask how much to trust the answer.</p>
+  <div class="grid2 prose">
+    <div>
+      <h3>Step 1: the model and the cost</h3>
+      <p>We have \(n\) examples \((x_i,y_i)\). Our model says each \(y_i\) is a straight-line function of \(x_i\) plus an error \(\varepsilon_i\) we cannot predict. The cost of a choice of \(\beta\) is the residual sum of squares (RSS):</p>
+      <div class="mathbox c1">$$y_i=\beta_0+\beta_1x_i+\varepsilon_i,\qquad \mathrm{RSS}(\beta)=\sum_{i=1}^n\big(y_i-\beta_0-\beta_1x_i\big)^2=\lVert y-X\beta\rVert^2$$</div>
+      <p>The second form is the same sum written with matrices. Stack the inputs into a <b>design matrix</b> \(X\in\mathbb R^{n\times 2}\): a column of ones (so that \(\beta_0\) gets added to every prediction) next to the column of \(x\)'s. Then all \(n\) predictions at once are \(X\beta\), and the RSS is the squared length of the residual vector \(y-X\beta\).</p>
+      <h3>Step 2: where is the cost smallest?</h3>
+      <p>RSS is a bowl-shaped (convex quadratic) function of \(\beta\), so its lowest point is where the slope is zero in every direction:</p>
+      <ol class="derive">
+        <li><div class="eq">\(\nabla_\beta\,\mathrm{RSS}=-2X^\top(y-X\beta)\)</div><div class="why">Differentiate the squared length; the chain rule brings down \(X^\top\). (See "Going deeper" for the step-by-step version.)</div></li>
+        <li><div class="eq">\(X^\top(y-X\hat\beta)=0\)</div><div class="why">Set it to zero at the best \(\hat\beta\). In words: the residuals are uncorrelated with every column of \(X\).</div></li>
+        <li><div class="eq">\(X^\top X\,\hat\beta=X^\top y\;\Rightarrow\;\hat\beta=(X^\top X)^{-1}X^\top y\)</div><div class="why">Rearrange. These are the <b>normal equations</b>; here they are with your data:</div></li>
+      </ol>
+      <div id="liveNormal"></div>
+      <p>The inverse exists only if \(X\) has <b>full column rank</b>, meaning no feature is an exact combination of the others. If you include a house's area in square feet <i>and</i> in square metres, one column is a multiple of the other, \(X^\top X\) is singular, and infinitely many \(\beta\) fit equally well (see <a href="../../math/matrices/#rank">rank</a>).</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: ordinary least squares</h5><ol>
+        <li><span class="kw">input</span> inputs \(x_1,\dots,x_n\) (each a vector of \(d\) features), targets \(y_1,\dots,y_n\)</li>
+        <li>build \(X\): row \(i\) is \((1, x_{i1},\dots,x_{id})\) <span class="cm">leading 1 for the intercept</span></li>
+        <li>\(G\leftarrow X^\top X\); \(g\leftarrow X^\top y\) <span class="cm">(d+1)×(d+1) matrix, (d+1) vector</span></li>
+        <li>solve \(G\hat\beta=g\) <span class="cm">use a solver, not an explicit inverse</span></li>
+        <li>\(\hat y\leftarrow X\hat\beta\); \(e\leftarrow y-\hat y\)</li>
+        <li><span class="kw">return</span> \(\hat\beta\), \(\hat y\), \(e\)</li>
+      </ol></div>
+      <h3>Geometry: a projection</h3>
+      <p>There is a picture behind step 2. Think of \(y\) as one point in \(n\)-dimensional space. Every choice of \(\beta\) gives predictions \(X\beta\), and these all lie in a flat plane (the column space of \(X\)). The best fit is the point of that plane closest to \(y\): its <a href="../../math/projections/#lsq">projection</a>. Formally \(\hat y=X\hat\beta=Hy\) with the "hat matrix" \(H=X(X^\top X)^{-1}X^\top\). The closest point is the one where the error sticks straight out of the plane, so the residual is orthogonal to every column: \(X^\top e=0\). The column of ones is one of them, which is why residuals always sum to zero when there is an intercept.</p>
+      <div id="liveOrth"></div>
+      <details class="deeper"><summary>Going deeper: the gradient step by step, and why squared error</summary><div>
+        <p><b>The gradient.</b> Expand \(\mathrm{RSS}=(y-X\beta)^\top(y-X\beta)=y^\top y-2\beta^\top X^\top y+\beta^\top X^\top X\beta\). Two standard facts, \(\nabla_\beta(\beta^\top a)=a\) and \(\nabla_\beta(\beta^\top A\beta)=2A\beta\) for symmetric \(A\), give \(\nabla\mathrm{RSS}=-2X^\top y+2X^\top X\beta\). The Hessian is \(2X^\top X\), which is positive semi-definite because \(v^\top X^\top Xv=\lVert Xv\rVert^2\ge0\). So the function is convex, and any point with zero gradient is a global minimum.</p>
+        <p><b>A probabilistic reason for squares.</b> Assume the errors are independent Gaussians, \(\varepsilon_i\sim\mathcal N(0,\sigma^2)\). Then the probability density of seeing \(y_i\) is \(\frac{1}{\sqrt{2\pi}\sigma}\exp\big(-\frac{(y_i-x_i^\top\beta)^2}{2\sigma^2}\big)\), and the log-likelihood of all the data is</p>
+        $$\ell(\beta)=-n\log(\sqrt{2\pi}\sigma)-\frac{1}{2\sigma^2}\sum_i(y_i-x_i^\top\beta)^2 .$$
+        <p>Only the last term depends on \(\beta\), so maximising the likelihood is exactly minimising RSS. Least squares is maximum likelihood under Gaussian noise (see <a href="../../math/inference/#mle">maximum likelihood</a>). If the noise has heavier tails, other losses (absolute error, Huber) are more appropriate.</p>
+      </div></details>
+    </div>
+    <div>
+      <h3>Step 3a: how good is the fit?</h3>
+      <p>Start from the simplest possible model, "always predict the average \(\bar y\)". Its squared error is the total sum of squares (TSS). The line explains part of that variation (MSS) and leaves the rest unexplained (RSS). With an intercept, the two pieces add up exactly:</p>
+      <div class="mathbox c5">$$\underbrace{\sum(y_i-\bar y)^2}_{\mathrm{TSS}}=\underbrace{\sum(\hat y_i-\bar y)^2}_{\mathrm{MSS}}+\underbrace{\sum(y_i-\hat y_i)^2}_{\mathrm{RSS}},\qquad R^2=1-\frac{\mathrm{RSS}}{\mathrm{TSS}}$$</div>
+      <p>So \(R^2\) is the fraction of the variation in \(y\) that the model accounts for: 0 means no better than the average, 1 means a perfect fit. The split works because the residual vector is orthogonal to \(\hat y-\bar y\), so Pythagoras applies.</p>
+      <div id="liveR2"></div>
+      <h3>Step 3b: how much should we trust each coefficient?</h3>
+      <p>If we collected a fresh sample of houses, we would get slightly different \(\hat\beta\). How much would they wobble? Estimate the noise level from the residuals (dividing by \(n-(p+1)\), because fitting \(p+1\) coefficients has used up that many degrees of freedom), then propagate it through the formula for \(\hat\beta\):</p>
+      <div class="mathbox c4">$$\hat\sigma^2=\frac{\mathrm{RSS}}{n-(p+1)},\qquad \operatorname{Cov}(\hat\beta)=\hat\sigma^2(X^\top X)^{-1},\qquad t_j=\frac{\hat\beta_j}{\mathrm{SE}(\hat\beta_j)}$$</div>
+      <p>The standard error \(\mathrm{SE}(\hat\beta_j)\) is the square root of the \(j\)-th diagonal entry. The \(t\)-statistic asks how many standard errors \(\hat\beta_j\) is away from zero; it is a <a href="../../math/inference/#test">hypothesis test</a> of "this feature has no effect".</p>
+      <div class="tblwrap"><table class="tbl" id="coefTbl"></table></div>
+      <p class="hint">A large \(|t|\) (roughly above 2) is evidence that the coefficient is not zero. Try the <b>Advertising</b> dataset to get a real-data regression table, then drag a point far away and watch the standard errors react.</p>
+      <details class="deeper"><summary>Going deeper: where \(\operatorname{Cov}(\hat\beta)=\sigma^2(X^\top X)^{-1}\) comes from</summary><div>
+        <p>Substitute \(y=X\beta+\varepsilon\) into the normal-equation solution: \(\hat\beta=(X^\top X)^{-1}X^\top(X\beta+\varepsilon)=\beta+(X^\top X)^{-1}X^\top\varepsilon\). So \(\hat\beta\) is the truth plus a linear transformation \(A\varepsilon\) of the noise, with \(A=(X^\top X)^{-1}X^\top\). Two consequences: \(\mathbb E[\hat\beta]=\beta\) (unbiased, since \(\mathbb E\varepsilon=0\)), and \(\operatorname{Cov}(\hat\beta)=A\operatorname{Cov}(\varepsilon)A^\top=\sigma^2AA^\top=\sigma^2(X^\top X)^{-1}\).</p>
+        <p>Reading this formula tells you how to design data. The variance is small when \(X^\top X\) is "large": many examples, inputs spread widely, and features not strongly correlated with each other. Highly correlated features make \(X^\top X\) nearly singular, so its inverse, and the standard errors, blow up (multicollinearity). The Gauss–Markov theorem says that among all unbiased estimators that are linear in \(y\), least squares has the smallest variance.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<!-- 3. GD -->
+<section id="gd" class="card">
+  <h2><span class="num">3</span>Gradient descent on the loss surface</h2>
+  <p class="sub">The normal equations solve the problem in one shot, but they need a \((d+1)\times(d+1)\) linear system, which is expensive when there are millions of features, and they do not exist for most other models. Gradient descent is the general-purpose alternative: start with some guess for \(\beta\), and repeatedly take a small step in the direction that decreases the cost fastest, \(\beta\leftarrow\beta-\eta\,\nabla J\). For \(J(\beta_0,\beta_1)=\tfrac{1}{2n}\mathrm{RSS}\) that step is \(\beta\leftarrow\beta+\tfrac{\eta}{n}X^\top(y-X\beta)\). Click the contour plot to choose a starting point.</p>
+  <div class="grid2">
+    <div><div class="plot sq" id="gdPlot"></div><p class="hint">Contours are log-spaced levels of \(J\). The star is the closed-form \(\hat\beta\).</p>
+      <div class="prose">
+        <p>Look at the update one example at a time: \(\beta\leftarrow\beta+\eta\,(y_i-\hat y_i)\,x_i\). It has a pleasing logic. If the prediction for example \(i\) is nearly right, the error \(y_i-\hat y_i\) is tiny and \(\beta\) barely moves. If it is far off, \(\beta\) moves a lot, and in the direction that fixes the error. This is the <b>LMS</b> (least mean squares) or Widrow–Hoff rule.</p>
+        <p>Because the bowl is convex there is only one minimum, so gradient descent always reaches it, as long as the step size \(\eta\) is small enough. Too large and it overshoots and diverges (try a fraction above 1). The bowl's shape matters too: if \(x\) is on a very different scale from the column of ones, the bowl is a long narrow valley and descent zig-zags. Standardising \(x\) makes the contours rounder and descent much faster. The ratio of the bowl's steepest to flattest curvature is the <a class="term" data-t="condition-number">condition number</a>.</p>
+      </div>
+    </div>
+    <div>
+      <div class="controls">
+        <div class="ctl"><label for="lr"><span>Step size \(\eta\) as a fraction of the stability limit \(2/\lambda_{\max}\)</span> <output id="lrOut"></output></label><input type="range" id="lr" min="0.02" max="1.08" step="0.01" value="0.35"></div>
+        <label class="toggle"><input type="checkbox" id="stdX">Standardise \(x\) first (centre and scale)</label>
+        <div class="player"><button class="btn primary" id="gdRun">Run</button><button class="btn" id="gdStep">Step</button><button class="btn" id="gdReset">Reset</button><span class="pos" id="gdPos"></span></div>
+      </div>
+      <div class="plot short" id="gdLoss" style="margin-top:12px"></div>
+      <div class="stats" id="gdStats" style="margin-top:12px"></div>
+      <div class="note" id="gdNote"></div>
+      <div class="algo"><h5 class="algo-h">Algorithm: batch and stochastic gradient descent for least squares</h5><ol>
+        <li><span class="kw">input</span> \(X\) (\(n\) rows), \(y\), step size \(\eta\), number of passes \(T\)</li>
+        <li>\(\beta\leftarrow 0\)</li>
+        <li><span class="kw">for</span> \(t=1\) <span class="kw">to</span> \(T\) <span class="kw">do</span> <span class="cm">batch version: one step per pass over all data</span></li>
+        <li class="i1">\(\beta\leftarrow\beta+\frac{\eta}{n}\sum_{i=1}^{n}(y_i-x_i^\top\beta)\,x_i\)</li>
+        <li><span class="cm">stochastic (LMS) version: one step per example</span></li>
+        <li><span class="kw">for</span> \(t=1\) <span class="kw">to</span> \(T\) <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">for</span> each \(i\) in a shuffled order <span class="kw">do</span></li>
+        <li class="i2">\(\beta\leftarrow\beta+\eta\,(y_i-x_i^\top\beta)\,x_i\) <span class="cm">correction ∝ error</span></li>
+        <li><span class="kw">return</span> \(\beta\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: why the stability limit is \(2/\lambda_{\max}\)</summary><div>
+        <p>Write \(H=\tfrac1nX^\top X\) (the Hessian of \(J\)) and let \(\delta=\beta-\hat\beta\) be the distance from the optimum. One step gives \(\delta\leftarrow(I-\eta H)\delta\). In the eigenbasis of \(H\) every component is multiplied by \(1-\eta\lambda_k\) per step. It shrinks only if \(|1-\eta\lambda_k|&lt;1\), that is \(0&lt;\eta&lt;2/\lambda_k\). The largest eigenvalue sets the limit. With \(\eta\) at that limit, the slowest component shrinks by a factor \(1-2\lambda_{\min}/\lambda_{\max}\approx1-2/\kappa\) per step, so the number of steps needed grows with the condition number \(\kappa\). That is the zig-zag you see without standardising. See <a href="../../math/decompositions/#eigdec">eigendecomposition</a> for the same argument with powers of a matrix.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<!-- 4. BIAS VARIANCE -->
+<section id="bv" class="card">
+  <h2><span class="num">4</span>Polynomial features and the bias–variance trade-off</h2>
+  <p class="sub">A straight line cannot follow a curve. The fix is cheap: invent new features \(x^2, x^3,\dots\) and fit \(\hat y=\beta_0+\beta_1x+\beta_2x^2+\dots+\beta_dx^d\). This is still <i>linear</i> regression, because the model is linear in the unknowns \(\beta\), so everything above still applies. But how high should the degree \(d\) go? Raising it always lowers the training error. The test error tells a different story.</p>
+  <div class="grid2">
+    <div><div class="plot wide" id="bvPlot"></div>
+      <div class="legend"><span><i class="sw" style="background:var(--c3)"></i>training MSE</span><span><i class="sw" style="background:var(--c2)"></i>test MSE (fresh data from the same source)</span><span>dashed line = your current degree</span></div></div>
+    <div class="prose">
+      <p>Imagine repeating the whole experiment many times: draw a new training set, fit the model, and predict at a fixed point \(x\). The average squared error of that prediction splits into three parts:</p>
+      <div class="mathbox c2">$$\mathbb E\big[(y-\hat f(x))^2\big]=\underbrace{\big(f(x)-\mathbb E\hat f(x)\big)^2}_{\text{bias}^2}+\underbrace{\operatorname{Var}\hat f(x)}_{\text{variance}}+\underbrace{\sigma^2}_{\text{noise}}$$</div>
+      <ul>
+        <li><b>Bias</b> is how far the <i>average</i> fit is from the truth: the error of a model that is too simple to follow the true curve, however much data it gets.</li>
+        <li><b>Variance</b> is how much the fit jumps around from one training set to the next: the error of a model so flexible that it follows the noise.</li>
+        <li><b>Noise</b> \(\sigma^2\) is the part no model can remove.</li>
+      </ul>
+      <ul>
+        <li><b>Low degree</b>: too rigid. High bias, low variance, so training and test error are both high (underfitting).</li>
+        <li><b>High degree</b>: the curve chases noise. Low bias, high variance, so training error keeps falling while test error climbs (overfitting).</li>
+        <li><b>Regularisation</b> (section 5) is the other dial: keep a high degree but shrink the coefficients.</li>
+      </ul>
+      <div class="note" id="bvNote"></div>
+      <details class="deeper"><summary>Going deeper: deriving the decomposition</summary><div>
+        <p>Fix \(x\) and write \(\bar f=\mathbb E[\hat f(x)]\), averaging over training sets. The new observation is \(y=f(x)+\varepsilon\) with noise independent of the training set. Then \(y-\hat f=(f-\bar f)+(\bar f-\hat f)+\varepsilon\). Square and take expectations. The three cross terms vanish: \(\mathbb E[\bar f-\hat f]=0\) by the definition of \(\bar f\), \(\mathbb E\varepsilon=0\), and \(\varepsilon\) is independent of \(\hat f\). What remains is \((f-\bar f)^2+\mathbb E(\bar f-\hat f)^2+\sigma^2\): bias², variance and noise. The derivation needs nothing about polynomials; it holds for any model and any learning algorithm under squared loss. Very large models (deep networks) can show "double descent", where test error falls again past the point where the model can fit the training data exactly.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<!-- 5. SHRINKAGE -->
+<section id="shrink" class="card">
+  <h2><span class="num">5</span>Ridge and lasso: shrinkage versus sparsity</h2>
+  <p class="sub">An overfit high-degree polynomial usually has huge coefficients that cancel each other out. So a natural cure is to make large coefficients expensive: add a penalty on the size of \(\beta\) to the cost. The features are standardised first so that "size" means the same thing for every feature, and the intercept is not penalised. The shape of the penalty changes what the solution looks like.</p>
+  <div class="grid2">
+    <div class="prose">
+      <div class="mathbox c3">$$\text{Ridge: }\min_\beta\ \tfrac1n\lVert y-X\beta\rVert_2^2+\lambda\lVert\beta\rVert_2^2\ \Rightarrow\ \hat\beta=(X^\top X+n\lambda I)^{-1}X^\top y$$</div>
+      <p><b>Ridge</b> (L2 penalty) keeps the closed form: the same derivation as section 2 just adds \(n\lambda I\) to \(X^\top X\). As a bonus, that matrix is always invertible for \(\lambda&gt;0\), which cures the collinearity problem. Every coefficient is shrunk towards zero, but none becomes exactly zero.</p>
+      <div class="mathbox c4">$$\text{Lasso: }\min_\beta\ \tfrac1{2n}\lVert y-X\beta\rVert_2^2+\lambda\lVert\beta\rVert_1\ \Rightarrow\ \beta_j\leftarrow S_\lambda\!\Big(\tfrac1n x_j^\top r_{(j)}\Big),\ S_\lambda(z)=\operatorname{sign}(z)(|z|-\lambda)_+$$</div>
+      <p><b>Lasso</b> (L1 penalty) has no closed form, because \(|\beta_j|\) has a kink at zero. It is solved one coefficient at a time by <b>coordinate descent</b>. Hold all other coefficients fixed, compute how strongly feature \(j\) correlates with what is left to explain (the partial residual \(r_{(j)}\)), then apply the soft-thresholding operator \(S_\lambda\). If that correlation is weaker than \(\lambda\), the coefficient is set to <i>exactly</i> zero. The lasso therefore does feature selection automatically.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: lasso by coordinate descent</h5><ol>
+        <li><span class="kw">input</span> standardised \(X\) (columns \(x_j\) with \(\tfrac1n\lVert x_j\rVert^2=1\)), centred \(y\), penalty \(\lambda\)</li>
+        <li>\(\beta\leftarrow 0\); \(r\leftarrow y\) <span class="cm">residual</span></li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1"><span class="kw">for</span> \(j=1\) <span class="kw">to</span> \(d\) <span class="kw">do</span></li>
+        <li class="i2">\(z\leftarrow\tfrac1nx_j^\top r+\beta_j\) <span class="cm">correlation with the partial residual</span></li>
+        <li class="i2">\(\beta_j^{\text{new}}\leftarrow\operatorname{sign}(z)\max(|z|-\lambda,0)\) <span class="cm">soft-threshold</span></li>
+        <li class="i2">\(r\leftarrow r-x_j(\beta_j^{\text{new}}-\beta_j)\); \(\beta_j\leftarrow\beta_j^{\text{new}}\)</li>
+        <li><span class="kw">until</span> no coefficient changes by more than a tolerance</li>
+        <li><span class="kw">return</span> \(\beta\)</li>
+      </ol></div>
+      <h3>Why the diamond gives zeros</h3>
+      <p>There is an equivalent way to state both problems: minimise RSS subject to a budget, \(\lVert\beta\rVert\le t\). The RSS contours are ellipses around the unpenalised (OLS) solution. Grow the ellipse until it first touches the allowed region. For the L2 <b>circle</b>, the first contact is usually at a generic point with no zero coordinates. The L1 <b>diamond</b> has corners sticking out along the axes, and the ellipse usually hits a corner first, where one coordinate is exactly zero. Drag the OLS point (the star) on the right-hand plot to see it.</p>
+      <details class="deeper"><summary>Going deeper: the penalties as priors</summary><div>
+        <p>Penalties have a Bayesian reading. Put a prior on the weights and maximise the posterior instead of the likelihood: \(\log p(\beta\mid\text{data})=\log p(\text{data}\mid\beta)+\log p(\beta)+\text{const}\). With Gaussian noise the first term is \(-\mathrm{RSS}/2\sigma^2\). A Gaussian prior \(\beta_j\sim\mathcal N(0,\tau^2)\) contributes \(-\lVert\beta\rVert_2^2/2\tau^2\), giving ridge with \(\lambda\propto\sigma^2/\tau^2\). A Laplace prior \(p(\beta_j)\propto e^{-|\beta_j|/b}\) contributes \(-\lVert\beta\rVert_1/b\), giving the lasso. The Laplace density has a sharp peak at zero, which is the probabilistic version of the diamond's corners. More on this on the <a href="../regularisation/#bayes">regularisation page</a> and in <a href="../../math/probability/#update">Bayesian updating</a>.</p>
+      </div></details>
+    </div>
+    <div>
+      <div class="plot sq" id="geoPlot"></div>
+      <div class="ctl" style="margin-top:10px"><label for="budget"><span>Budget \(t\)</span> <output id="budgetOut"></output></label><input type="range" id="budget" min="0.2" max="3" step="0.05" value="1.2"></div>
+      <div class="stats" id="geoStats" style="margin-top:8px"></div>
+    </div>
+  </div>
+  <h3>Coefficient paths on your current data (degree <span id="pathDeg"></span>)</h3>
+  <div class="grid2">
+    <div><div class="plot short" id="pathRidge"></div><p class="hint">Ridge: every coefficient shrinks smoothly and reaches zero only as \(\lambda\to\infty\).</p></div>
+    <div><div class="plot short" id="pathLasso"></div><p class="hint">Lasso: coefficients hit zero one by one, which is automatic feature selection.</p></div>
+  </div>
+  <p class="hint">Paths need several features, so they use degree \(\max(d,6)\). The dashed line marks your current \(\lambda\). Read them from right (large \(\lambda\), everything zero) to left (small \(\lambda\), close to OLS).</p>
+</section>
+
+<!-- 6. CODE -->
+<section id="code" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> sklearn.linear_model <span class="k">import</span> LinearRegression, Ridge, Lasso
+<span class="k">from</span> sklearn.preprocessing <span class="k">import</span> PolynomialFeatures, StandardScaler
+<span class="k">from</span> sklearn.pipeline <span class="k">import</span> make_pipeline
+
+<span class="c"># closed form</span>
+X = np.column_stack([np.ones(len(x)), x])
+beta = np.linalg.solve(X.T @ X, X.T @ y)          <span class="c"># (X^T X)^{-1} X^T y, without forming the inverse</span>
+e = y - X @ beta; RSS = e @ e; R2 = <span class="s">1</span> - RSS / np.sum((y - y.mean())**<span class="s">2</span>)
+se = np.sqrt(np.diag(RSS / (len(y) - <span class="s">2</span>) * np.linalg.inv(X.T @ X)))
+
+<span class="c"># gradient descent (LMS)</span>
+b = np.zeros(<span class="s">2</span>)
+<span class="k">for</span> _ <span class="k">in</span> range(<span class="s">1000</span>):
+    b += <span class="s">0.01</span> / len(y) * X.T @ (y - X @ b)
+
+<span class="c"># polynomial + penalty, as on this page</span>
+model = make_pipeline(PolynomialFeatures(degree=<span class="s">6</span>, include_bias=<span class="k">False</span>), StandardScaler(),
+                      Lasso(alpha=<span class="s">0.1</span>))     <span class="c"># or Ridge(alpha=...), LinearRegression()</span>
+model.<span class="f">fit</span>(x.reshape(-<span class="s">1</span>, <span class="s">1</span>), y)</pre>
+  <p class="hint">Note that scikit-learn's <code>Ridge(alpha)</code> uses \(\lVert y-X\beta\rVert^2+\alpha\lVert\beta\rVert^2\) (no \(1/n\)), so its \(\alpha\) equals \(n\lambda\) here. <code>Lasso(alpha)</code> uses the same \(\tfrac1{2n}\) scaling as this page.</p>
+</section>
+
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything is computed in your browser in plain JavaScript; no data leaves the page.</p>
+</main>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/gloss.js"></script>
+<script src="../assets/models.js"></script>
+<script>
+(function(){
+const {$, fmt, LA} = ML, Mo = ML.models;
+ML.nav('linear-regression'); ML.renderMath(document.body);
+
+/* ---------- state ---------- */
+const S = { ds:'line', n:30, noise:0.4, seed:3, deg:1, pen:'none', lam:0.1, pts:[], data:null };
+const sel=$('#dsSel'); ML.REG_DATASETS.forEach(d=>{ const o=document.createElement('option'); o.value=d.id; o.textContent=d.name; sel.appendChild(o); });
+function load(){ const d=ML.regDataset(S.ds,S.n,S.noise,S.seed); S.data=d; S.pts=d.x.map((x,i)=>[x,d.y[i]]); $('#dsDesc').textContent=d.desc;
+  $('#nPts').disabled=$('#noise').disabled=!!(d.id==='adv'); setBounds(); }
+let B;
+function setBounds(){ const xs=S.pts.map(p=>p[0]), ys=S.pts.map(p=>p[1]);
+  if(S.data.id==='adv'){ B={x0:-10,x1:290,y0:0,y1:26}; } else { const lo=Math.min(-3.5,...ys), hi=Math.max(3.5,...ys); B={x0:-3.3,x1:3.3,y0:lo-0.6,y1:hi+0.6}; }
+  fitPlot.setBounds(B); }
+
+const fitPlot = new ML.Plot('#fitPlot', {equal:false});
+function fit(deg, pen, lam, pts){ pts=pts||S.pts; return Mo.polyReg(pts.map(p=>p[0]), pts.map(p=>p[1]), {degree:deg, penalty:pen, lambda:lam}); }
+
+/* ---------- main plot ---------- */
+let model=null, hoverI=-1, dragI=-1;
+function drawFit(){
+  const P=ML.palette(), c=fitPlot.ctx; fitPlot.clear();
+  const isAdv=S.data.id==='adv'; fitPlot.grid(isAdv?50:1, true, isAdv?5:1);
+  if(S.pts.length<2){ return; }
+  model = fit(S.deg, S.pen, S.lam);
+  // residual squares (in pixel space, side = vertical residual length)
+  if($('#showSq').checked) S.pts.forEach(p=>{ const yh=model.f(p[0]), X=fitPlot.X(p[0]), Y=fitPlot.Y(p[1]), Yh=fitPlot.Y(yh), s=Yh-Y;
+    c.save(); c.fillStyle=P.c2; c.globalAlpha=.13; c.strokeStyle=P.c2; c.lineWidth=1; const x0 = s>0? X : X; c.fillRect(x0, Math.min(Y,Yh), Math.abs(s)*(p[0]>(B.x0+B.x1)/2?-1:1), Math.abs(s)); c.globalAlpha=.45; c.strokeRect(x0, Math.min(Y,Yh), Math.abs(s)*(p[0]>(B.x0+B.x1)/2?-1:1), Math.abs(s)); c.restore();
+    fitPlot.line(p[0],p[1],p[0],yh,{color:P.c2,width:1.5,alpha:.8}); });
+  // true function
+  if($('#showTrue').checked && S.data.f){ c.save(); c.setLineDash([6,5]); c.strokeStyle=P.muted; c.lineWidth=2; c.beginPath();
+    for(let k=0;k<=200;k++){ const x=B.x0+(B.x1-B.x0)*k/200, X=fitPlot.X(x), Y=fitPlot.Y(S.data.f(x)); k?c.lineTo(X,Y):c.moveTo(X,Y); } c.stroke(); c.restore(); }
+  // fitted curve
+  c.save(); c.strokeStyle=P.c1; c.lineWidth=3.2; c.lineJoin='round'; c.beginPath(); for(let k=0;k<=400;k++){ const x=B.x0+(B.x1-B.x0)*k/400, X=fitPlot.X(x), Y=fitPlot.Y(model.f(x)); k?c.lineTo(X,Y):c.moveTo(X,Y); } c.stroke(); c.restore();
+  fitPlot.points(S.pts, S.pts.map(()=>0), {r:5.5, color:()=>P.c3, ring:i=>i===hoverI||i===dragI ? P.ink : false});
+  if(isAdv){ fitPlot.text('TV spend ($1000s) →', B.x1, B.y0, {align:'right', dy:-18, color:P.muted, font:'600 12px Inter,system-ui,sans-serif'}); fitPlot.text('Sales ↑', B.x0, B.y1, {dx:46, dy:16, color:P.muted, font:'600 12px Inter,system-ui,sans-serif'}); }
+  updateStats(); }
+
+function updateStats(){
+  const xs=S.pts.map(p=>p[0]), ys=S.pts.map(p=>p[1]), n=xs.length, yh=xs.map(model.f), yb=ys.reduce((a,b)=>a+b,0)/n;
+  const RSS=ys.reduce((s,y,i)=>s+(y-yh[i])**2,0), TSS=ys.reduce((s,y)=>s+(y-yb)**2,0), p=S.deg;
+  const nz = model.w.filter(v=>Math.abs(v)>1e-10).length;
+  $('#stats').innerHTML = [['c1',fmt(RSS,2),'RSS'],['c2',fmt(RSS/n,3),'MSE (train)'],['c5',fmt(1-RSS/TSS,3),'R²'],['c3',n,'points'],['c4',nz+' / '+p,'non-zero β (excl. β₀)']]
+    .map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  $('#statHint').innerHTML = S.pen==='lasso'&&nz<p ? `Lasso has set ${p-nz} coefficient${p-nz>1?'s':''} to exactly zero.` : (p>=8&&S.pen==='none'? 'High degree with no penalty: look at the wiggles near the edges. That is variance.' : '');
+  // equation (raw coefficients for degree 1, standardised otherwise)
+  if(S.deg===1 && S.pen==='none'){ const st=Mo.olsStats(xs,ys); $('#eqBox').innerHTML=ML.tex(`\\hat y = ${fmt(st.beta[0],3)} ${st.beta[1]<0?'-':'+'} ${fmt(Math.abs(st.beta[1]),4)}\\,x\\qquad R^2=${fmt(st.R2,3)}`,true); }
+  else { const terms=model.w.map((w,j)=>`${w<0?'-':'+'}${fmt(Math.abs(w),2)}\\,\\tilde z_{${j+1}}`).join(''); $('#eqBox').innerHTML=ML.tex(`\\hat y=${fmt(model.b0,2)}${terms}`,true)+`<p class="hint" style="margin:0">\\(\\tilde z_j\\) is the standardised feature \\(x^j\\) (after centring and scaling \\(x\\)), which keeps high degrees numerically stable and makes the penalty fair across features.</p>`; ML.renderMath($('#eqBox')); }
+  drawMaths(); }
+
+/* pointer editing */
+let pressT=0, pressI=-1, moved=false;
+fitPlot.pointer({
+  down(x,y,px,py,e){ const i=fitPlot.nearest(S.pts,px,py,14); moved=false; pressT=Date.now(); pressI=i;
+    if(e.button===2) return; if(i>=0){ dragI=i; } else { S.pts.push([x,y]); dragI=S.pts.length-1; } scheduleAll(); },
+  move(x,y){ if(dragI>=0){ moved=true; S.pts[dragI]=[Math.max(B.x0,Math.min(B.x1,x)), Math.max(B.y0,Math.min(B.y1,y))]; scheduleAll(); } },
+  up(){ if(dragI>=0 && !moved && pressI>=0 && Date.now()-pressT>550){ S.pts.splice(pressI,1); } dragI=-1; scheduleAll(); },
+  hover(x,y,px,py){ const i=fitPlot.nearest(S.pts,px,py,14); if(i!==hoverI){ hoverI=i; fitPlot.cv.style.cursor=i>=0?'grab':'crosshair'; drawFit(); } },
+  context(x,y,px,py){ const i=fitPlot.nearest(S.pts,px,py,14); if(i>=0 && S.pts.length>2){ S.pts.splice(i,1); dragI=-1; scheduleAll(); } }
+});
+
+/* ---------- maths panel ---------- */
+function drawMaths(){
+  const xs=S.pts.map(p=>p[0]), ys=S.pts.map(p=>p[1]); if(xs.length<3) return; const st=Mo.olsStats(xs,ys), f=v=>fmt(v,3);
+  $('#liveNormal').innerHTML = ML.tex(`X^\\top X=\\begin{bmatrix}${st.XtX[0][0]}&${f(st.XtX[0][1])}\\\\ ${f(st.XtX[1][0])}&${f(st.XtX[1][1])}\\end{bmatrix},\\quad X^\\top y=\\begin{bmatrix}${f(st.XtY[0])}\\\\ ${f(st.XtY[1])}\\end{bmatrix}\\ \\Rightarrow\\ \\hat\\beta=\\begin{bmatrix}${fmt(st.beta[0],4)}\\\\ ${fmt(st.beta[1],4)}\\end{bmatrix}`, true);
+  const Xe=[st.e.reduce((a,b)=>a+b,0), st.e.reduce((a,b,i)=>a+b*xs[i],0)];
+  $('#liveOrth').innerHTML = ML.tex(`X^\\top e=\\begin{bmatrix}\\sum e_i\\\\ \\sum x_ie_i\\end{bmatrix}=\\begin{bmatrix}${fmt(Xe[0],6)}\\\\ ${fmt(Xe[1],6)}\\end{bmatrix}\\approx 0\\ \\checkmark`, true);
+  $('#liveR2').innerHTML = ML.tex(`${fmt(st.TSS,2)}=${fmt(st.MSS,2)}+${fmt(st.RSS,2)},\\qquad R^2=1-\\tfrac{${fmt(st.RSS,2)}}{${fmt(st.TSS,2)}}=${fmt(st.R2,4)},\\qquad \\hat\\sigma^2=\\tfrac{${fmt(st.RSS,2)}}{${st.n}-2}=${fmt(st.s2,4)}`, true);
+  $('#coefTbl').innerHTML = `<tr><th>Coefficient</th><th>Estimate</th><th>Std. error</th><th>t-statistic</th></tr>` +
+    ['β₀ (intercept)','β₁ (slope)'].map((nm,j)=>`<tr${Math.abs(st.t[j])>2?' class="best"':''}><td>${nm}</td><td>${fmt(st.beta[j],4)}</td><td>${fmt(st.se[j],4)}</td><td>${fmt(st.t[j],2)}</td></tr>`).join('');
+}
+
+/* ---------- gradient descent ---------- */
+const gdPlot=new ML.Plot('#gdPlot',{equal:false}), gdLoss=new ML.Plot('#gdLoss',{equal:false});
+const G={path:[], timer:null, start:null};
+function gdSetup(){ const xs=S.pts.map(p=>p[0]), ys=S.pts.map(p=>p[1]), n=xs.length; const std=$('#stdX').checked;
+  const mx=xs.reduce((a,b)=>a+b,0)/n, sx=Math.sqrt(xs.reduce((a,b)=>a+(b-mx)**2,0)/n)||1; const u=std? xs.map(v=>(v-mx)/sx) : xs.slice();
+  const H=[[1, u.reduce((a,b)=>a+b,0)/n],[u.reduce((a,b)=>a+b,0)/n, u.reduce((a,b)=>a+b*b,0)/n]]; const ev=LA.eigSym(H).values;
+  const st=Mo.olsStats(u,ys), ry=Math.sqrt(ys.reduce((a,b)=>a+(b-st.ybar)**2,0)/n)||1, su=Math.sqrt(u.reduce((a,b)=>a+b*b,0)/n - (u.reduce((a,b)=>a+b,0)/n)**2)||1;
+  const r0=Math.max(2*ry,Math.abs(st.beta[0])*0.8,1), r1=Math.max(2*ry/su, Math.abs(st.beta[1])*0.8);
+  return {u,ys,n,H,ev,opt:st.beta,r0,r1,std, J:(b0,b1)=>{ let s=0; for(let i=0;i<n;i++) s+=(ys[i]-b0-b1*u[i])**2; return s/(2*n); }}; }
+let GS=null;
+function gdReset(keepStart){ clearInterval(G.timer); G.timer=null; $('#gdRun').textContent='Run'; GS=gdSetup();
+  const b={x0:GS.opt[0]-1.6*GS.r0, x1:GS.opt[0]+1.6*GS.r0, y0:GS.opt[1]-1.6*GS.r1, y1:GS.opt[1]+1.6*GS.r1}; gdPlot.setBounds(b); GS.b=b;
+  if(!keepStart || !G.start) G.start=[GS.opt[0]-1.3*GS.r0, GS.opt[1]+1.3*GS.r1]; G.path=[G.start.slice()]; drawGD(); }
+function gdStep(){ const [b0,b1]=G.path[G.path.length-1], {u,ys,n}=GS; let g0=0,g1=0; for(let i=0;i<n;i++){ const r=ys[i]-b0-b1*u[i]; g0-=r; g1-=r*u[i]; } g0/=n; g1/=n;
+  const eta=(+$('#lr').value)*2/GS.ev[0]; const nb=[b0-eta*g0, b1-eta*g1]; G.path.push(nb);
+  if(!isFinite(nb[0])||Math.abs(nb[0])>1e9){ clearInterval(G.timer); G.timer=null; $('#gdRun').textContent='Run'; } }
+function drawGD(){ const P=ML.palette(), c=gdPlot.ctx, J=GS.J, jmin=J(GS.opt[0],GS.opt[1]); gdPlot.clear();
+  // filled log-contour background
+  const res=6, gw=Math.ceil(gdPlot.w/res)+1, gh=Math.ceil(gdPlot.h/res)+1, k1=ML.rgb(P.c1), bg=ML.rgb(P.bg), off=document.createElement('canvas'); off.width=gw; off.height=gh;
+  const oc=off.getContext('2d'), img=oc.createImageData(gw,gh); let mx=0; const V=new Float64Array(gw*gh);
+  for(let j=0;j<gh;j++) for(let i=0;i<gw;i++){ const v=Math.log(J(gdPlot.ix(i*res),gdPlot.iy(j*res))-jmin+1e-9); V[j*gw+i]=v; }
+  let lo=Infinity,hi=-Infinity; V.forEach(v=>{lo=Math.min(lo,v);hi=Math.max(hi,v);});
+  for(let t=0;t<V.length;t++){ const a=0.42*(1-(V[t]-lo)/(hi-lo)); img.data[4*t]=bg[0]*(1-a)+k1[0]*a; img.data[4*t+1]=bg[1]*(1-a)+k1[1]*a; img.data[4*t+2]=bg[2]*(1-a)+k1[2]*a; img.data[4*t+3]=255; }
+  oc.putImageData(img,0,0); c.save(); c.imageSmoothingEnabled=true; c.drawImage(off,0,0,gw,gh,0,0,gw*res,gh*res); c.restore();
+  for(let L=0;L<14;L++){ const lev=lo+(hi-lo)*(L+0.5)/14; gdPlot.contour((x,y)=>Math.log(J(x,y)-jmin+1e-9), lev, {color:P.c1, width:1, alpha:.55, res:5}); }
+  // path
+  c.save(); c.strokeStyle=P.c4; c.fillStyle=P.c4; c.lineWidth=2.2; c.beginPath(); G.path.forEach((p,i)=>{ const X=gdPlot.X(p[0]),Y=gdPlot.Y(p[1]); i?c.lineTo(X,Y):c.moveTo(X,Y); }); c.stroke();
+  G.path.forEach((p,i)=>{ if(i%Math.max(1,Math.floor(G.path.length/60))===0||i===G.path.length-1){ c.beginPath(); c.arc(gdPlot.X(p[0]),gdPlot.Y(p[1]),i===G.path.length-1?5:2.5,0,7); c.fill(); } }); c.restore();
+  // optimum star
+  const ox=gdPlot.X(GS.opt[0]), oy=gdPlot.Y(GS.opt[1]); c.save(); c.fillStyle=P.star; c.strokeStyle=P.ink; c.lineWidth=1; c.beginPath(); for(let k=0;k<10;k++){ const r=k%2?4:9, a=-Math.PI/2+k*Math.PI/5; c.lineTo(ox+r*Math.cos(a),oy+r*Math.sin(a)); } c.closePath(); c.fill(); c.stroke(); c.restore();
+  gdPlot.text('β₀ →', GS.b.x1, GS.b.y0, {align:'right',dx:-6,dy:-8,color:P.muted}); gdPlot.text('β₁ ↑', GS.b.x0, GS.b.y1, {dx:6,dy:16,color:P.muted});
+  // loss curve
+  const pts=G.path.map((p,i)=>[i, Math.log10(J(p[0],p[1])-jmin+1e-12)]); ML.chart(gdLoss,[{pts,color:P.c4}],{yfmt:v=>'1e'+v.toFixed(0),xl:'iteration  (log₁₀ of J − J*)'});
+  const last=G.path[G.path.length-1], kappa=GS.ev[0]/GS.ev[1], eta=(+$('#lr').value)*2/GS.ev[0];
+  $('#gdPos').textContent=`iteration ${G.path.length-1}`;
+  $('#gdStats').innerHTML=[['c1',fmt(kappa,kappa>100?0:2),'condition number κ'],['c4',fmt(eta,4),'step size η'],['c3',fmt(last[0],3),'β₀'],['c3',fmt(last[1],4),'β₁'],['c2',fmt(J(last[0],last[1])-jmin,4),'J − J*']]
+    .map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  const lrF=+$('#lr').value;
+  $('#gdNote').innerHTML = lrF>1 ? '<b>Diverging.</b> With \\(\\eta>2/\\lambda_{\\max}\\) the step overshoots along the steepest direction and the error grows every step.'
+    : kappa>50 ? `<b>Ill-conditioned bowl (κ = ${fmt(kappa,0)}).</b> The surface is a long, thin valley because \\(x\\) is not centred or is on a large scale. The step size is limited by the steep direction, so progress along the flat direction is painfully slow. Tick <i>Standardise x</i> and run again.`
+    : `<b>Well-conditioned (κ = ${fmt(kappa,2)}).</b> The contours are close to circles, so gradient descent heads almost straight for \\(\\hat\\beta\\). Convergence speed depends on κ: error shrinks by about \\((1-1/\\kappa)\\) per step at a good step size.`;
+  ML.renderMath($('#gdNote')); }
+gdPlot.pointer({down(x,y){ G.start=[x,y]; G.path=[[x,y]]; drawGD(); }});
+$('#gdRun').onclick=()=>{ if(G.timer){ clearInterval(G.timer); G.timer=null; $('#gdRun').textContent='Run'; return; } $('#gdRun').textContent='Pause';
+  G.timer=setInterval(()=>{ for(let k=0;k<(G.path.length>200?5:1);k++) gdStep(); drawGD(); if(G.path.length>3000){ clearInterval(G.timer); G.timer=null; $('#gdRun').textContent='Run'; } }, 40); };
+$('#gdStep').onclick=()=>{ gdStep(); drawGD(); };
+$('#gdReset').onclick=()=>gdReset(false);
+ML.bindRange('lr',()=>{ gdReset(true); }, v=>v.toFixed(2)+'×');
+$('#stdX').onchange=()=>{ G.start=null; gdReset(false); };
+
+/* ---------- bias-variance ---------- */
+const bvPlot=new ML.Plot('#bvPlot',{equal:false});
+function drawBV(){ const P=ML.palette(), xs=S.pts.map(p=>p[0]), ys=S.pts.map(p=>p[1]), tr=[], te=[], maxD=Math.min(12, xs.length-2);
+  if(S.data.id==='adv' || !S.data.f){ // leave-one-out CV on real data
+    for(let d=1;d<=maxD;d++){ const m=fit(d,S.pen,S.lam); tr.push([d, xs.reduce((s,x,i)=>s+(ys[i]-m.f(x))**2,0)/xs.length]);
+      let cv=0; for(let i=0;i<xs.length;i++){ const rest=S.pts.filter((_,k)=>k!==i), mi=fit(d,S.pen,S.lam,rest); cv+=(ys[i]-mi.f(xs[i]))**2; } te.push([d,cv/xs.length]); }
+    $('#bvNote').innerHTML='Real data has no "fresh" sample, so the red curve is <b>leave-one-out cross-validation</b> error: refit without each point and predict it.'; }
+  else { const r=ML.rng(99), sTe=[]; const s=0.15+1.1*S.noise; for(let i=0;i<300;i++){ const x=-2.8+5.6*r(); let e=s*r.gauss(); if(S.data.id==='hetero') e*=(0.15+0.55*Math.abs(x)); sTe.push([x,S.data.f(x)+e]); }
+    for(let d=1;d<=maxD;d++){ const m=fit(d,S.pen,S.lam); tr.push([d, xs.reduce((s2,x,i)=>s2+(ys[i]-m.f(x))**2,0)/xs.length]); te.push([d, sTe.reduce((s2,p)=>s2+(p[1]-m.f(p[0]))**2,0)/sTe.length]); }
+    const best=te.reduce((a,b)=>b[1]<a[1]?b:a); $('#bvNote').innerHTML=`On this sample the test error is lowest at <b>degree ${best[0]}</b> (MSE ${fmt(best[1],3)}). The noise floor is \\(\\sigma^2\\approx${fmt(s*s,3)}\\): no model can go below it on average.`; ML.renderMath($('#bvNote')); }
+  const hi=Math.max(...tr.map(p=>p[1]))*1.15+3*Math.min(...te.map(p=>p[1]));
+  ML.chart(bvPlot,[{pts:tr,color:P.c3,dots:true,width:2.5},{pts:te,color:P.c2,dots:true,width:2.5}],{y0:0,y1:hi,vline:S.deg,xl:'polynomial degree'}); }
+
+/* ---------- shrinkage geometry ---------- */
+const geo=new ML.Plot('#geoPlot',{bounds:{x0:-3.2,x1:3.2,y0:-3.2,y1:3.2}}); const GE={ols:[1.9,0.8], dragging:false};
+const Aq=[[1.0,0.55],[0.55,0.8]]; // RSS(β) ∝ (β-ols)^T A (β-ols)
+function qform(b){ const d=[b[0]-GE.ols[0],b[1]-GE.ols[1]]; return d[0]*(Aq[0][0]*d[0]+Aq[0][1]*d[1])+d[1]*(Aq[1][0]*d[0]+Aq[1][1]*d[1]); }
+function projL2(b,t){ const r=Math.hypot(b[0],b[1]); return r<=t?b:[b[0]*t/r,b[1]*t/r]; }
+function projL1(v,t){ const a=v.map(Math.abs); if(a[0]+a[1]<=t) return v; const u=a.slice().sort((x,y)=>y-x); let th=0; // projection onto L1 ball
+  for(let k=1;k<=2;k++){ const s=u.slice(0,k).reduce((p,q)=>p+q,0); const th2=(s-t)/k; if(u[k-1]>th2) th=th2; } return v.map(x=>Math.sign(x)*Math.max(0,Math.abs(x)-th)); }
+function constrained(proj,t){ let b=proj(GE.ols.slice(),t); for(let it=0;it<4000;it++){ const g=[2*(Aq[0][0]*(b[0]-GE.ols[0])+Aq[0][1]*(b[1]-GE.ols[1])), 2*(Aq[1][0]*(b[0]-GE.ols[0])+Aq[1][1]*(b[1]-GE.ols[1]))]; b=proj([b[0]-0.2*g[0],b[1]-0.2*g[1]],t); } return b; }
+function drawGeo(){ const P=ML.palette(), c=geo.ctx, t=+$('#budget').value; geo.clear(); geo.grid(1);
+  const r2=constrained(projL2,t), r1=constrained(projL1,t);
+  [qform(r2),qform(r1)].forEach((lv,k)=>geo.contour(b=>qform([b[0],b[1]])-lv, 0, {color:k?P.c4:P.c3, width:1.6, alpha:.9, dash:[5,4]}));
+  for(let L=1;L<=5;L++) geo.contour(b=>qform(b), L*L*0.12, {color:P.muted, width:1, alpha:.35});
+  c.save(); c.fillStyle=P.c3; c.globalAlpha=.16; c.beginPath(); c.arc(geo.X(0),geo.Y(0),geo.X(t)-geo.X(0),0,7); c.fill(); c.globalAlpha=1; c.strokeStyle=P.c3; c.lineWidth=2; c.stroke();
+  c.fillStyle=P.c4; c.globalAlpha=.16; c.beginPath(); c.moveTo(geo.X(t),geo.Y(0)); c.lineTo(geo.X(0),geo.Y(t)); c.lineTo(geo.X(-t),geo.Y(0)); c.lineTo(geo.X(0),geo.Y(-t)); c.closePath(); c.fill(); c.globalAlpha=1; c.strokeStyle=P.c4; c.stroke(); c.restore();
+  const dot=(b,col,lab)=>{ c.save(); c.fillStyle=col; c.strokeStyle=P.bg; c.lineWidth=2; c.beginPath(); c.arc(geo.X(b[0]),geo.Y(b[1]),6.5,0,7); c.fill(); c.stroke(); c.restore(); geo.text(lab,b[0],b[1],{dx:9,dy:-8,color:col,halo:true}); };
+  dot(r2,P.c3,'ridge'); dot(r1,P.c4,'lasso');
+  const ox=geo.X(GE.ols[0]), oy=geo.Y(GE.ols[1]); c.save(); c.fillStyle=P.star; c.strokeStyle=P.ink; c.beginPath(); for(let k=0;k<10;k++){ const r=k%2?4.5:10, a=-Math.PI/2+k*Math.PI/5; c.lineTo(ox+r*Math.cos(a),oy+r*Math.sin(a)); } c.closePath(); c.fill(); c.stroke(); c.restore();
+  geo.text('OLS (drag me)',GE.ols[0],GE.ols[1],{dx:12,dy:4,color:P.ink,halo:true}); geo.text('β₁',3.0,0,{dy:-6,color:P.muted}); geo.text('β₂',0,3.0,{dx:6,color:P.muted});
+  $('#geoStats').innerHTML=[['c3',`(${fmt(r2[0],2)}, ${fmt(r2[1],2)})`,'ridge β'],['c4',`(${fmt(r1[0],2)}, ${fmt(r1[1],2)})`,'lasso β'],['c5',[r1[0],r1[1]].filter(v=>Math.abs(v)<1e-6).length,'lasso zeros']]
+    .map(([c2,v,l])=>`<div class="stat ${c2}"><b style="font-size:15px">${v}</b><span>${l}</span></div>`).join(''); }
+geo.pointer({down(x,y){ GE.ols=[x,y]; drawGeo(); }, move(x,y){ GE.ols=[x,y]; drawGeo(); }});
+ML.bindRange('budget', drawGeo, v=>v.toFixed(2));
+
+/* ---------- coefficient paths ---------- */
+const pR=new ML.Plot('#pathRidge',{equal:false}), pL=new ML.Plot('#pathLasso',{equal:false});
+function drawPaths(){ const P=ML.palette(), d=Math.max(S.deg,6); $('#pathDeg').textContent=d; const lams=[]; for(let e=-4;e<=1.5001;e+=0.1) lams.push(Math.pow(10,e));
+  ['ridge','lasso'].forEach((pen,k)=>{ const W=lams.map(l=>fit(d,pen,l).w); const series=[]; for(let j=0;j<d;j++) series.push({pts:lams.map((l,i)=>[l,W[i][j]]),color:ML.SERIES[j%ML.SERIES.length],width:2});
+    ML.chart(k?pL:pR, series, {logx:true, vline:S.lam, xl:'λ'}); }); }
+
+/* ---------- wiring ---------- */
+let raf=0; function scheduleAll(){ if(raf) return; raf=requestAnimationFrame(()=>{ raf=0; drawFit(); }); clearTimeout(scheduleAll.t); scheduleAll.t=setTimeout(()=>{ gdReset(true); drawBV(); drawPaths(); }, 120); }
+function full(){ load(); drawFit(); gdReset(false); drawBV(); drawPaths(); drawGeo(); }
+sel.onchange=()=>{ S.ds=sel.value; full(); };
+ML.bindRange('nPts',v=>{ S.n=v; full(); });
+ML.bindRange('noise',v=>{ S.noise=v; full(); }, v=>v.toFixed(2));
+ML.bindRange('deg',v=>{ S.deg=v; scheduleAll(); });
+ML.bindRange('lam',v=>{ S.lam=Math.pow(10,v); scheduleAll(); }, v=>Math.pow(10,v).toPrecision(2));
+S.lam=Math.pow(10,+$('#lam').value);
+ML.bindSeg('penSeg',v=>{ S.pen=v; scheduleAll(); });
+$('#showSq').onchange=$('#showTrue').onchange=drawFit;
+$('#resample').onclick=()=>{ S.seed++; full(); };
+$('#reset').onclick=()=>full();
+fitPlot.onResize=drawFit; gdPlot.onResize=()=>GS&&drawGD(); gdLoss.onResize=()=>GS&&drawGD(); bvPlot.onResize=drawBV; geo.onResize=drawGeo; pR.onResize=pL.onResize=drawPaths;
+ML.onTheme(full);
+full();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Causal inference & uplift: A/B tests, propensity scores, difference-in-differences, uplift models</title>
+<meta name="description" content="What did the action actually cause? Simpson's paradox, A/B-test sample size and the false positives from peeking, propensity scores with weighting and matching, difference-in-differences and parallel trends, and uplift models judged by Qini curves, all on simulated data where the true effect is known.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<style>
+.src{font-size:12.5px;color:var(--muted);margin:10px 0 0;border-left:3px solid var(--line);padding-left:10px}
+.src a{color:inherit;text-decoration:underline;text-decoration-color:var(--line)}
+.ci-quad{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0;font-size:12.5px}
+.ci-quad div{border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--soft);line-height:1.45}
+.ci-quad b{display:block}
+</style>
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Applied ML</p>
+  <h1>Causal inference: <span class="grad">what did the action actually cause?</span></h1>
+  <p class="lede">Prediction asks what will happen. Decisions ask what will happen <i>if we act</i>: if we send this discount, change this price, ship this feature. Those are different questions, and data collected without an experiment can answer the second one badly while answering the first one well. This page shows why, then works through the tools: randomised A/B tests and how to size them, propensity scores when you cannot randomise, difference-in-differences for policies that hit one group at a time, and uplift models that find who responds to a treatment. Every lab runs on simulated data whose true effect we know, so you can see each method hit or miss it.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#simpson">1 · Simpson's paradox</a><a href="#ab">2 · A/B tests</a><a href="#ps">3 · Propensity scores</a><a href="#did">4 · Difference-in-differences</a><a href="#uplift">5 · Uplift</a><a href="#py">6 · Python</a><a href="#credits">7 · Sources &amp; credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is causal inference, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>Customers who got a discount spent more. Did the discount cause it, or did we give discounts to customers who were going to spend more anyway? A model trained on this data will happily predict that discounted customers spend more, and still tell you nothing about what a discount <i>does</i>. The variable that drove both the treatment and the outcome (here, how engaged the customer already was) is a <a class="term" data-t="confounder">confounder</a>.</p>
+      <h3>The idea</h3><p>Write down what each person's outcome would have been under each choice, their <a class="term" data-t="potential-outcomes">potential outcomes</a> \(Y(1)\) and \(Y(0)\). The effect for that person is \(Y(1)-Y(0)\), but we only ever see one of the two: this is the fundamental problem of causal inference. We can still estimate the <b>average</b> effect, either by randomising who gets treated (an experiment) or, without randomisation, by comparing like with like under assumptions we must state and defend.</p>
+      <h3>How it works</h3><ol class="steps2"><li>State the question as a contrast: effect of T on Y, for whom.</li><li>Randomise if you can: an <a class="term" data-t="ab-test">A/B test</a> makes the groups comparable by design.</li><li>If not, adjust for confounders: regression, <a class="term" data-t="propensity-score">propensity scores</a>, or a natural experiment such as <a class="term" data-t="diff-in-diff">difference-in-differences</a>.</li><li>Check the assumptions (overlap, parallel trends) with plots, not hope.</li><li>For targeting, estimate how the effect varies: <a class="term" data-t="uplift-modelling">uplift</a>.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Hospitals with the best surgeons often have higher death rates, because the hardest cases are sent to them. Comparing raw death rates would tell you to avoid the best surgeons. Comparing patients of the same severity across hospitals gives the right answer. Causal inference is the discipline of making that “same severity” comparison carefully, and of knowing when it cannot be made.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Answering “what if we do X?”, the question decisions need</li><li>Experiments give unbiased answers with honest error bars</li><li>Uplift targets only people the treatment actually changes</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Unmeasured confounders cannot be adjusted for from data alone</li><li>Peeking at A/B tests inflates false positives</li><li>Assumptions (overlap, parallel trends) can fail quietly</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="potential-outcomes">Potential outcomes</a><a class="term" data-t="confounder">Confounder</a><a class="term" data-t="ate">ATE</a><a class="term" data-t="simpsons-paradox">Simpson's paradox</a><a class="term" data-t="ab-test">A/B test</a><a class="term" data-t="power">Power</a><a class="term" data-t="mde">MDE</a><a class="term" data-t="peeking">Peeking</a><a class="term" data-t="propensity-score">Propensity score</a><a class="term" data-t="ipw">IPW</a><a class="term" data-t="diff-in-diff">Diff-in-diff</a><a class="term" data-t="parallel-trends">Parallel trends</a><a class="term" data-t="uplift-modelling">Uplift</a><a class="term" data-t="qini-curve">Qini curve</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. Hypothesis tests and p-values are explained in <a href="../../math/inference/">statistical inference</a>; for pricing, see how this connects to the <a href="../glm-studio/">GLM Pricing Studio</a> in section 5.</p>
+    </div>
+  </div>
+</section>
+
+<section id="simpson" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Simpson's paradox: the same data, two answers</h2>
+    <p class="sub">Two treatments for kidney stones. Treatment A is better for small stones <i>and</i> for large stones. Change how doctors allocate hard cases and watch the pooled comparison flip.</p>
+    <div class="ctl"><label for="spA"><span>Share of large-stone patients given A</span><output id="spAOut"></output></label><input type="range" id="spA" min="0.1" max="0.9" step="0.05" value="0.77"></div>
+    <div class="plot pe-vis" id="spBars" style="padding:10px 12px"></div>
+    <div class="stats" id="spStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The numbers are modelled on a famous 1986 study of kidney-stone treatments: within each stone size, open surgery (A) succeeded more often than the less invasive treatment (B), yet over all patients B looked better. The reason is allocation. Large stones are harder to treat, and doctors gave the hard cases to A. Stone size affects both which treatment you get and whether it works: it is a <a class="term" data-t="confounder">confounder</a>.</p>
+      <p>The pooled success rate of A is a weighted average of its within-group rates, with weights set by who got A:</p>
+      <div class="mathbox c1">$$P(Y{=}1\mid A)=\sum_{s}P(Y{=}1\mid A,s)\,P(s\mid A).$$</div>
+      <p>If A's patients are mostly large-stone cases, A's average is pulled towards the lower large-stone rate, whatever A's quality. The fix is to compare within strata and then average with the <b>same</b> weights for both treatments, the population's mix \(P(s)\). This is adjustment (or standardisation), and it estimates the average effect of switching everyone from B to A:</p>
+      <div class="mathbox c1">$$\text{ATE}=\sum_s\big[P(Y{=}1\mid A,s)-P(Y{=}1\mid B,s)\big]\,P(s).$$</div>
+      <p>Which answer is right depends on the causal story, not on the numbers. Here severity causes the treatment choice, so we adjust for it. If instead the variable were caused <i>by</i> the treatment (say, a side effect), adjusting for it would be a mistake. Data cannot tell these stories apart; a diagram of what causes what can.</p>
+      <details class="deeper"><summary>Going deeper: causal diagrams and the back-door criterion</summary><div>
+        <p>A causal diagram (DAG) draws an arrow from every cause to its effect: size → treatment, size → success, treatment → success. A <b>back-door path</b> is a path from treatment to outcome that starts with an arrow into the treatment (treatment ← size → success). Pearl's back-door criterion says: adjust for a set of variables that blocks every back-door path and contains no descendant of the treatment, and the adjusted comparison is causal. Here, adjusting for size does exactly that.</p>
+      </div></details>
+      <p class="src">Adapted from: Charig et al., Comparison of treatment of renal calculi (BMJ, 1986), via Julious and Mullee (1994); Pearl, Glymour and Jewell, <i>Causal Inference in Statistics: A Primer</i> (2016), ch. 1 and 3.</p>
+    </div>
+  </div>
+</section>
+
+<section id="ab" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>A/B tests: how many users, and why not to peek</h2>
+    <p class="sub">Size a test for a conversion rate, then run 2,000 simulated A/A tests (no real difference) and stop each one the first time it looks significant.</p>
+    <div class="ctl"><label for="abP"><span>Baseline conversion rate</span><output id="abPOut"></output></label><input type="range" id="abP" min="0.01" max="0.5" step="0.01" value="0.1"></div>
+    <div class="ctl"><label for="abM"><span>Smallest lift worth detecting (relative)</span><output id="abMOut"></output></label><input type="range" id="abM" min="0.02" max="0.5" step="0.01" value="0.1"></div>
+    <div class="plot wide" id="abPlot"></div>
+    <div class="stats" id="abStats"></div>
+    <div class="ctl"><label for="abK"><span>Times you check the result before the end</span><output id="abKOut"></output></label><input type="range" id="abK" min="1" max="50" step="1" value="10"></div>
+    <div class="plot wide" id="abPeek"></div>
+    <div class="stats" id="abPStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Randomisation is the gold standard because it breaks every arrow into the treatment: a coin decides who sees version B, so nothing about the users can be related to which version they got, measured or not. The difference in average outcomes is then an unbiased estimate of the <a class="term" data-t="ate">average treatment effect</a>. What remains is noise, and the question is how many users you need to see through it.</p>
+      <p>For conversion rates \(p_0\) (control) and \(p_1=p_0(1+\text{lift})\), a two-sided test at level \(\alpha\) with <a class="term" data-t="power">power</a> \(1-\beta\) needs about</p>
+      <div class="mathbox c1">$$n\ \text{per arm}\approx\frac{\Big(z_{1-\alpha/2}\sqrt{2\bar p(1-\bar p)}+z_{1-\beta}\sqrt{p_0(1-p_0)+p_1(1-p_1)}\Big)^2}{(p_1-p_0)^2},\quad \bar p=\tfrac{p_0+p_1}{2}.$$</div>
+      <p>The lift you choose is the <a class="term" data-t="mde">minimum detectable effect</a>. Because it is squared in the denominator, halving it quadruples the sample. Small baselines are expensive too: a 10% lift on a 1% conversion rate needs far more users than on 20%.</p>
+      <p>The second chart is the most common way A/B tests go wrong. A p-value is valid for one look at a sample size fixed in advance. If you check every day and stop as soon as \(p&lt;0.05\), you get many chances for noise to cross the line, and the false positive rate climbs far above 5%. This is <a class="term" data-t="peeking">peeking</a>. Each grey path is one A/A test's z-statistic over time; red ones crossed ±1.96 at some check.</p>
+      <details class="deeper"><summary>Going deeper: sequential tests, CUPED and the guardrails</summary><div>
+        <p>If you must look early, use a method designed for it: group-sequential boundaries (O'Brien–Fleming spend little α early and most at the end), or always-valid p-values and confidence sequences, which stay correct however often you look. <b>CUPED</b> reduces variance, and so sample size, by adjusting each user's outcome for their pre-experiment value of the same metric. Also check the <b>sample ratio</b> (a 50/50 split that comes back 48/52 signals a bug), and watch guardrail metrics such as latency and unsubscribes, not just the one you hope to move.</p>
+      </div></details>
+      <p class="src">Adapted from: Kohavi, Tang and Xu, <i>Trustworthy Online Controlled Experiments</i> (2020), ch. 2, 17 and 22; Johari et al., <a href="https://arxiv.org/abs/1512.04922" target="_blank" rel="noopener">Always valid inference</a> (2015); Deng et al., CUPED (WSDM 2013).</p>
+    </div>
+  </div>
+</section>
+
+<section id="ps" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Propensity scores: comparing like with like</h2>
+    <p class="sub">Observational data: more engaged customers are more likely to get a coupon, and spend more anyway. The true effect of the coupon is +1.0. See how far each estimate lands from it.</p>
+    <div class="ctl"><label for="psG"><span>Strength of confounding</span><output id="psGOut"></output></label><input type="range" id="psG" min="0" max="3" step="0.1" value="1.5"></div>
+    <div class="ctl"><label for="psN"><span>Customers</span><output id="psNOut"></output></label><input type="range" id="psN" min="200" max="5000" step="100" value="2000"></div>
+    <div class="row" style="margin:6px 0"><button class="btn" id="psNew">New sample</button></div>
+    <div class="plot wide" id="psHist"></div>
+    <div class="plot pe-vis" id="psBars" style="padding:10px 12px"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Without randomisation, the treated and untreated groups differ before treatment. If we have measured every confounder \(X\), we can compare them within groups that share the same \(X\). With many covariates that becomes impossible directly, but Rosenbaum and Rubin showed a single number is enough: the <a class="term" data-t="propensity-score">propensity score</a>, each unit's probability of being treated given its covariates,</p>
+      <div class="mathbox c1">$$e(x)=P(T=1\mid X=x).$$</div>
+      <p>If treatment is as good as random once \(X\) is known (no unmeasured confounders) and every kind of unit had some chance of either choice (<b>overlap</b>: \(0&lt;e(x)&lt;1\)), then comparing treated and untreated units with the same \(e(x)\) is like comparing within a small randomised experiment. Two ways to use it:</p>
+      <ul><li><b>Matching</b>: pair each treated unit with the untreated unit whose score is closest, and average the differences.</li><li><a class="term" data-t="ipw">Inverse probability weighting</a>: weight each unit by one over the probability of the treatment it actually got, which builds a pseudo-population in which treatment no longer depends on \(X\):</li></ul>
+      <div class="mathbox c1">$$\widehat{\text{ATE}}_{\text{IPW}}=\frac{\sum_i T_iY_i/\hat e_i}{\sum_i T_i/\hat e_i}-\frac{\sum_i (1-T_i)Y_i/(1-\hat e_i)}{\sum_i (1-T_i)/(1-\hat e_i)}$$</div>
+      <div class="algo" data-anim="ipw"><h5 class="algo-h">Algorithm: inverse probability weighting</h5><ol>
+        <li><span class="kw">input</span> covariates \(X\), treatment \(T\), outcome \(Y\)</li>
+        <li>fit \(\hat e(x)\), e.g. logistic regression of \(T\) on \(X\)</li>
+        <li>check overlap: histograms of \(\hat e\) for treated and control; trim extremes</li>
+        <li>weights \(w_i\leftarrow T_i/\hat e_i+(1-T_i)/(1-\hat e_i)\)</li>
+        <li>check balance: weighted means of \(X\) should match across groups</li>
+        <li><span class="kw">return</span> weighted mean of \(Y\) for treated − weighted mean for control</li>
+      </ol></div>
+      <p>Raise the confounding in the lab: the naive difference drifts far from +1, while IPW and matching stay close, until the score histograms stop overlapping and a few units with tiny \(\hat e\) carry enormous weights. Propensity methods fix measured confounding only; nothing on this page can adjust for a confounder you did not record.</p>
+      <details class="deeper"><summary>Going deeper: doubly robust estimators and double ML</summary><div>
+        <p>A <b>doubly robust</b> (AIPW) estimator combines an outcome model \(\hat\mu_t(x)\) with the propensity model and is consistent if either one is right. <b>Double/debiased machine learning</b> (Chernozhukov et al., 2018) fits both with flexible ML models using cross-fitting, then estimates the effect from the residuals, which keeps valid confidence intervals even when the nuisance models are random forests or boosted trees.</p>
+      </div></details>
+      <p class="src">Adapted from: Rosenbaum and Rubin, The central role of the propensity score (Biometrika, 1983); Hernán and Robins, <a href="https://miguelhernan.org/whatifbook" target="_blank" rel="noopener"><i>Causal Inference: What If</i></a> (2020), ch. 12–15.</p>
+    </div>
+  </div>
+</section>
+
+<section id="did" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Difference-in-differences</h2>
+    <p class="sub">A new policy starts in one region in month 7; a similar region does not get it. Set the true effect and how far the regions' trends differ, and see what diff-in-diff recovers.</p>
+    <div class="plot wide" id="didPlot"></div>
+    <div class="ctl"><label for="didE"><span>True effect of the policy</span><output id="didEOut"></output></label><input type="range" id="didE" min="-3" max="5" step="0.5" value="3"></div>
+    <div class="ctl"><label for="didT"><span>Extra monthly trend in the treated region</span><output id="didTOut"></output></label><input type="range" id="didT" min="-0.6" max="0.6" step="0.05" value="0"></div>
+    <div class="stats" id="didStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Many changes cannot be randomised per user: a law passes in one state, a store layout changes in one city. A before-and-after comparison in the treated group mixes the effect with everything else that changed over time. A comparison between groups after the change mixes it with pre-existing differences. <a class="term" data-t="diff-in-diff">Difference-in-differences</a> subtracts both:</p>
+      <div class="mathbox c1">$$\hat\tau_{\text{DiD}}=\big(\bar Y_{\text{treated,after}}-\bar Y_{\text{treated,before}}\big)-\big(\bar Y_{\text{control,after}}-\bar Y_{\text{control,before}}\big).$$</div>
+      <p>The control group's change stands in for what would have happened to the treated group without the policy (the dashed line). That only works under <a class="term" data-t="parallel-trends">parallel trends</a>: without treatment, both groups would have moved by the same amount. Levels may differ; trends may not. Push the trend slider and the estimate absorbs the trend gap as if it were effect. The usual check is to plot the months before the change and see that the lines run parallel, as you can in the lab.</p>
+      <p>In regression form, with a treated-group dummy \(G\) and an after dummy \(A\), \(Y=\beta_0+\beta_1G+\beta_2A+\tau\,(G\times A)+\varepsilon\); the interaction coefficient is the DiD estimate, and the regression gives its standard error (cluster it by group).</p>
+      <details class="deeper"><summary>Going deeper: staggered adoption and synthetic control</summary><div>
+        <p>When groups adopt a policy at different times, the classic two-way fixed-effects regression can give badly weighted, even wrong-signed, answers if effects change over time (Goodman-Bacon, 2021); newer estimators (Callaway and Sant'Anna, 2021) compare each cohort only with not-yet-treated units. When there is a single treated unit and no obvious control, the <b>synthetic control</b> method builds one as a weighted mix of untreated units that tracks the treated unit before the change.</p>
+      </div></details>
+      <p class="src">Adapted from: Card and Krueger, Minimum wages and employment (AER, 1994); Angrist and Pischke, <i>Mostly Harmless Econometrics</i> (2009), ch. 5.</p>
+    </div>
+  </div>
+</section>
+
+<section id="uplift" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Uplift modelling and Qini curves</h2>
+    <p class="sub">A randomised campaign: half of 4,000 customers got an offer. The offer helps some, does nothing for others and annoys a few. Compare targeting by predicted uplift with targeting by predicted purchase.</p>
+    <div class="plot wide" id="upPlot"></div>
+    <div class="ctl"><label for="upS"><span>Share of “sleeping dogs” (offer backfires)</span><output id="upSOut"></output></label><input type="range" id="upS" min="0" max="0.4" step="0.05" value="0.15"></div>
+    <div class="row" style="margin:6px 0"><button class="btn" id="upNew">New campaign</button></div>
+    <div class="stats" id="upStats"></div>
+    <div class="ci-quad"><div><b style="color:var(--c5)">Persuadables</b>buy only if treated. Target these.</div><div><b style="color:var(--c3)">Sure things</b>buy either way. The offer is wasted money.</div><div><b style="color:var(--muted)">Lost causes</b>never buy. Wasted, but harmless.</div><div><b style="color:var(--c2)">Sleeping dogs</b>buy only if left alone. The offer costs you sales.</div></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>An A/B test gives one number, the average effect. Targeting needs the effect for each customer, the <b>conditional average treatment effect</b> \(\tau(x)=\mathbb E[Y(1)-Y(0)\mid X=x]\). A model of who will buy is not enough: the customers most likely to buy are often “sure things” who would have bought anyway. <a class="term" data-t="uplift-modelling">Uplift modelling</a> estimates the difference the offer makes.</p>
+      <p>The simplest version is the <b>two-model (T-learner)</b> approach: fit one model on the treated customers and one on the controls, and score each customer with the difference,</p>
+      <div class="mathbox c1">$$\hat\tau(x)=\hat P(Y{=}1\mid X{=}x,T{=}1)-\hat P(Y{=}1\mid X{=}x,T{=}0).$$</div>
+      <p>We can never check \(\hat\tau\) for one customer, but we can check a ranking on a group. Sort customers by predicted uplift, and for the top fraction compare purchases among the treated with purchases among the controls, scaled to the same size. That cumulative gain is the <a class="term" data-t="qini-curve">Qini curve</a>:</p>
+      <div class="mathbox c1">$$Q(k)=Y_T(k)-Y_C(k)\,\frac{N_T(k)}{N_C(k)},$$</div>
+      <p>where \(Y_T(k)\) and \(N_T(k)\) are the purchases and count of treated customers in the top \(k\), and likewise for controls. A random targeting order gives the straight diagonal; the area between a model's curve and the diagonal is the <b>Qini coefficient</b>. In the lab the uplift model's curve rises steeply (persuadables first) and then falls at the end (sleeping dogs last), so treating everyone is worse than treating the best part of the list. The purchase model mixes sure things and sleeping dogs into its top ranks.</p>
+      <div class="algo" data-anim="qini"><h5 class="algo-h">Algorithm: a Qini curve</h5><ol>
+        <li><span class="kw">input</span> randomised data \((x_i,T_i,Y_i)\), uplift scores \(\hat\tau(x_i)\)</li>
+        <li>sort customers by \(\hat\tau\), highest first</li>
+        <li><span class="kw">for</span> \(k=1,\dots,n\): count \(Y_T(k), N_T(k), Y_C(k), N_C(k)\) in the top \(k\)</li>
+        <li class="i1">\(Q(k)\leftarrow Y_T(k)-Y_C(k)\,N_T(k)/N_C(k)\)</li>
+        <li>draw the line from \((0,0)\) to \((n,Q(n))\) for random targeting</li>
+        <li><span class="kw">return</span> \(Q\) and its area above the line (Qini coefficient)</li>
+      </ol></div>
+      <p><b>Pricing is a causal question too.</b> The <a href="../glm-studio/">GLM Pricing Studio</a> fits how claims or conversions vary with customer features, which is prediction. How customers would respond to a <i>different</i> price is a treatment effect: estimating price elasticity from historical quotes is confounded by how prices were set, so it needs price tests or the adjustments above.</p>
+      <details class="deeper"><summary>Going deeper: S-, X- and R-learners, causal trees and forests</summary><div>
+        <p>The <b>S-learner</b> fits one model with \(T\) as a feature; it can shrink small effects to zero. The <b>X-learner</b> (Künzel et al., 2019) imputes individual effects from the other group's model and works well when one group is much smaller. <b>Causal trees</b> (Athey and Imbens, 2016) choose splits that maximise differences in treatment effect rather than in outcome, using separate samples to choose the splits and estimate the effects (“honest” trees); <b>causal forests</b> average many such trees and give confidence intervals for \(\tau(x)\). Libraries: EconML, CausalML, DoWhy and grf.</p>
+      </div></details>
+      <p class="src">Adapted from: Radcliffe, Using control groups to target on predicted lift (2007) for the Qini curve; Gutierrez and Gérardy, <a href="https://proceedings.mlr.press/v67/gutierrez17a.html" target="_blank" rel="noopener">Causal Inference and Uplift Modeling: A review of the literature</a> (2017); Athey and Imbens, <a href="https://www.pnas.org/doi/10.1073/pnas.1510489113" target="_blank" rel="noopener">Recursive partitioning for heterogeneous causal effects</a> (PNAS, 2016).</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+  <p class="sub">Sample size with statsmodels, inverse probability weighting with scikit-learn, difference-in-differences as a regression, and a two-model uplift with a Qini curve.</p>
+<pre class="code"><span class="c"># pip install numpy pandas scikit-learn statsmodels</span>
+<span class="k">import</span> numpy <span class="k">as</span> np, pandas <span class="k">as</span> pd
+<span class="k">import</span> statsmodels.formula.api <span class="k">as</span> smf
+<span class="k">from</span> statsmodels.stats.power <span class="k">import</span> NormalIndPower
+<span class="k">from</span> statsmodels.stats.proportion <span class="k">import</span> proportion_effectsize
+<span class="k">from</span> sklearn.linear_model <span class="k">import</span> LogisticRegression
+<span class="k">from</span> sklearn.ensemble <span class="k">import</span> GradientBoostingClassifier
+
+rng = np.random.default_rng(0)
+
+<span class="c"># ---- 1. A/B test: users per arm for 10% -> 11% at alpha 0.05, power 0.8 ----</span>
+es = <span class="f">proportion_effectsize</span>(0.11, 0.10)                       <span class="c"># Cohen's h</span>
+n = <span class="f">NormalIndPower</span>().solve_power(effect_size=es, alpha=0.05, power=0.8, ratio=1)
+<span class="f">print</span>(<span class="s">f"about {np.ceil(n):,.0f} users per arm"</span>)
+
+<span class="c"># ---- 2. Propensity scores and IPW on confounded data (true effect = 1) ----</span>
+N = 5000
+x = rng.normal(size=N)                                       <span class="c"># engagement: the confounder</span>
+t = rng.random(N) < 1 / (1 + np.exp(-1.5 * x))               <span class="c"># engaged customers get the coupon more often</span>
+y = 1 + 1.0 * t + 2 * x + rng.normal(size=N)
+<span class="f">print</span>(<span class="s">"naive difference:"</span>, y[t].mean() - y[~t].mean())       <span class="c"># biased upwards</span>
+
+e = <span class="f">LogisticRegression</span>().fit(x[:, <span class="k">None</span>], t).predict_proba(x[:, <span class="k">None</span>])[:, 1]
+e = np.clip(e, 0.01, 0.99)                                   <span class="c"># trim extreme scores</span>
+w1, w0 = t / e, (~t) / (1 - e)
+ate_ipw = (w1 * y).sum() / w1.sum() - (w0 * y).sum() / w0.sum()
+<span class="f">print</span>(<span class="s">"IPW estimate:"</span>, ate_ipw)
+
+<span class="c"># ---- 3. Difference-in-differences as a regression with an interaction ----</span>
+df = pd.DataFrame({<span class="s">"region"</span>: np.repeat([0, 1], 24), <span class="s">"month"</span>: np.tile(np.arange(24), 2)})
+df[<span class="s">"after"</span>] = (df.month >= 12).astype(int)
+df[<span class="s">"y"</span>] = 10 + 2 * df.region + 0.3 * df.month + 3 * df.region * df.after + rng.normal(0, 0.5, <span class="f">len</span>(df))
+did = smf.ols(<span class="s">"y ~ region * after"</span>, data=df).fit(cov_type=<span class="s">"cluster"</span>, cov_kwds={<span class="s">"groups"</span>: df.region})
+<span class="f">print</span>(<span class="s">"DiD effect:"</span>, did.params[<span class="s">"region:after"</span>])
+
+<span class="c"># ---- 4. Two-model uplift (T-learner) and a Qini curve on randomised data ----</span>
+X = rng.normal(size=(8000, 3)); T = rng.random(8000) < 0.5
+tau = 0.15 * (X[:, 0] > 0) - 0.10 * (X[:, 1] > 1)            <span class="c"># who is persuadable, who backfires</span>
+Y = rng.random(8000) < 0.10 + 0.05 * X[:, 2].clip(-1, 1) + tau * T
+m1 = <span class="f">GradientBoostingClassifier</span>().fit(X[T], Y[T])
+m0 = <span class="f">GradientBoostingClassifier</span>().fit(X[~T], Y[~T])
+uplift = m1.predict_proba(X)[:, 1] - m0.predict_proba(X)[:, 1]   <span class="c"># use held-out data in practice</span>
+
+order = np.argsort(-uplift)
+Yt, Tt = Y[order], T[order]
+nt, nc = np.cumsum(Tt), np.cumsum(~Tt)
+qini = np.cumsum(Yt &amp; Tt) - np.cumsum(Yt &amp; ~Tt) * nt / np.maximum(nc, 1)
+<span class="f">print</span>(<span class="s">"incremental buyers if we treat the top 30%:"</span>, qini[<span class="f">int</span>(0.3 * <span class="f">len</span>(qini))])
+</pre>
+  <p class="hint">For production work, DoWhy (modelling and refutation tests), EconML (double ML, causal forests) and CausalML (uplift learners and metrics) implement these methods with confidence intervals.</p>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">7</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page is written for this site in its own words, with its own simulations. The methods come from these sources:</p>
+    <ul>
+      <li>Neyman (1923) and Rubin (1974) for potential outcomes; Pearl, Glymour and Jewell, <i>Causal Inference in Statistics: A Primer</i> (2016).</li>
+      <li>Hernán and Robins, <a href="https://miguelhernan.org/whatifbook" target="_blank" rel="noopener"><i>Causal Inference: What If</i></a> (2020); Rosenbaum and Rubin (1983).</li>
+      <li>Kohavi, Tang and Xu, <i>Trustworthy Online Controlled Experiments</i> (2020); Johari et al., always-valid inference (2015).</li>
+      <li>Angrist and Pischke, <i>Mostly Harmless Econometrics</i> (2009); Card and Krueger (1994).</li>
+      <li>Radcliffe (2007); Gutierrez and Gérardy (2017); Athey and Imbens (2016); Künzel et al., meta-learners (PNAS, 2019).</li>
+      <li>Kidney-stone figures modelled on Charig et al. (BMJ, 1986). statsmodels and scikit-learn documentation, for the Python section.</li>
+    </ul>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"Why does randomising treatment remove confounding?","o":["It increases the sample size","A coin decides who is treated, so nothing about the units can be related to treatment","It makes the outcome binary","It removes measurement error"],"a":1,"e":"Randomisation breaks every arrow into the treatment, measured or unmeasured, so the groups are comparable in expectation."},
+{"q":"You halve the minimum detectable effect of an A/B test. Roughly how does the required sample size change?","o":["It halves","It stays the same","It doubles","It quadruples"],"a":3,"e":"n is proportional to 1/(p1 − p0)², so halving the difference multiplies n by about four."},
+{"q":"An analyst checks an A/A test every day and stops when p < 0.05. What happens to the false positive rate?","o":["It stays at 5%","It falls below 5%","It rises well above 5%","It becomes exactly 0"],"a":2,"e":"Each look is another chance for noise to cross the threshold, so repeated checking inflates the false positive rate."},
+{"q":"Which assumption does difference-in-differences rely on?","o":["Both groups have the same level of the outcome","Without treatment, both groups would have changed by the same amount (parallel trends)","Treatment was randomised","There are no time effects"],"a":1,"e":"Levels may differ; DiD needs the untreated trends to be parallel so the control group's change stands in for the treated group's counterfactual change."},
+{"q":"Why can targeting customers with the highest predicted purchase probability waste a marketing budget?","o":["Those customers never buy","Many of them are “sure things” who would buy without the offer","Purchase models are always wrong","It ignores the price"],"a":1,"e":"What matters is the change the offer makes, Y(1) − Y(0). Uplift models rank by that difference."}
+]</script>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../dl/assets/gen.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette();
+const pct=x=>(100*x).toFixed(Math.abs(x)<0.1&&x!==0?1:0)+'%';
+const erf=x=>{ const s=Math.sign(x); x=Math.abs(x); const t=1/(1+.3275911*x); return s*(1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-.284496736)*t+.254829592)*t*Math.exp(-x*x)); };
+const Phi=z=>.5*(1+erf(z/Math.SQRT2));
+const zq=p=>{ let lo=-8,hi=8; for(let i=0;i<60;i++){ const m=(lo+hi)/2; Phi(m)<p?lo=m:hi=m; } return (lo+hi)/2; };
+const gauss=r=>{ let u=0; while(!u) u=r(); return Math.sqrt(-2*Math.log(u))*Math.cos(6.283185*r()); };
+
+/* ---------- 1. Simpson ---------- */
+const RATE={A:{s:.93,l:.73},B:{s:.87,l:.69}}, NS=357, NL=343;
+function drawSp(){ const P=P0(), a=+$('#spA').value;
+  /* a = share of large-stone patients given A; small-stone patients get A with share 1-a (doctors keep A for hard cases) */
+  const nAL=NL*a, nBL=NL*(1-a), nAS=NS*(1-a), nBS=NS*a;
+  const pA=(nAS*RATE.A.s+nAL*RATE.A.l)/(nAS+nAL), pB=(nBS*RATE.B.s+nBL*RATE.B.l)/(nBS+nBL);
+  const ps=NS/(NS+NL), ate=(RATE.A.s-RATE.B.s)*ps+(RATE.A.l-RATE.B.l)*(1-ps);
+  $('#spBars').innerHTML=NLP.bars([{label:'A, small stones',value:RATE.A.s,color:P.c1},{label:'B, small stones',value:RATE.B.s,color:P.c4},{label:'A, large stones',value:RATE.A.l,color:P.c1},{label:'B, large stones',value:RATE.B.l,color:P.c4},{label:'A, all patients (pooled)',value:pA,color:pA>pB?P.c5:P.c2},{label:'B, all patients (pooled)',value:pB,color:pB>pA?P.c5:P.c2}],{max:1,lw:'minmax(140px,48%)',fmt:v=>(100*v).toFixed(1)+'%'});
+  GX.stats('#spStats',[[(pA-pB>=0?'+':'')+(100*(pA-pB)).toFixed(1)+' pts','pooled A − B',pA>pB?'c5':'c2'],[(ate>=0?'+':'')+(100*ate).toFixed(1)+' pts','adjusted A − B (true)','c5'],[Math.round(nAL)+' / '+Math.round(nAS+nAL),'large stones among A’s patients','c3']]); }
+ML.bindRange('spA',drawSp,v=>(+v).toFixed(2)); drawSp();
+
+/* ---------- 2. A/B tests ---------- */
+const abP=new ML.Plot('#abPlot',{equal:false}), pkP=new ML.Plot('#abPeek',{equal:false});
+function nNeed(p0,p1,a=.05,pw=.8){ const pb=(p0+p1)/2, za=zq(1-a/2), zb=zq(pw); return Math.pow(za*Math.sqrt(2*pb*(1-pb))+zb*Math.sqrt(p0*(1-p0)+p1*(1-p1)),2)/Math.pow(p1-p0,2); }
+function power(p0,p1,n,a=.05){ const pb=(p0+p1)/2, se0=Math.sqrt(2*pb*(1-pb)/n), se1=Math.sqrt((p0*(1-p0)+p1*(1-p1))/n), d=Math.abs(p1-p0), za=zq(1-a/2); return Phi((d-za*se0)/se1); }
+function drawAb(){ const P=P0(), p0=+$('#abP').value, m=+$('#abM').value, p1=Math.min(.99,p0*(1+m)), n=nNeed(p0,p1), xs=[];
+  const xmax=n*3; for(let i=1;i<=120;i++) xs.push(xmax*i/120);
+  GX.chart(abP,[{pts:xs.map(x=>[x,power(p0,p1,x)]),color:P.c1,width:2.5,label:'power at α = 0.05'},{pts:xs.map(x=>[x,power(p0,Math.min(.99,p0*(1+m/2)),x)]),color:P.c4,width:2,dash:[5,4],label:'if the true lift is half'}],{x0:0,x1:xmax,y0:0,y1:1,xl:'users per arm',hline:.8,vline:n,yfmt:v=>Math.round(v*100)+'%',xfmt:v=>GX.fmtN(v,0)});
+  GX.stats('#abStats',[[GX.fmtN(Math.ceil(n),1),'users per arm for 80% power','c1'],[(100*p0).toFixed(1)+'% → '+(100*p1).toFixed(2)+'%','control → treatment','c3'],[GX.fmtN(Math.ceil(nNeed(p0,Math.min(.99,p0*(1+m/2)))),1),'per arm for half the lift','c4']]); }
+let peekSeed=1;
+function drawPeek(){ const P=P0(), K=+$('#abK').value, r=ML.rng(peekSeed), sims=2000, steps=50; let fp=0, fpEnd=0; const show=[];
+  for(let s=0;s<sims;s++){ let S=0, hit=false; const path=[]; for(let t=1;t<=steps;t++){ S+=gauss(r); const z=S/Math.sqrt(t); if(s<40) path.push([t,z]);
+      const look=t===steps||(K>1&&t%Math.max(1,Math.round(steps/K))===0); if(look&&Math.abs(z)>1.96) hit=true; if(t===steps&&Math.abs(z)>1.96) fpEnd++; }
+    if(hit) fp++; if(s<40) show.push({path,hit}); }
+  GX.chart(pkP,show.map(o=>({pts:o.path,color:o.hit?P.c2:P.muted,width:o.hit?1.6:1,alpha:o.hit?.85:.35})).concat([{pts:[[1,1.96],[steps,1.96]],color:P.ink,width:1,dash:[4,4]},{pts:[[1,-1.96],[steps,-1.96]],color:P.ink,width:1,dash:[4,4]}]),{x0:1,x1:steps,y0:-4,y1:4,xl:'days of data (A/A test: no real difference)',legend:false});
+  GX.stats('#abPStats',[[pct(fp/sims),'false positives when stopping at the first p < 0.05','c2'],[pct(fpEnd/sims),'false positives with one look at the end','c5'],[String(K),'looks during the test','c3']]); }
+['abP','abM'].forEach(id=>ML.bindRange(id,drawAb,v=>(+v).toFixed(2))); ML.bindRange('abK',drawPeek); abP.onResize=drawAb; pkP.onResize=drawPeek; drawAb(); drawPeek();
+
+/* ---------- 3. propensity scores ---------- */
+const hP=new ML.Plot('#psHist',{equal:false}); let psSeed=11;
+function logit(xs,ts){ let a=0,b=0; for(let it=0;it<60;it++){ let g0=0,g1=0,h00=0,h01=0,h11=0; xs.forEach((x,i)=>{ const p=1/(1+Math.exp(-(a+b*x))), w=p*(1-p); g0+=ts[i]-p; g1+=(ts[i]-p)*x; h00+=w; h01+=w*x; h11+=w*x*x; });
+  const det=h00*h11-h01*h01; if(Math.abs(det)<1e-9) break; a+=(h11*g0-h01*g1)/det; b+=(-h01*g0+h00*g1)/det; } return x=>1/(1+Math.exp(-(a+b*x))); }
+function drawPs(){ const P=P0(), gam=+$('#psG').value, n=+$('#psN').value, r=ML.rng(psSeed);
+  const X=[],T=[],Y=[]; for(let i=0;i<n;i++){ const x=gauss(r), t=r()<1/(1+Math.exp(-gam*x))?1:0; X.push(x); T.push(t); Y.push(1+1.0*t+2*x+gauss(r)); }
+  const m=(arr,f)=>{ let s=0,c=0; arr.forEach((v,i)=>{ if(f(i)){ s+=v; c++; } }); return c?s/c:NaN; };
+  const naive=m(Y,i=>T[i])-m(Y,i=>!T[i]);
+  const e=logit(X,T), E=X.map(x=>Math.min(.99,Math.max(.01,e(x))));
+  let s1=0,w1=0,s0=0,w0=0; for(let i=0;i<n;i++){ if(T[i]){ s1+=Y[i]/E[i]; w1+=1/E[i]; } else { s0+=Y[i]/(1-E[i]); w0+=1/(1-E[i]); } } const ipw=s1/w1-s0/w0;
+  /* nearest-neighbour matching on e, ATE via matching both ways */
+  const ti=[],ci=[]; for(let i=0;i<n;i++) (T[i]?ti:ci).push(i); const srt=a=>a.slice().sort((p,q)=>E[p]-E[q]);
+  const nn=(pool,v)=>{ let lo=0,hi=pool.length-1; while(hi-lo>1){ const mid=(lo+hi)>>1; E[pool[mid]]<v?lo=mid:hi=mid; } return Math.abs(E[pool[lo]]-v)<Math.abs(E[pool[hi]]-v)?pool[lo]:pool[hi]; };
+  const cs=srt(ci), ts=srt(ti); let md=0; ti.forEach(i=>{ md+=Y[i]-Y[nn(cs,E[i])]; }); ci.forEach(i=>{ md+=Y[nn(ts,E[i])]-Y[i]; }); const match=md/n;
+  /* regression adjustment (correct linear model) */
+  const reg=(()=>{ let sx=0,st=0,sy=0,sxx=0,stt=0,sxt=0,sxy=0,sty=0; for(let i=0;i<n;i++){ sx+=X[i]; st+=T[i]; sy+=Y[i]; sxx+=X[i]*X[i]; stt+=T[i]; sxt+=X[i]*T[i]; sxy+=X[i]*Y[i]; sty+=T[i]*Y[i]; }
+    const A=[[n,sx,st],[sx,sxx,sxt],[st,sxt,stt]], b=[sy,sxy,sty]; for(let c=0;c<3;c++){ for(let r2=c+1;r2<3;r2++){ const f=A[r2][c]/A[c][c]; for(let k=c;k<3;k++) A[r2][k]-=f*A[c][k]; b[r2]-=f*b[c]; } } const z=[0,0,0]; for(let c=2;c>=0;c--){ let v=b[c]; for(let k=c+1;k<3;k++) v-=A[c][k]*z[k]; z[c]=v/A[c][c]; } return z[2]; })();
+  const bins=20, h1=Array(bins).fill(0), h0=Array(bins).fill(0); E.forEach((v,i)=>{ const b=Math.min(bins-1,Math.floor(v*bins)); (T[i]?h1:h0)[b]++; });
+  const tot1=ti.length||1, tot0=ci.length||1, pts=(h,t)=>h.flatMap((c,b)=>[[b/bins,c/t],[(b+1)/bins,c/t]]);
+  GX.chart(hP,[{pts:pts(h1,tot1),color:P.c1,width:2,fill:true,label:'treated'},{pts:pts(h0,tot0),color:P.c4,width:2,fill:true,label:'control'}],{x0:0,x1:1,y0:0,xl:'estimated propensity score ê(x)',yfmt:v=>Math.round(v*100)+'%'});
+  const est=[['Naive difference',naive,P.c2],['Regression on x',reg,P.c3],['IPW',ipw,P.c1],['Propensity matching',match,P.c4],['Truth',1,P.c5]];
+  $('#psBars').innerHTML=NLP.bars(est.map(([l,v,c])=>({label:l+'  ('+(v>=0?'+':'')+v.toFixed(2)+')',value:Math.max(0,v),color:c})),{max:Math.max(4,naive*1.05),lw:'minmax(150px,55%)',fmt:v=>v.toFixed(2)}); }
+ML.bindRange('psG',drawPs,v=>(+v).toFixed(1)); ML.bindRange('psN',drawPs); $('#psNew').onclick=()=>{ psSeed++; drawPs(); }; hP.onResize=drawPs; drawPs();
+
+/* ---------- 4. diff-in-diff ---------- */
+const dP=new ML.Plot('#didPlot',{equal:false}); const dN=ML.rng(4), noise=[...Array(24)].map(()=>gauss(dN)*.35);
+function drawDid(){ const P=P0(), eff=+$('#didE').value, tr=+$('#didT').value, M=[...Array(12)].map((_,i)=>i+1);
+  const C=M.map(t=>10+.4*t+noise[t-1]), Tr0=M.map(t=>13+(.4+tr)*t+noise[t+11]), Tr=Tr0.map((v,i)=>v+(M[i]>=7?eff:0));
+  const mean=(a,f)=>{ const v=a.filter((_,i)=>f(M[i])); return v.reduce((s,x)=>s+x,0)/v.length; };
+  const did=(mean(Tr,t=>t>=7)-mean(Tr,t=>t<7))-(mean(C,t=>t>=7)-mean(C,t=>t<7)), ba=mean(Tr,t=>t>=7)-mean(Tr,t=>t<7);
+  const cf=M.filter(t=>t>=6).map(t=>[t,Tr[5]+(C[t-1]-C[5])]);
+  GX.chart(dP,[{pts:M.map((t,i)=>[t,C[i]]),color:P.c4,width:2.5,dots:true,label:'control region'},{pts:M.map((t,i)=>[t,Tr[i]]),color:P.c1,width:2.5,dots:true,label:'treated region'},{pts:cf,color:P.c1,width:2,dash:[6,4],label:'DiD’s counterfactual'}],{x0:1,x1:12,xl:'month',vline:6.5});
+  GX.stats('#didStats',[[(did>=0?'+':'')+did.toFixed(2),'diff-in-diff estimate','c1'],[(eff>=0?'+':'')+eff.toFixed(2),'true effect','c5'],[(ba>=0?'+':'')+ba.toFixed(2),'naive before/after','c2']]); }
+ML.bindRange('didE',drawDid,v=>(+v).toFixed(1)); ML.bindRange('didT',drawDid,v=>(+v).toFixed(2)); dP.onResize=drawDid; drawDid();
+
+/* ---------- 5. uplift and Qini ---------- */
+const uP=new ML.Plot('#upPlot',{equal:false}); let upSeed=3;
+function fitLR(F,y,iters=250,lr=.5){ const d=F[0].length, w=Array(d).fill(0), m=Array(d).fill(0), v=Array(d).fill(0);
+  for(let it=1;it<=iters;it++){ const g=Array(d).fill(0); F.forEach((f,i)=>{ let z=0; for(let j=0;j<d;j++) z+=w[j]*f[j]; const p=1/(1+Math.exp(-z)); for(let j=0;j<d;j++) g[j]+=(p-y[i])*f[j]; });
+    for(let j=0;j<d;j++){ const gj=g[j]/F.length+1e-3*w[j]; m[j]=.9*m[j]+.1*gj; v[j]=.999*v[j]+.001*gj*gj; w[j]-=lr*.1*(m[j]/(1-Math.pow(.9,it)))/(Math.sqrt(v[j]/(1-Math.pow(.999,it)))+1e-8); } }
+  return f=>{ let z=0; for(let j=0;j<d;j++) z+=w[j]*f[j]; return 1/(1+Math.exp(-z)); }; }
+function drawUp(){ const P=P0(), sd=+$('#upS').value, r=ML.rng(upSeed), n=4000, D=[];
+  const feat=(a,b)=>[1,a,b,a*a,b*b,a*b];
+  for(let i=0;i<n;i++){ const a=gauss(r), b=gauss(r), t=r()<.5?1:0;
+    /* type from features: persuadables where a>0.3, sleeping dogs where b>q, sure things where a<-0.5&&b<0 */
+    const q=zq(1-sd), type=b>q&&sd>0?'dog':a>.3?'pers':(a<-.5&&b<0)?'sure':'lost';
+    const p0={pers:.08,sure:.6,lost:.03,dog:.45}[type], p1={pers:.45,sure:.62,lost:.04,dog:.12}[type];
+    D.push({f:feat(a,b),t,y:r()<(t?p1:p0)?1:0,type}); }
+  const tr=D.filter((_,i)=>i%2===0), te=D.filter((_,i)=>i%2===1);
+  const m1=fitLR(tr.filter(d=>d.t).map(d=>d.f),tr.filter(d=>d.t).map(d=>d.y)), m0=fitLR(tr.filter(d=>!d.t).map(d=>d.f),tr.filter(d=>!d.t).map(d=>d.y));
+  const qini=score=>{ const s=te.map(d=>[score(d),d]).sort((a,b)=>b[0]-a[0]); let yt=0,yc=0,nt=0,nc=0; const out=[[0,0]]; s.forEach(([_,d],k)=>{ if(d.t){ nt++; yt+=d.y; } else { nc++; yc+=d.y; } out.push([(k+1)/s.length,yt-yc*(nc?nt/nc:0)]); }); return out; };
+  const qU=qini(d=>m1(d.f)-m0(d.f)), qR=qini(d=>m1(d.f)), qO=qini(d=>({pers:3,sure:1,lost:0,dog:-3})[d.type]+Math.random()*1e-3), end=qU[qU.length-1][1];
+  const area=q=>{ let a=0; for(let i=1;i<q.length;i++) a+=(q[i][0]-q[i-1][0])*((q[i][1]+q[i-1][1])/2-end*(q[i][0]+q[i-1][0])/2); return a; };
+  const best=qU.reduce((a,p)=>p[1]>a[1]?p:a,qU[0]);
+  GX.chart(uP,[{pts:qO,color:P.muted,width:1.5,dash:[3,3],label:'perfect knowledge'},{pts:qU,color:P.c5,width:2.5,label:'uplift model'},{pts:qR,color:P.c2,width:2.5,label:'purchase model'},{pts:[[0,0],[1,end]],color:P.ink,width:1.2,dash:[5,4],label:'random'}],{x0:0,x1:1,xl:'share of customers targeted, best first',yl:'extra buyers',xfmt:v=>Math.round(v*100)+'%'});
+  GX.stats('#upStats',[[area(qU).toFixed(1),'Qini area, uplift model','c5'],[area(qR).toFixed(1),'Qini area, purchase model','c2'],[pct(best[0]),'best share to target','c1'],['+'+best[1].toFixed(0)+' vs +'+end.toFixed(0),'extra buyers: best cut vs everyone','c3']]); }
+ML.bindRange('upS',drawUp,v=>(+v).toFixed(2)); $('#upNew').onclick=()=>{ upSeed++; drawUp(); }; uP.onResize=drawUp; drawUp();
+})();
+</script>
+<script>ML.nav('causal'); ML.renderMath(document.body);</script>
+</body>
+</html>

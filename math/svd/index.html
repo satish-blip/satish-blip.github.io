@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The singular value decomposition (SVD), explained interactively</title>
+<meta name="description" content="The SVD as rotate, stretch, rotate; where U, Σ and V come from; the best low-rank approximation demonstrated on an image; and how the SVD gives PCA, the pseudo-inverse, rank and the condition number.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-math">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Mathematical concepts &middot; Linear algebra</p>
+  <h1>The singular value <span class="grad">decomposition</span></h1>
+  <p class="lede">Eigenvectors only work for square matrices, and even then not always. The SVD works for every matrix, of any shape. It says that any linear map is a rotation, then a stretch along perpendicular axes, then another rotation. From that one statement come rank, the best low-rank approximation, PCA and the pseudo-inverse.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#geom">1 · Rotate, stretch, rotate</a><a href="#derive">2 · Where the pieces come from</a><a href="#lowrank">3 · Low-rank approximation</a><a href="#uses">4 · PCA, pseudo-inverse, conditioning</a><a href="#ml">5 · In ML</a><a href="#py">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is the SVD, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>Take a table of movie ratings: 1,000 users by 500 films. It has half a million numbers, yet it is far from random. People who like one action film tend to like others; some films please almost everyone. Intuitively, a handful of hidden "tastes" explain most of the table. The <a class="term" data-t="svd">SVD</a> finds those tastes and ranks them by importance.</p>
+      <p>Formally, every \(m\times n\) matrix can be written</p>
+      $$A=U\Sigma V^\top=\sum_{i=1}^{r}\sigma_i\,u_iv_i^\top ,$$
+      <p>a sum of simple rank-one pieces \(u_iv_i^\top\), each weighted by a <b>singular value</b> \(\sigma_1\ge\sigma_2\ge\dots\ge0\). Keep the first few pieces and you keep most of the matrix.</p>
+      <h3>How it works</h3>
+      <ol class="steps2"><li>\(V^\top\) rotates the input so that special perpendicular directions \(v_i\) line up with the axes.</li><li>\(\Sigma\) stretches axis \(i\) by \(\sigma_i\) (and drops or adds dimensions if the shape changes).</li><li>\(U\) rotates the result into place, sending axis \(i\) to direction \(u_i\).</li><li>Sort by \(\sigma_i\): the first terms carry most of what \(A\) does.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>A recipe card for any linear transformation, always with the same three steps: turn the dough, roll it out along two perpendicular directions by different amounts, turn the tray. Different matrices only differ in the angles and the rolling amounts.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Works for any matrix: rectangular, singular, anything</li><li>Gives the best possible rank-\(k\) approximation</li><li>Numerically the most reliable way to find rank and conditioning</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Costly for huge matrices: use truncated or randomised SVD</li><li>Signs of \(u_i, v_i\) are arbitrary (flip both together)</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="svd">SVD</a><a class="term" data-t="singular-value">Singular value</a><a class="term" data-t="orthogonal-matrix">Orthogonal matrix</a><a class="term" data-t="low-rank">Low-rank approximation</a><a class="term" data-t="rank">Rank</a><a class="term" data-t="pseudo-inverse">Pseudo-inverse</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="geom" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Rotate, stretch, rotate</h2>
+    <p class="sub">Slide through the three stages. The circle is every unit vector; the two arrows are \(v_1\) and \(v_2\) being carried along.</p>
+    <div class="plot sq" id="pG"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="gPlay">Play</button><span class="pos" id="gStage"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Apply any \(2\times2\) matrix to the unit circle and you get an ellipse (possibly a flat one). An ellipse has two perpendicular axes, a long one and a short one. Their lengths are the singular values \(\sigma_1\ge\sigma_2\), and their directions are \(u_1, u_2\). The unit vectors that land on those axes are \(v_1, v_2\), and they are perpendicular too. So</p>
+      <div class="mathbox c1">$$Av_1=\sigma_1u_1,\qquad Av_2=\sigma_2u_2$$ $$\Longleftrightarrow\quad AV=U\Sigma\quad\Longleftrightarrow\quad A=U\Sigma V^\top .$$</div>
+      <p>The last step uses \(V^{-1}=V^\top\), true for any matrix with orthonormal columns. Watch the stages: \(V^\top\) turns \(v_1, v_2\) onto the axes, \(\Sigma\) stretches the axes, \(U\) turns the result into the final ellipse.</p>
+      <div class="ctl"><label for="gs"><span>Stage: 0 start · 1 after \(V^\top\) · 2 after \(\Sigma V^\top\) · 3 after \(U\Sigma V^\top=A\)</span><output id="gsOut"></output></label><input type="range" id="gs" min="0" max="3" step="0.01" value="3"></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>\(A=\)</span><div id="gM"></div></div>
+      <div class="texout" id="gTex"></div>
+    </div>
+  </div>
+</section>
+
+<section id="derive" class="card">
+  <h2><span class="num">2</span>Where \(U\), \(\Sigma\) and \(V\) come from</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>The picture says the SVD exists in 2-D. Here is why it exists for every matrix, using only the <a href="../decompositions/#eigen">spectral theorem</a>.</p>
+      <ol class="derive">
+        <li><div class="eq">\(A^\top A\) is \(n\times n\), symmetric, and \(x^\top A^\top Ax=\|Ax\|^2\ge0\)</div><div class="why">So it has an orthonormal basis of eigenvectors \(v_i\) with eigenvalues \(\lambda_i\ge0\).</div></li>
+        <li><div class="eq">\(\sigma_i=\sqrt{\lambda_i},\qquad \|Av_i\|^2=v_i^\top A^\top Av_i=\lambda_i=\sigma_i^2\)</div><div class="why">The singular values are the square roots; \(\sigma_i\) is how much \(A\) stretches \(v_i\).</div></li>
+        <li><div class="eq">\(u_i=Av_i/\sigma_i\) (for \(\sigma_i&gt;0\))</div><div class="why">Define the output directions as the normalised images.</div></li>
+        <li><div class="eq">\(u_i\cdot u_j=\dfrac{v_i^\top A^\top Av_j}{\sigma_i\sigma_j}=\dfrac{\lambda_jv_i^\top v_j}{\sigma_i\sigma_j}=\begin{cases}1&amp;i=j\\0&amp;i\ne j\end{cases}\)</div><div class="why">The \(u_i\) are automatically orthonormal: perpendicular inputs land on perpendicular outputs.</div></li>
+        <li><div class="eq">\(AV=U\Sigma\;\Rightarrow\;A=U\Sigma V^\top\)</div><div class="why">That is steps 2 and 3 for every \(i\), stacked as columns.</div></li>
+      </ol>
+      <p>The number of nonzero \(\sigma_i\) is the <a class="term" data-t="rank">rank</a>. Numerically, "nonzero" means "above a small tolerance", which is how <code>matrix_rank</code> decides.</p>
+    </div>
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: SVD via the eigenvectors of \(A^\top A\) (teaching version)</h5><ol>
+        <li><span class="kw">input</span> \(A\) of size \(m\times n\)</li>
+        <li>\(G\leftarrow A^\top A\) <span class="cm">n×n, symmetric, positive semi-definite</span></li>
+        <li>\((\lambda_i, v_i)\leftarrow\) eigenpairs of \(G\), sorted so \(\lambda_1\ge\lambda_2\ge\dots\)</li>
+        <li><span class="kw">for</span> each \(i\) <span class="kw">do</span></li>
+        <li class="i1">\(\sigma_i\leftarrow\sqrt{\max(\lambda_i,0)}\)</li>
+        <li class="i1"><span class="kw">if</span> \(\sigma_i&gt;\varepsilon\) <span class="kw">then</span> \(u_i\leftarrow Av_i/\sigma_i\) <span class="kw">else</span> stop: rank \(=i-1\)</li>
+        <li><span class="kw">return</span> \(U=[u_i]\), \(\Sigma=\operatorname{diag}(\sigma_i)\), \(V=[v_i]\)</li>
+      </ol></div>
+      <p class="hint">This is how the demos on this page compute it. Production code (LAPACK's <code>gesdd</code>) never forms \(A^\top A\), because that squares the condition number. Instead it reduces \(A\) to a two-diagonal (bidiagonal) form with orthogonal transformations and iterates on that.</p>
+      <div class="ex"><b>Worked example</b>
+        <p>\(A=\begin{bmatrix}3&amp;0\\4&amp;5\end{bmatrix}\). Then \(A^\top A=\begin{bmatrix}25&amp;20\\20&amp;25\end{bmatrix}\), with eigenvalues 45 and 5 and eigenvectors \(\tfrac1{\sqrt2}(1,1)\) and \(\tfrac1{\sqrt2}(1,-1)\).</p>
+        <p>So \(\sigma_1=\sqrt{45}=3\sqrt5\approx6.71\) and \(\sigma_2=\sqrt5\approx2.24\). Also \(u_1=Av_1/\sigma_1=\tfrac{1}{\sqrt{10}}(1,3)\).</p>
+        <p>Check: \(\sigma_1\sigma_2=15=|\det A|\). The area scale is the product of the stretches.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="lowrank" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>The best low-rank approximation</h2>
+    <p class="sub">A 48×48 greyscale image is a 48×48 matrix. Keep only the first \(k\) terms of its SVD.</p>
+    <div class="grid2" style="gap:10px"><div><div class="hint">original</div><canvas id="imO" width="48" height="48" style="width:100%;image-rendering:pixelated;border:1px solid var(--line);border-radius:6px"></canvas></div><div><div class="hint" id="imKLab">rank k</div><canvas id="imK" width="48" height="48" style="width:100%;image-rendering:pixelated;border:1px solid var(--line);border-radius:6px"></canvas></div></div>
+    <div class="row" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px" id="imPre"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Write the SVD as a sum of rank-one layers and stop after \(k\) of them:</p>
+      <div class="mathbox c2">$$A_k=\sum_{i=1}^{k}\sigma_i\,u_iv_i^\top,\qquad \|A-A_k\|_F=\sqrt{\sigma_{k+1}^2+\dots+\sigma_r^2}.$$</div>
+      <p>Each layer \(u_iv_i^\top\) is an outer product: a column pattern times a row pattern, the simplest possible "image". The <b>Eckart–Young theorem</b> says no rank-\(k\) matrix is closer to \(A\) than \(A_k\) (in squared error, or in the largest-stretch norm). So truncating the SVD is not just a good compression, it is the optimal one.</p>
+      <p>Storage drops from \(mn\) numbers to \(k(m+n+1)\). Smooth images with large shapes have quickly falling singular values and compress well. Noise has flat singular values and does not.</p>
+      <div class="ctl"><label for="kr"><span>Rank \(k\)</span><output id="krOut"></output></label><input type="range" id="kr" min="1" max="48" step="1" value="4"></div>
+      <div class="plot short" id="pSv"></div>
+      <div class="stats" id="imStats" style="margin-top:8px"></div>
+    </div>
+  </div>
+</section>
+
+<section id="uses" class="card">
+  <h2><span class="num">4</span>What else the SVD gives you</h2>
+  <div class="grid3 prose">
+    <div><h3>PCA</h3><p>Centre the data matrix \(X\) (subtract each column's mean) and take its SVD, \(X=U\Sigma V^\top\). Then the covariance is \(\frac{1}{n-1}X^\top X=V\frac{\Sigma^2}{n-1}V^\top\). The principal directions are the columns of \(V\), the variances are \(\sigma_i^2/(n-1)\), and the projected coordinates are \(U\Sigma\). This is how <a href="../../ml/pca/">PCA</a> is computed in practice.</p></div>
+    <div><h3>Pseudo-inverse</h3><p>Invert what can be inverted: \(A^+=V\Sigma^+U^\top\), where \(\Sigma^+\) takes \(1/\sigma_i\) for each nonzero \(\sigma_i\) and leaves zeros alone. \(x=A^+b\) is the least-squares solution, and when there are many it is the one with the smallest \(\|x\|\). It works for any shape or rank.</p></div>
+    <div><h3>Rank and conditioning</h3><p>Rank = number of \(\sigma_i\) above a tolerance. Condition number \(\kappa=\sigma_1/\sigma_r\): the ratio of the longest to the shortest axis of the ellipse. A nearly flat ellipse means a nearly singular matrix, and errors get amplified by \(\kappa\).</p></div>
+  </div>
+  <details class="deeper"><summary>Going deeper: Eckart–Young, norms, and the link to eigenvalues</summary><div>
+    <p><b>Matrix norms from the SVD.</b> The spectral norm (largest stretch) is \(\|A\|_2=\sigma_1\). The Frobenius norm (square root of the sum of squared entries) is \(\|A\|_F=\sqrt{\sum_i\sigma_i^2}\), because orthogonal matrices do not change lengths. The nuclear norm \(\|A\|_*=\sum_i\sigma_i\) is to rank what the L1 norm is to the number of nonzero entries. It is the convex surrogate used in matrix completion (the Netflix-prize style recommender problem).</p>
+    <p><b>Eckart–Young, spectral version.</b> Let \(B\) have rank \(k\). Its null space has dimension \(n-k\), so it meets the \((k+1)\)-dimensional span of \(v_1,\dots,v_{k+1}\) in some unit vector \(w\). Then \(\|(A-B)w\|=\|Aw\|\ge\sigma_{k+1}\), so \(\|A-B\|_2\ge\sigma_{k+1}=\|A-A_k\|_2\). \(\square\)</p>
+    <p><b>Eigenvalues vs singular values.</b> For a symmetric positive semi-definite matrix they coincide. For a symmetric matrix \(\sigma_i=|\lambda_i|\). In general they differ: the shear \(\begin{bmatrix}1&1\\0&1\end{bmatrix}\) has both eigenvalues 1 but singular values \(\approx1.62\) and \(0.62\). Eigenvalues describe repeated application (\(A^k\)); singular values describe a single application (how much one step stretches). That is why exploding gradients are about the largest singular value of the weight matrix, while long-run stability is about its eigenvalues.</p>
+  </div></details>
+</section>
+
+<section id="ml" class="card">
+  <h2><span class="num">5</span>Where the SVD shows up in ML</h2>
+  <div class="grid3 prose">
+    <div><h3>LoRA</h3><p>Fine-tuning updates a weight matrix by \(\Delta W=BA\) of rank \(r\ll d\). The bet is that useful updates have quickly decaying singular values. See the <a href="../../dl/nlp/llm-adaptation/">LLM adaptation map</a>.</p></div>
+    <div><h3>Latent semantic analysis</h3><p>Take the SVD of a word–document count matrix and keep \(k\approx300\) components. Words used in similar documents land close together: an early form of <a href="../../dl/nlp/embeddings/">word embeddings</a>.</p></div>
+    <div><h3>Recommenders</h3><p>A user–item rating matrix is approximated as \(UV^\top\) with a few hidden factors per user and per item, the "tastes" from the opening example.</p></div>
+    <div><h3>Whitening and initialisation</h3><p>Orthogonal initialisation sets weight matrices to have all \(\sigma_i=1\), so signals neither explode nor vanish at the start of training.</p></div>
+    <div><h3>Spectral normalisation</h3><p>Dividing a layer's weights by \(\sigma_1\) caps how much the layer can stretch its input, which stabilises GAN training.</p></div>
+    <div><h3>Compression</h3><p>Large fully connected layers can be replaced by two thin ones from a truncated SVD, trading a little accuracy for big savings in memory.</p></div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python (NumPy)</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
+A = np.array([[<span class="s">3.</span>, <span class="s">0.</span>], [<span class="s">4.</span>, <span class="s">5.</span>]])
+U, s, Vt = np.linalg.svd(A)             <span class="c"># s = [6.708, 2.236]</span>
+np.allclose(U @ np.diag(s) @ Vt, A)
+img = np.random.rand(<span class="s">48</span>, <span class="s">48</span>)
+U, s, Vt = np.linalg.svd(img, full_matrices=<span class="k">False</span>)
+k = <span class="s">5</span>; img_k = U[:, :k] @ np.diag(s[:k]) @ Vt[:k]       <span class="c"># best rank-k approximation</span>
+err = np.sqrt((s[k:]**<span class="s">2</span>).sum())                  <span class="c"># == np.linalg.norm(img - img_k)</span>
+np.linalg.pinv(A)                       <span class="c"># pseudo-inverse V Σ⁺ Uᵀ</span>
+s[<span class="s">0</span>] / s[-<span class="s">1</span>], np.linalg.cond(A)               <span class="c"># condition number</span>
+<span class="k">from</span> sklearn.utils.extmath <span class="k">import</span> randomized_svd     <span class="c"># fast top-k SVD for big matrices</span></pre>
+</section>
+<p class="foot">Part of the <a href="../">Mathematical concepts</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script>
+(function(){
+const {$} = ML, LA=ML.LA;
+/* ---- 1. geometry ---- */
+const GA=[[1.6,1.1],[0.3,1.2]]; const pG=new ML.Plot('#pG',{bounds:{x0:-3,x1:3,y0:-3,y1:3}}); let st=3;
+MX.matInput('gM',GA,drawG);
+const rot=th=>[[Math.cos(th),-Math.sin(th)],[Math.sin(th),Math.cos(th)]];
+function svd2(){ const s=MX.svd(GA); let V=[[s.V[0][0],s.V[1][0]],[s.V[0][1],s.V[1][1]]], U=[[s.U[0][0],s.U[1][0]],[s.U[0][1],s.U[1][1]]], S=s.S.slice();
+  if(S[1]<1e-9){ const u=s.U[0]; U=[[u[0],-u[1]],[u[1],u[0]]]; }
+  /* make V and U proper rotations (det +1) where possible by flipping the second pair together */
+  if(LA.det2(V)<0){ V=[[V[0][0],-V[0][1]],[V[1][0],-V[1][1]]]; U=[[U[0][0],-U[0][1]],[U[1][0],-U[1][1]]]; }
+  return {U,S,V}; }
+function stageMat(t){ const {U,S,V}=svd2(), thV=Math.atan2(V[1][0],V[0][0]); const detU=LA.det2(U);
+  const VtT=rot(-thV*Math.min(1,t)); if(t<=1) return VtT;
+  const sT=Math.min(1,t-1), Sm=[[1+(S[0]-1)*sT,0],[0,1+(S[1]-1)*sT]], SV=LA.mul(Sm,rot(-thV)); if(t<=2) return SV;
+  const uT=t-2, thU=Math.atan2(U[1][0],U[0][0]); let R=rot(thU*uT); if(detU<0&&uT>=1) R=U; return LA.mul(R,SV); }
+function drawG(){ const P=ML.palette(), M=stageMat(st), {U,S,V}=svd2(); pG.clear(); pG.grid(1,true);
+  const c=pG.ctx; c.save(); c.strokeStyle=P.c2; c.lineWidth=2.5; c.fillStyle=P.c2; c.beginPath(); for(let t=0;t<=96;t++){ const a=t/96*2*Math.PI, p=LA.mv(M,[Math.cos(a),Math.sin(a)]); t?c.lineTo(pG.X(p[0]),pG.Y(p[1])):c.moveTo(pG.X(p[0]),pG.Y(p[1])); } c.globalAlpha=.1; c.fill(); c.globalAlpha=1; c.stroke(); c.restore();
+  for(let t=0;t<16;t++){ const a=t/16*2*Math.PI, p=LA.mv(M,[Math.cos(a),Math.sin(a)]); pG.ctx.save(); pG.ctx.fillStyle=P.muted; pG.ctx.beginPath(); pG.ctx.arc(pG.X(p[0]),pG.Y(p[1]),2.5,0,7); pG.ctx.fill(); pG.ctx.restore(); }
+  const v1=[V[0][0],V[1][0]], v2=[V[0][1],V[1][1]]; MX.vec(pG,LA.mv(M,v1),P.c1,st<0.02?'v₁':st>2.98?'σ₁u₁':''); MX.vec(pG,LA.mv(M,v2),P.c3,st<0.02?'v₂':st>2.98?'σ₂u₂':'');
+  $('#gStage').textContent=['start: unit circle','after Vᵀ (rotate)','after ΣVᵀ (stretch axes)','after UΣVᵀ = A'][Math.min(3,Math.round(st))];
+  MX.set('gTex',`${MX.mtex(GA)}=\\underbrace{${MX.mtex(U,3)}}_{U}\\underbrace{${MX.mtex([[S[0],0],[0,S[1]]],3)}}_{\\Sigma}\\underbrace{${MX.mtex(LA.T(V),3)}}_{V^\\top}`,true); }
+ML.bindRange('gs',v=>{st=v;drawG();},v=>v.toFixed(2)); pG.onResize=drawG;
+let anim=null; $('#gPlay').addEventListener('click',()=>{ if(anim){ cancelAnimationFrame(anim); anim=null; $('#gPlay').textContent='Play'; return; } $('#gPlay').textContent='Pause'; let t0=null; const step=ts=>{ if(t0===null) t0=ts; st=Math.min(3,(ts-t0)/1500); $('#gs').value=st; $('#gsOut').textContent=st.toFixed(2); drawG(); if(st<3) anim=requestAnimationFrame(step); else { anim=null; $('#gPlay').textContent='Play'; } }; anim=requestAnimationFrame(step); });
+
+/* ---- 3. low-rank image ---- */
+const N=48; let IMG=null, SV=null, K=4, cur='Shapes';
+function makeImg(kind){ const cv=document.createElement('canvas'); cv.width=N; cv.height=N; const c=cv.getContext('2d'); c.fillStyle='#fff'; c.fillRect(0,0,N,N); c.fillStyle='#000'; c.strokeStyle='#000';
+  if(kind==='Shapes'){ c.beginPath(); c.arc(16,16,10,0,7); c.fill(); c.fillRect(26,28,18,14); c.lineWidth=3; c.beginPath(); c.moveTo(4,44); c.lineTo(22,26); c.stroke(); }
+  else if(kind==='Letters'){ c.font='bold 30px Georgia,serif'; c.textAlign='center'; c.textBaseline='middle'; c.fillText('ML',24,26); }
+  else if(kind==='Smooth'){ const d=c.createImageData(N,N); for(let i=0;i<N;i++) for(let j=0;j<N;j++){ const v=128+60*Math.sin(i/7)+60*Math.cos(j/9); const o=4*(i*N+j); d.data[o]=d.data[o+1]=d.data[o+2]=v; d.data[o+3]=255; } c.putImageData(d,0,0); }
+  else if(kind==='Checkerboard'){ for(let i=0;i<6;i++) for(let j=0;j<6;j++) if((i+j)%2) c.fillRect(i*8,j*8,8,8); }
+  else { const r=ML.rng(3), d=c.createImageData(N,N); for(let k=0;k<N*N;k++){ const v=r()*255; d.data[4*k]=d.data[4*k+1]=d.data[4*k+2]=v; d.data[4*k+3]=255; } c.putImageData(d,0,0); }
+  const d=c.getImageData(0,0,N,N).data; return Array.from({length:N},(_,i)=>Array.from({length:N},(_,j)=>d[4*(i*N+j)]/255)); }
+function paint(id,M){ const c=document.getElementById(id).getContext('2d'), d=c.createImageData(N,N); for(let i=0;i<N;i++) for(let j=0;j<N;j++){ const v=Math.max(0,Math.min(255,M[i][j]*255)), o=4*(i*N+j); d.data[o]=d.data[o+1]=d.data[o+2]=v; d.data[o+3]=255; } c.putImageData(d,0,0); }
+const pSv=new ML.Plot('#pSv',{equal:false});
+function loadImg(kind){ cur=kind; IMG=makeImg(kind); SV=MX.svd(IMG); paint('imO',IMG); drawK(); }
+function drawK(){ const P=ML.palette(), R=LA.zeros(N,N); for(let i=0;i<K;i++){ const s=SV.S[i], u=SV.U[i], v=SV.V[i]; if(s<1e-9) break; for(let a=0;a<N;a++){ const su=s*u[a]; for(let b=0;b<N;b++) R[a][b]+=su*v[b]; } }
+  paint('imK',R); $('#imKLab').textContent=`rank ${K} approximation`;
+  const tot=SV.S.reduce((a,s)=>a+s*s,0), kept=SV.S.slice(0,K).reduce((a,s)=>a+s*s,0), rank=SV.S.filter(s=>s>1e-6*SV.S[0]).length;
+  ML.chart(pSv,[{pts:SV.S.map((s,i)=>[i+1,s]),color:P.muted,dots:true,r:2.5,noline:true},{pts:SV.S.slice(0,K).map((s,i)=>[i+1,s]),color:P.c1,dots:true,r:3.5,noline:true}],{xl:'i',vline:K+0.5,y0:0});
+  $('#imStats').innerHTML=`<div class="stat c1"><b>${(100*kept/tot).toFixed(1)}%</b><span>of Σσᵢ² kept (energy)</span></div><div class="stat c4"><b>${Math.sqrt(Math.max(0,tot-kept)).toFixed(2)}</b><span>error ‖A − Aₖ‖ (Frobenius)</span></div><div class="stat c3"><b>${K*(2*N+1)} / ${N*N}</b><span>numbers stored</span></div><div class="stat c2"><b>${rank}</b><span>rank of the original</span></div>`; }
+$('#imPre').innerHTML=['Shapes','Letters','Smooth','Checkerboard','Noise'].map(k=>`<button class="btn" data-k="${k}">${k}</button>`).join('');
+$('#imPre').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) loadImg(b.dataset.k); });
+ML.bindRange('kr',v=>{K=v;drawK();}); pSv.onResize=drawK;
+ML.onTheme(()=>{ drawG(); drawK(); });
+drawG(); loadImg('Shapes');
+})();
+</script>
+<script>NLP.nav('math','svd'); ML.renderMath(document.body);</script>
+</body>
+</html>

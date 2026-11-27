@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Interpretability: what did the model learn? Explained interactively</title>
+<meta name="description" content="How to open up a trained model: coefficients and standardising, GLM relativities, collinearity, impurity versus permutation importance, partial dependence and ICE curves, ALE for correlated features, and global surrogate trees, all live on a house-price model with a known true formula.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Explaining models</p>
+  <h1>Interpretability: <span class="grad">what did the model learn?</span></h1>
+  <p class="lede">A model that predicts well can still be right for the wrong reasons: it may lean on a column that leaks the answer, treat a postcode as a proxy for something it should not use, or break the moment the data drift. Interpretability methods let you look inside, or at least around, a trained model and ask what it relies on. This page builds the classic methods one at a time on a house-price model whose true formula we know, so you can check every explanation against the truth. The <a href="../shap/">next page</a> explains single predictions with SHAP values.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#data">1 · The example</a><a href="#linear">2 · Coefficients</a><a href="#collinear">3 · Collinearity</a><a href="#importance">4 · Importance</a><a href="#pdp">5 · PDP &amp; ICE</a><a href="#ale">6 · ALE</a><a href="#surrogate">7 · Surrogates</a><a href="#choose">8 · Which one?</a><a href="#py">9 · Python</a><a href="#credits">10 · Credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is interpretability, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p><a class="term" data-t="interpretability">Interpretability</a> is how well a person can understand why a model gives the predictions it does. Some models are readable as they stand: a short <a class="term" data-t="decision-tree">decision tree</a> or a linear model with a handful of <a class="term" data-t="coefficient">coefficients</a>. Others, such as a forest of 500 trees or a neural network, are effectively black boxes, and we explain them <i>after</i> training by poking them: change an input, watch the output.</p>
+      <h3>Why bother?</h3>
+      <ol class="steps2"><li><b>Debugging.</b> Find leakage, spurious shortcuts and bugs before users do.</li><li><b>Trust.</b> A doctor, underwriter or loan officer will not act on a number they cannot question.</li><li><b>Rules.</b> Credit and insurance decisions must come with reasons; the EU AI Act asks for transparency in high-risk systems.</li><li><b>Science.</b> Sometimes what the model learned is the finding.</li></ol>
+    </div>
+    <div>
+      <h3>Three ways to sort the methods</h3>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Question</th><th>One answer</th><th>The other</th></tr>
+        <tr><td>When?</td><td><b>Intrinsic</b>: the model is simple enough to read</td><td><b><a class="term" data-t="post-hoc">Post-hoc</a></b>: explain a trained model from outside</td></tr>
+        <tr><td>About what?</td><td><b><a class="term" data-t="global-explanation">Global</a></b>: the model's behaviour overall</td><td><b><a class="term" data-t="local-explanation">Local</a></b>: one particular prediction</td></tr>
+        <tr><td>For which models?</td><td><b>Model-specific</b>: uses the insides (weights, tree splits, gradients)</td><td><b><a class="term" data-t="model-agnostic">Model-agnostic</a></b>: needs only predictions</td></tr>
+      </table></div>
+      <div class="pc"><div class="pro"><b>What explanations can do</b><ul><li>Show what the <i>model</i> relies on</li><li>Expose leakage and shortcuts</li><li>Give reasons for one decision</li></ul></div><div class="con"><b>What they cannot do</b><ul><li>Prove cause and effect in the real world</li><li>Fix a model that is simply wrong</li><li>Be trusted when features are strongly correlated, without care</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="feature-importance">Feature importance</a><a class="term" data-t="permutation-importance">Permutation importance</a><a class="term" data-t="partial-dependence">Partial dependence</a><a class="term" data-t="ice">ICE curves</a><a class="term" data-t="ale">ALE</a><a class="term" data-t="surrogate-model">Surrogate model</a><a class="term" data-t="relativity">Relativity</a></div>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="data" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>The running example: a price model we can check</h2>
+    <p class="sub">Predicted against actual price for 200 test houses the models never saw. Points on the dashed line are perfect predictions.</p>
+    <div class="plot sq" id="pData"></div>
+    <div class="seg" id="dModel"><button data-v="lin" class="on">Linear regression</button><button data-v="gbm">Boosted trees</button></div>
+    <div class="stats" id="dStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Every explanation on this page needs something to explain, and a way to check it. So we make up a world where we know the answer. Six hundred houses each have six <a class="term" data-t="feature">features</a>, and the price (in thousands) comes from this formula plus random noise with standard deviation 14:</p>
+      <div class="mathbox c1">$$\text{price}=40+1.4\,\text{area}+8\,\text{bedrooms}-60\big(1-e^{-\text{age}/15}\big)-32\log\!\big(1+\tfrac{\text{dist}}{2}\big)\tfrac{\text{area}}{100}+15\,\text{garden}+\varepsilon$$</div>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Feature</th><th>Range</th><th>True effect</th></tr>
+        <tr><td><b>Floor area</b> (m²)</td><td>35 to 240</td><td>Bigger is dearer, roughly linear</td></tr>
+        <tr><td><b>Bedrooms</b></td><td>1 to 7</td><td>+8 each, but strongly tied to area (correlation 0.86)</td></tr>
+        <tr><td><b>Age</b> (years)</td><td>0 to 90</td><td>Falls fast for the first 20 years, then levels off</td></tr>
+        <tr><td><b>Distance to centre</b> (km)</td><td>0.5 to 35</td><td>Hurts, and hurts big houses more: an <a class="term" data-t="interaction-effect">interaction</a></td></tr>
+        <tr><td><b>Garden</b></td><td>yes / no</td><td>+15; more common far from the centre</td></tr>
+        <tr><td><b>Listing code</b></td><td>random number</td><td><b>None.</b> Pure noise, a trap for importance methods</td></tr>
+      </table></div>
+      <p>We train two models on 400 houses: <b>linear regression</b>, readable but unable to bend, and <b>gradient-boosted trees</b> (120 depth-3 trees, see <a href="../ensembles/">bagging &amp; boosting</a>), flexible but opaque. Switch between them: the boosted model fits better because the true formula curves and interacts. That is the usual trade: accuracy often costs readability, and the rest of the page wins readability back.</p>
+    </div>
+  </div>
+</section>
+
+<section id="linear" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Reading a linear model: coefficients, units and scale</h2>
+    <p class="sub">The fitted coefficients with 95% intervals (±1.96 standard errors). Raw: thousands per unit of each feature. Standardised: thousands per standard deviation.</p>
+    <div class="plot short" id="pCoef"></div>
+    <div class="seg" id="cScale"><button data-v="raw" class="on">Raw units</button><button data-v="std">Standardised</button></div>
+    <div class="stats" id="cStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A linear model predicts \(\hat y=\beta_0+\beta_1x_1+\dots+\beta_dx_d\). Each <a class="term" data-t="coefficient">coefficient</a> has a crisp meaning: <b>\(\beta_j\) is the change in the prediction when \(x_j\) rises by one unit and every other feature stays fixed.</b> The garden coefficient near 15 says “a garden adds about 15 thousand”, matching the truth.</p>
+      <p>But look at the raw bars: floor area gets a tiny coefficient (about 1) and the garden a big one. That does not mean area matters less. Area is measured in square metres, and houses typically differ by about 36 m², so area moves prices by far more than the garden ever can. Coefficients carry the units of their feature, so you cannot rank them as they are.</p>
+      <p>The fix is to <b>standardise</b>: rescale each feature to mean 0 and standard deviation 1 (a <a href="../../math/probability/#cov">z-score</a>) before fitting, or equivalently multiply each coefficient by its feature's standard deviation:</p>
+      <div class="mathbox c2">$$\beta_j^{\text{std}}=\beta_j\,\mathrm{sd}(x_j)\quad=\quad\text{change in }\hat y\text{ for a one-standard-deviation change in }x_j.$$</div>
+      <p>Now area dominates, as it should. Two warnings remain. The linear model cannot see that the age effect levels off or that distance matters more for big houses, so its coefficients average those patterns away. And the listing code gets a small coefficient whose interval straddles zero: a reminder to read the uncertainty, not only the bar.</p>
+      <details class="deeper"><summary>Going deeper: multiplicative models, odds ratios and GLM relativities</summary><div>
+        <p>In a <a class="term" data-t="glm">generalised linear model</a> with a log link, used for insurance claim frequency (Poisson) and severity (gamma), \(\log\mathbb E[y]=\beta_0+\sum_j\beta_jx_j\), so \(\mathbb E[y]=e^{\beta_0}\prod_j e^{\beta_jx_j}\). Each \(e^{\beta_j}\) is a <a class="term" data-t="relativity">relativity</a>: a multiplier on the base rate. A pricing table might read: base claim frequency 0.08 per year; young driver ×1.9; urban postcode ×1.35; telematics discount ×0.85. A young urban telematics driver is priced at \(0.08\times1.9\times1.35\times0.85\approx0.174\).</p>
+        <p>In <a href="../logistic-regression/">logistic regression</a> the link is the <a class="term" data-t="logit">logit</a>, so \(e^{\beta_j}\) is an <b>odds ratio</b>: the odds \(p/(1-p)\) are multiplied by \(e^{\beta_j}\) for each unit of \(x_j\). An odds ratio of 2 doubles the odds, which is not the same as doubling the probability unless the probability is small.</p>
+        <p>Categorical features are coded against a <b>reference level</b> (the base), so every relativity is relative to that level; change the base and every number changes while the predictions do not.</p>
+        <p>The <a href="../glm/">GLMs for pricing</a> page builds such a rating table from claims data, with exposure offsets, deviance tests and credibility.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="collinear" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>When features move together, coefficients wobble</h2>
+    <p class="sub">Each dot is one fit of the linear model on a fresh bootstrap resample of 150 houses. Horizontal: the area coefficient. Vertical: the bedrooms coefficient. Here prices are made purely linear in the features, so the cross marks the true values exactly (1.4 and 8).</p>
+    <div class="plot sq" id="pCol"></div>
+    <div class="ctl"><label for="colN"><span>How tightly bedrooms follow area (noise in bedrooms)</span><output id="colNOut"></output></label><input type="range" id="colN" min="0.05" max="1.5" step="0.05" value="0.6"></div>
+    <button class="btn" id="colRun">New resamples</button>
+    <div class="stats" id="colStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>“Every other feature stays fixed” is the catch in the definition of a coefficient. Bedrooms and floor area rise together: in the data you almost never see a big house with one bedroom. So the data say very little about the effect of a bedroom <i>holding area fixed</i>, and the fit can trade one coefficient against the other with almost no change in the predictions.</p>
+      <p>Slide the noise down so bedrooms follow area more tightly. The cloud stretches into a long diagonal: when the area coefficient comes out high, the bedrooms coefficient comes out low, and vice versa. Individual coefficients become unstable, can even flip sign, yet the predictions barely change. This is <b>collinearity</b>, measured by the <b>variance inflation factor</b></p>
+      <div class="mathbox c3">$$\mathrm{VIF}_j=\frac{1}{1-R_j^2},$$</div>
+      <p>where \(R_j^2\) is how well the other features predict feature \(j\). A VIF of 10 means the variance of \(\hat\beta_j\) is ten times what it would be with uncorrelated features. Remedies: drop or combine one of the pair (price per m², rooms per 100 m²), use <a href="../regularisation/">ridge regression</a>, which spreads the weight evenly and steadies the cloud, or explain the pair as a group.</p>
+      <details class="deeper"><summary>Going deeper: why the variance blows up</summary><div>
+        <p>Least squares gives \(\operatorname{Var}(\hat\beta)=\sigma^2(X^\top X)^{-1}\). With two standardised features of correlation \(\rho\) and \(n\) rows, \(X^\top X=n\begin{pmatrix}1&amp;\rho\\\rho&amp;1\end{pmatrix}\), whose inverse is \(\frac{1}{n(1-\rho^2)}\begin{pmatrix}1&amp;-\rho\\-\rho&amp;1\end{pmatrix}\). So each coefficient's variance is \(\sigma^2/\big(n(1-\rho^2)\big)\), the VIF \(1/(1-\rho^2)\) times the uncorrelated case, and the two estimates have correlation \(-\rho\): that is the downward tilt of the cloud. In eigenvector terms, \(X^\top X\) has a tiny eigenvalue \(n(1-\rho)\) along the direction “more area, fewer bedrooms”, the one direction the data barely explore.</p>
+      </div></details>
+      <p class="hint">This problem is not special to linear models. Every method on this and the next page struggles when features are strongly correlated; section 6 shows the tree-model version.</p>
+    </div>
+  </div>
+</section>
+
+<section id="importance" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Which features matter? Impurity versus permutation importance</h2>
+    <p class="sub">Violet: impurity importance (MDI), read off the trees on the training data. Orange: permutation importance, the drop in test R² when one column is shuffled (whiskers: ±1 sd over 5 shuffles). Both scaled so the largest bar is 1.</p>
+    <div class="plot short" id="pImp"></div>
+    <div class="seg" id="iModel"><button data-v="rf" class="on">Random forest (deep trees)</button><button data-v="gbm">Boosted trees</button></div>
+    <button class="btn" id="iRun">Shuffle again</button>
+    <div class="stats" id="iStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p><a class="term" data-t="feature-importance">Feature importance</a> gives each feature one number for how much the model relies on it. Tree ensembles offer one for free. Every split reduces the squared error (or <a class="term" data-t="gini">Gini impurity</a>) of its node; add up those reductions for each feature over all splits and all trees, and you get the <a class="term" data-t="impurity-importance">mean decrease in impurity</a> (MDI), the <code>feature_importances_</code> of scikit-learn.</p>
+      <p>MDI has a known bias. It is measured on the <b>training</b> data, and a deep tree can always find a split on a feature with many distinct values that reduces training error a little, even if the feature is noise. Look at the random forest: the listing code, a random number, gets more MDI than the garden, which really adds 15 thousand. The bias favours continuous and high-cardinality features (IDs, postcodes, timestamps).</p>
+      <p><a class="term" data-t="permutation-importance">Permutation importance</a> asks a cleaner question on <b>test</b> data: if this column were scrambled, so its link to the price was broken but its distribution kept, how much worse would the model do?</p>
+      <div class="algo" data-anim="permimp"><h5 class="algo-h">Algorithm: permutation importance</h5><ol>
+        <li><span class="kw">input</span> fitted model \(f\), test data \((X,y)\), score \(s\) (here \(R^2\)), repeats \(K\)</li>
+        <li>\(s_0\leftarrow s(f,X,y)\) <span class="cm">baseline score</span></li>
+        <li><span class="kw">for</span> each feature \(j\) <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">for</span> \(k=1\) <span class="kw">to</span> \(K\) <span class="kw">do</span></li>
+        <li class="i1">\(\quad X^{(k)}\leftarrow X\) with column \(j\) randomly shuffled</li>
+        <li class="i1">\(\quad d_{jk}\leftarrow s_0-s(f,X^{(k)},y)\) <span class="cm">how much worse?</span></li>
+        <li class="i1">\(I_j\leftarrow\frac1K\sum_kd_{jk}\)</li>
+        <li><span class="kw">return</span> \(I_1,\dots,I_d\) <span class="cm">near zero (or negative) means unused</span></li>
+      </ol></div>
+      <p>The noise feature now scores about zero, and the garden is ranked fairly. Permutation importance works for any model, costs only predictions, and is on the same scale as the metric you care about. Its weak spots: shuffling one of two correlated features creates impossible houses (a 200 m² one-bedroom), and the importance gets shared between the pair, so each looks less important than the pair is. Shuffle correlated features together, or use <b>drop-column importance</b> (retrain without the feature), which is honest but costs one refit per feature.</p>
+    </div>
+  </div>
+</section>
+
+<section id="pdp" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Partial dependence and ICE: how the prediction moves with one feature</h2>
+    <p class="sub">Thin lines: one ICE curve per house (40 houses), coloured by floor area, small to large: <span style="color:var(--c3)">●</span> to <span style="color:var(--c2)">●</span>. Thick: the partial dependence (their average). Dashed: the same average for the true formula.</p>
+    <div class="plot wide" id="pPdp"></div>
+    <div class="seg" id="pFeat"></div>
+    <div class="seg" id="pModel"><button data-v="gbm" class="on">Boosted trees</button><button data-v="lin">Linear regression</button></div>
+    <label class="toggle"><input type="checkbox" id="pCent"> Centre each curve at the left edge (c-ICE)</label>
+    <div class="stats" id="pStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Importance says <i>how much</i>. To see <i>how</i>, take one house, slide one of its features across its range while holding everything else fixed, and record the prediction. That curve is an <a class="term" data-t="ice">individual conditional expectation</a> (ICE) curve. Do it for many houses and average the curves, and you get the <a class="term" data-t="partial-dependence">partial dependence</a> (PD) of the model on that feature:</p>
+      <div class="mathbox c1">$$\mathrm{PD}_j(v)=\frac1n\sum_{i=1}^{n}f\big(v,\;x_{i,-j}\big),$$</div>
+      <p>where \(x_{i,-j}\) means house \(i\)'s values for every feature except \(j\).</p>
+      <div class="algo" data-anim="pdpice"><h5 class="algo-h">Algorithm: partial dependence and ICE curves</h5><ol>
+        <li><span class="kw">input</span> model \(f\), data rows \(x_1..x_n\), feature \(j\), grid \(v_1&lt;\dots&lt;v_G\)</li>
+        <li><span class="kw">for</span> each row \(i\) <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">for</span> each grid value \(v_g\) <span class="kw">do</span></li>
+        <li class="i1">\(\quad\)copy \(x_i\), set its feature \(j\) to \(v_g\), predict: \(\mathrm{ICE}_i(v_g)\)</li>
+        <li><span class="kw">for</span> each \(v_g\): \(\mathrm{PD}(v_g)\leftarrow\) average of \(\mathrm{ICE}_i(v_g)\) over \(i\)</li>
+        <li><span class="kw">return</span> the ICE curves and the PD curve</li>
+      </ol></div>
+      <p>Try <b>age</b>: the boosted model has learned the fast early drop that levels off, close to the dashed truth, while the linear model can only draw a straight line. Now try <b>distance</b>. The ICE lines fan out: big houses (red) lose much more with distance than small ones (blue). When ICE curves are not parallel, the feature <b>interacts</b> with others, and the PD average hides it. Tick c-ICE to line the curves up at the left edge, which makes the fan easy to see. The listing code gives flat lines: the boosted model has learned to ignore it.</p>
+      <details class="deeper"><summary>Going deeper: what PD estimates, and when it is causal</summary><div>
+        <p>PD estimates \(\mathbb E_{X_{-j}}[f(v,X_{-j})]\): the model's average prediction when feature \(j\) is <i>set</i> to \(v\) and the others keep their own distribution. Zhao and Hastie (2021) show this equals the causal effect of \(x_j\) on the <i>model output</i> (always true, by construction) and on the real-world outcome only if the other features block every back-door path (no unmeasured confounders) and the model is accurate. Being an average of the model at points that may never occur, it also inherits the problem of the next section.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="ale" class="lab">
+  <div class="card hl">
+    <h2><span class="num">6</span>Correlated features: where PD makes up data, and ALE</h2>
+    <p class="sub">Left: the training data (\(x_1\), \(x_2\)) and, in red, the points PD evaluates to get its value at \(x_1=0.8\). Right: the effect of \(x_1\) estimated by PD and by ALE for boosted trees trained on \(y=x_1+2x_2^2+\text{noise}\); the true effect is the dashed line of slope 1.</p>
+    <div class="grid2"><div class="plot sq" id="pAleS"></div><div class="plot sq" id="pAleC"></div></div>
+    <div class="ctl"><label for="aRho"><span>Correlation between \(x_1\) and \(x_2\)</span><output id="aRhoOut"></output></label><input type="range" id="aRho" min="0" max="0.98" step="0.02" value="0.9"></div>
+    <div class="stats" id="aStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>To get the PD value at \(x_1=0.8\), we pair 0.8 with <i>every</i> house's \(x_2\), including houses whose \(x_2\) is −0.9. If the two features are correlated, a point with \(x_1=0.8\) and \(x_2=-0.9\) never occurs in the data. A tree model has never seen anything there, so its prediction in that corner is whatever the nearest leaf says: an extrapolation. PD averages those made-up values in as if they were real.</p>
+      <p>Raise the correlation: the red points leave the cloud, and the PD slope drifts away from the true slope of 1. <a class="term" data-t="ale">Accumulated local effects</a> (ALE, Apley and Zhu) avoid the empty regions. Cut \(x_1\) into narrow bins. Within a bin, take only the houses that really fall there, move each one from the bin's left edge to its right edge, and average the change in prediction. Then add up (accumulate) these local changes from left to right:</p>
+      <div class="mathbox c4">$$\mathrm{ALE}_j(v)=\sum_{k=1}^{k(v)}\frac{1}{n_k}\sum_{i:\,x_{ij}\in\text{bin }k}\Big[f(z_k,x_{i,-j})-f(z_{k-1},x_{i,-j})\Big]\;-\;\text{constant}.$$</div>
+      <div class="algo" data-anim="ale"><h5 class="algo-h">Algorithm: accumulated local effects (ALE)</h5><ol>
+        <li><span class="kw">input</span> model \(f\), data, feature \(j\), number of bins \(K\)</li>
+        <li>bin edges \(z_0&lt;\dots&lt;z_K\) at quantiles of \(x_j\) <span class="cm">equal counts per bin</span></li>
+        <li><span class="kw">for</span> each bin \(k\) <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">for</span> each row \(i\) with \(x_{ij}\) in bin \(k\): \(\Delta_i\leftarrow f(z_k,x_{i,-j})-f(z_{k-1},x_{i,-j})\)</li>
+        <li class="i1">\(\delta_k\leftarrow\) average of \(\Delta_i\) <span class="cm">only real neighbours used</span></li>
+        <li>\(\mathrm{ALE}(z_k)\leftarrow\delta_1+\dots+\delta_k\) <span class="cm">accumulate</span></li>
+        <li><span class="kw">return</span> ALE minus its average, so it is centred on 0</li>
+      </ol></div>
+      <p>ALE stays near the truth because every evaluation is close to real data. It is also cheaper than PD. The price: it is harder to explain to a non-specialist, and it has no per-house version like ICE. At very high correlation, no method can tell the two features' effects apart, because the data contain no house where they disagree; the model itself may have divided the credit arbitrarily.</p>
+    </div>
+  </div>
+</section>
+
+<section id="surrogate" class="lab">
+  <div class="card hl">
+    <h2><span class="num">7</span>Global surrogates: a small tree that imitates the big model</h2>
+    <p class="sub">A single regression tree trained to predict the <i>boosted model's</i> predictions (not the real prices). Fidelity is how well it imitates the model, as R². The chart shows fidelity at every depth; the tree below is the one you picked.</p>
+    <div class="plot short" id="pSur"></div>
+    <div class="ctl"><label for="sDepth"><span>Surrogate depth</span><output id="sDepthOut"></output></label><input type="range" id="sDepth" min="1" max="4" step="1" value="2"></div>
+    <div class="stats" id="sStats"></div>
+    <div class="sgt" id="sTree"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A <a class="term" data-t="surrogate-model">global surrogate</a> is an interpretable model trained to mimic a black box. Feed the training inputs to the black box, keep its predictions as labels, and fit a short tree or a sparse linear model to them. Then read the surrogate.</p>
+      <p>At depth 2 the surrogate already tells the boosted model's main story: floor area first, and then, for big houses only, distance to the centre, which is the interaction from section 5 showing up on its own. Fidelity climbs from about 0.5 at depth 1 to about 0.7 at depth 2 and 0.9 by depth 4, but each extra level doubles the number of leaves: fidelity is bought with readability. Always report fidelity; a surrogate that imitates the model with R² of 0.6 explains a different model, not yours.</p>
+      <h3>Or skip the black box</h3>
+      <p>For tabular data, a model that is <b>interpretable by design</b> often costs little accuracy. A <a class="term" data-t="gam">generalised additive model</a> (GAM) predicts \(\beta_0+\sum_jf_j(x_j)\), a sum of one curve per feature, so its “explanation” is just those curves, with no approximation. Explainable boosting machines (EBMs, in Microsoft's InterpretML) fit each \(f_j\) with boosted shallow trees and add a few chosen pairwise terms \(f_{jk}(x_j,x_k)\); on many tabular benchmarks they come close to unrestricted boosting. Rudin (2019) argues that for high-stakes decisions this should be the first thing to try. In insurance pricing, the GLM with relativities from section 2 is exactly such a model.</p>
+    </div>
+  </div>
+</section>
+
+<section id="choose" class="card">
+  <h2><span class="num">8</span>Which method, when?</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Method</th><th>Question it answers</th><th>Scope</th><th>Watch out for</th></tr>
+    <tr><td><b>Coefficients</b> (standardised)</td><td>How much does the prediction change per unit or per sd?</td><td>Global, linear models and GLMs</td><td>Units, collinearity, missed curves</td></tr>
+    <tr><td><b>Impurity importance (MDI)</b></td><td>How much did the trees split on it?</td><td>Global, trees only, training data</td><td>Bias to high-cardinality features</td></tr>
+    <tr><td><b>Permutation importance</b></td><td>How much worse without its information?</td><td>Global, any model, test data</td><td>Correlated features share credit; impossible rows</td></tr>
+    <tr><td><b>Partial dependence</b></td><td>How does the average prediction move with it?</td><td>Global, any model</td><td>Hides interactions; extrapolates when correlated</td></tr>
+    <tr><td><b>ICE / c-ICE</b></td><td>Does that movement differ between rows?</td><td>Local and global</td><td>Clutter; same extrapolation as PD</td></tr>
+    <tr><td><b>ALE</b></td><td>The effect of moving it locally, using real neighbours</td><td>Global, any model</td><td>Harder to explain; needs enough rows per bin</td></tr>
+    <tr><td><b>Global surrogate</b></td><td>A readable model that imitates the black box</td><td>Global</td><td>Only as good as its fidelity</td></tr>
+    <tr><td><b><a href="../shap/">SHAP values</a></b></td><td>How much did each feature push <i>this</i> prediction?</td><td>Local, aggregates to global</td><td>Background choice, correlation, cost</td></tr>
+  </table></div>
+  <div class="grid2 prose">
+    <div>
+      <h3>Habits that keep explanations honest</h3>
+      <ul><li>Explain on held-out data, and check the model is accurate first: explaining a bad model explains nothing.</li><li>Use two methods that work differently; trust what they agree on.</li><li>Check correlations before reading any single feature's effect.</li><li>Report uncertainty: repeat shuffles, bootstrap the data.</li></ul>
+    </div>
+    <div>
+      <h3>The Rashomon effect</h3>
+      <p>Breiman (2001) noticed that many different models fit the same data almost equally well, and they can tell different stories about which features matter. An explanation describes <i>this</i> model, not the world. If a conclusion matters, check that it holds across several good models.</p>
+      <p class="hint">Try it yourself: the <a href="../playground/">ML Playground</a> shows model-based and permutation importance under Output for any dataset you load.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">9</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.ensemble <span class="k">import</span> HistGradientBoostingRegressor, RandomForestRegressor
+<span class="k">from</span> sklearn.inspection <span class="k">import</span> permutation_importance, PartialDependenceDisplay
+<span class="k">from</span> sklearn.model_selection <span class="k">import</span> train_test_split
+X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=<span class="s">0.33</span>, random_state=<span class="s">0</span>)
+gbm = HistGradientBoostingRegressor(max_depth=<span class="s">3</span>).fit(X_tr, y_tr)
+
+rf = RandomForestRegressor(n_estimators=<span class="s">300</span>).fit(X_tr, y_tr)
+rf.feature_importances_                                   <span class="c"># impurity importance (MDI): training data, biased</span>
+r = permutation_importance(gbm, X_te, y_te, n_repeats=<span class="s">10</span>, random_state=<span class="s">0</span>)
+r.importances_mean, r.importances_std                     <span class="c"># drop in score on held-out data</span>
+
+PartialDependenceDisplay.from_estimator(gbm, X_te, [<span class="s">"age"</span>, <span class="s">"dist"</span>], kind=<span class="s">"both"</span>, centered=<span class="s">True</span>)  <span class="c"># PD + c-ICE</span>
+PartialDependenceDisplay.from_estimator(gbm, X_te, [(<span class="s">"size"</span>, <span class="s">"dist"</span>)])                      <span class="c"># 2-D PD: the interaction</span>
+
+<span class="k">import</span> statsmodels.api <span class="k">as</span> sm                              <span class="c"># coefficients with standard errors, VIF</span>
+<span class="k">from</span> statsmodels.stats.outliers_influence <span class="k">import</span> variance_inflation_factor
+ols = sm.OLS(y_tr, sm.add_constant(X_tr)).fit(); ols.summary()
+glm = sm.GLM(claims, sm.add_constant(Xc), family=sm.families.Poisson(), exposure=years).fit()
+np.exp(glm.params)                                        <span class="c"># relativities</span>
+
+<span class="k">from</span> alibi.explainers <span class="k">import</span> ALE                         <span class="c"># or PyALE; interpret.glassbox for EBMs</span>
+<span class="k">from</span> sklearn.tree <span class="k">import</span> DecisionTreeRegressor, export_text   <span class="c"># global surrogate</span>
+sur = DecisionTreeRegressor(max_depth=<span class="s">2</span>).fit(X_tr, gbm.predict(X_tr)); print(export_text(sur, feature_names=list(X.columns)))</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">10</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page was written for this site with its own example, labs and code. Its structure and several of its examples follow Christoph Molnar's free book <a href="https://christophm.github.io/interpretable-ml-book/" target="_blank" rel="noopener"><i>Interpretable Machine Learning</i></a>, the standard introduction to the field, and the scikit-learn user guide on <a href="https://scikit-learn.org/stable/modules/permutation_importance.html" target="_blank" rel="noopener">permutation importance</a> (including its demonstration that impurity importance favours high-cardinality noise) and <a href="https://scikit-learn.org/stable/modules/partial_dependence.html" target="_blank" rel="noopener">partial dependence and ICE</a>. Both are well worth reading in full.</p>
+    <p>Original papers: Breiman 2001 (random forests and permutation importance; “Statistical modeling: the two cultures” and the Rashomon effect); Friedman 2001 (partial dependence); Strobl et al. 2007 (bias in random forest variable importance); Goldstein et al. 2015 (ICE plots); Apley and Zhu 2020 (accumulated local effects); Craven and Shavlik 1996 (extracting tree-structured representations of trained networks); Hastie and Tibshirani 1986 (generalised additive models); Lou, Caruana and Gehrke 2012 and Nori et al. 2019 (GA²M and InterpretML / EBMs); Rudin 2019 (stop explaining black boxes for high-stakes decisions); Zhao and Hastie 2021 (causal interpretation of black-box models); Nelder and Wedderburn 1972 (generalised linear models).</p>
+  </div>
+</section>
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything runs in your browser. Next: <a href="../shap/">SHAP values and local explanations &rarr;</a></p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../dl/assets/evo.js"></script>
+<script src="../assets/xai.js"></script>
+<script>
+(function(){
+const {$} = ML, X = XAI, F = X.FEATS;
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+if(window.EVO) EVO.render('#evoSlot','xai');
+const D = X.makeData(600, 11), TR = {X:D.X.slice(0,400), y:D.y.slice(0,400)}, TE = {X:D.X.slice(400), y:D.y.slice(400)};
+const M = { lin: X.ols(TR.X, TR.y), gbm: X.gbm(TR.X, TR.y, {trees:120, minLeaf:20, sub:.7}) };
+const short = ['area','bedrooms','age','distance','garden','code'];
+const mix = (a,b,t) => { const A=ML.rgb(a), B=ML.rgb(b); return `rgb(${A.map((v,i)=>Math.round(v+(B[i]-v)*t)).join(',')})`; };
+function frame(plot,x0,x1,y0,y1,xl,o={}){ return ML.chart(plot,[{pts:[[x0,y0],[x1,y1]],color:'transparent',noline:true}],Object.assign({x0,x1,y0,y1,xl},o)); }
+/* horizontal bars: rows = [{label, vals:[...], err:[...]}], colours per series */
+function hbars(plot, rows, cols, o={}){ const P=ML.palette(), c=plot.ctx; plot.clear(); const L=o.left||118, R=16, T=10, B=24, W=plot.w-L-R, H=plot.h-T-B;
+  const lo=o.lo??Math.min(0,...rows.flatMap(r=>r.vals.map((v,k)=>v-(r.err?r.err[k]:0)))), hi=o.hi??Math.max(0,...rows.flatMap(r=>r.vals.map((v,k)=>v+(r.err?r.err[k]:0))));
+  const fx=v=>L+(v-lo)/(hi-lo||1)*W, rh=H/rows.length, ns=cols.length, bh=Math.min(16,rh*.7/ns);
+  c.save(); c.font='11px Inter,system-ui'; c.strokeStyle=P.line; c.fillStyle=P.muted; c.textAlign='center';
+  const st=Math.pow(10,Math.floor(Math.log10((hi-lo)/4||1))), m=[1,2,5,10].find(k=>(hi-lo)/(k*st)<=5)*st; for(let v=Math.ceil(lo/m)*m; v<=hi+1e-9; v+=m){ c.beginPath(); c.moveTo(fx(v)+.5,T); c.lineTo(fx(v)+.5,T+H); c.stroke(); c.fillText(+v.toPrecision(3),fx(v),T+H+15); }
+  c.strokeStyle=P.muted; c.beginPath(); c.moveTo(fx(0)+.5,T); c.lineTo(fx(0)+.5,T+H); c.stroke();
+  rows.forEach((r,i)=>{ const y0=T+i*rh+(rh-ns*bh)/2; c.fillStyle=P.ink; c.textAlign='right'; c.font='12px Inter,system-ui'; c.fillText(r.label,L-8,T+i*rh+rh/2+4);
+    r.vals.forEach((v,k)=>{ c.fillStyle=cols[k]; c.globalAlpha=.85; const x=Math.min(fx(0),fx(v)); c.fillRect(x,y0+k*bh,Math.abs(fx(v)-fx(0)),bh-2); c.globalAlpha=1;
+      if(r.err){ c.strokeStyle=P.ink; c.lineWidth=1.3; const e=r.err[k], yy=y0+k*bh+bh/2-1; c.beginPath(); c.moveTo(fx(v-e),yy); c.lineTo(fx(v+e),yy); c.moveTo(fx(v-e),yy-3); c.lineTo(fx(v-e),yy+3); c.moveTo(fx(v+e),yy-3); c.lineTo(fx(v+e),yy+3); c.stroke(); } }); });
+  if(o.xl){ c.fillStyle=P.muted; c.textAlign='right'; c.font='11px Inter,system-ui'; c.fillText(o.xl,L+W,T+H+15+9); }
+  c.restore(); }
+
+/* ---- 1 data ---- */
+const pData=new ML.Plot('#pData',{equal:false}); let dM='lin';
+function drawData(){ const P=ML.palette(), m=M[dM], pr=TE.X.map(r=>m.predict(r)), lo=Math.min(...TE.y,...pr)-5, hi=Math.max(...TE.y,...pr)+5;
+  const fr=ML.chart(pData,[{pts:[[lo,lo],[hi,hi]],color:P.muted,dash:[5,4],width:1.5}],{x0:lo,x1:hi,y0:lo,y1:hi,xl:'actual price (thousands)'}), c=pData.ctx;
+  TE.y.forEach((v,i)=>{ c.beginPath(); c.arc(fr.fx(v),fr.fy(pr[i]),3.6,0,7); c.fillStyle=dM==='lin'?P.c3:P.c1; c.globalAlpha=.7; c.fill(); }); c.globalAlpha=1;
+  c.save(); c.font='11px Inter,system-ui'; c.fillStyle=P.muted; c.fillText('predicted ↑',50,22); c.restore();
+  $('#dStats').innerHTML=['lin','gbm'].map((k,i)=>stat(i?'c1':'c3',X.r2(M[k],TE.X,TE.y).toFixed(3),(i?'boosted':'linear')+' test R²')).join('')+stat('c5',X.r2({predict:X.truth},TE.X,TE.y).toFixed(3),'true formula (the best possible)'); }
+ML.bindSeg('dModel',v=>{dM=v;drawData();}); pData.onResize=drawData;
+
+/* ---- 2 coefficients ---- */
+const pCoef=new ML.Plot('#pCoef',{equal:false}); let cS='raw';
+function drawCoef(){ const P=ML.palette(), m=M.lin, sd=m.sd; const rows=F.map((f,j)=>({label:f.name.replace(' (noise)',''), vals:[cS==='raw'?m.beta[j]:m.beta[j]*sd[j]], err:[1.96*(cS==='raw'?m.se[j]:m.se[j]*sd[j])]}));
+  hbars(pCoef, rows, [P.c1], {xl: cS==='raw'?'thousands per unit':'thousands per standard deviation'});
+  $('#cStats').innerHTML=stat('c2',(m.beta[0]*sd[0]).toFixed(1),'area: per sd ('+sd[0].toFixed(0)+' m²)')+stat('c3',m.beta[4].toFixed(1),'garden (true: 15)')+stat('c4',m.beta[5].toFixed(1)+' ± '+(1.96*m.se[5]).toFixed(1),'listing code (true: 0)'); }
+ML.bindSeg('cScale',v=>{cS=v;drawCoef();}); pCoef.onResize=drawCoef;
+
+/* ---- 3 collinearity ---- */
+const pCol=new ML.Plot('#pCol',{equal:false}); let colN=.6, colSeed=1, CL=[];
+function runCol(){ const R=X.rng(100+colSeed), rows=[], y=[];
+  for(let i=0;i<1500;i++){ const size=Math.max(35,Math.min(240,105+38*R.gauss())), rooms=size/32+colN*R.gauss(); const r=[size,rooms,-18*Math.log(1-R()*.99),Math.min(35,.5-7*Math.log(1-R()*.995)),R()<.5?1:0]; rows.push(r); y.push(40+1.4*r[0]+8*r[1]-.6*r[2]-2*r[3]+15*r[4]+14*R.gauss()); }
+  CL=[]; for(let b=0;b<60;b++){ const idx=[...Array(150)].map(()=>R.int(1500)); const m=X.ols(idx.map(i=>rows[i]),idx.map(i=>y[i])); CL.push([m.beta[0],m.beta[1]]); }
+  const a=rows.map(r=>r[0]), b=rows.map(r=>r[1]), ma=X.mean(a), mb=X.mean(b); let sab=0,sa=0,sb=0; a.forEach((v,i)=>{ sab+=(v-ma)*(b[i]-mb); sa+=(v-ma)**2; sb+=(b[i]-mb)**2; }); const rho=sab/Math.sqrt(sa*sb);
+  const sdr=Math.sqrt(X.mean(CL.map(p=>(p[1]-X.mean(CL.map(q=>q[1])))**2)));
+  $('#colStats').innerHTML=stat('c1',rho.toFixed(2),'correlation of area and bedrooms')+stat('c2',(1/(1-rho*rho)).toFixed(1),'VIF (from this pair)')+stat('c3','± '+sdr.toFixed(1),'spread of the bedrooms coefficient')+stat('c4',CL.filter(p=>p[1]<0).length+' / 60','fits where a bedroom lowers the price');
+  drawCol(); }
+function drawCol(){ const P=ML.palette(); const fr=frame(pCol,0.4,2.4,-40,56,'area coefficient (per m²)'), c=pCol.ctx;
+  c.save(); c.strokeStyle=P.muted; c.setLineDash([3,4]); c.beginPath(); c.moveTo(fr.fx(.4),fr.fy(0)); c.lineTo(fr.fx(2.4),fr.fy(0)); c.stroke(); c.restore();
+  CL.forEach(([a,b])=>{ c.beginPath(); c.arc(fr.fx(Math.max(.4,Math.min(2.4,a))),fr.fy(Math.max(-40,Math.min(56,b))),4,0,7); c.fillStyle=P.c1; c.globalAlpha=.6; c.fill(); }); c.globalAlpha=1;
+  c.save(); c.strokeStyle=P.c2; c.lineWidth=3; const x=fr.fx(1.4), y=fr.fy(8); c.beginPath(); c.moveTo(x-8,y-8); c.lineTo(x+8,y+8); c.moveTo(x+8,y-8); c.lineTo(x-8,y+8); c.stroke(); c.font='11px Inter,system-ui'; c.fillStyle=P.muted; c.fillText('bedrooms coefficient ↑',50,22); c.restore(); }
+ML.bindRange('colN',v=>{colN=v;runCol();},v=>v.toFixed(2)+' rooms'); $('#colRun').onclick=()=>{colSeed++;runCol();}; pCol.onResize=drawCol;
+
+/* ---- 4 importance ---- */
+const pImp=new ML.Plot('#pImp',{equal:false}); let iM='rf', iSeed=3; const IMP={};
+function getImp(){ if(!M.rf) M.rf=X.forest(TR.X,TR.y,{trees:60,depth:14,minLeaf:1}); const m=M[iM];
+  const pi=X.permImp(m,TE.X,TE.y,5,iSeed), mdi=m.mdi, a=Math.max(...mdi), b=Math.max(...pi.map(o=>o.mean));
+  IMP.rows=F.map((f,j)=>({label:f.name.replace(' (noise)',''), vals:[mdi[j]/a, pi[j].mean/b], err:[0, pi[j].sd/b]})); IMP.pi=pi; IMP.mdi=mdi; drawImp(); }
+function drawImp(){ if(!IMP.rows) return; const P=ML.palette(); hbars(pImp, IMP.rows, [P.c1,P.c4], {lo:Math.min(0,...IMP.rows.map(r=>r.vals[1]-r.err[1])), hi:1.05, xl:'relative importance'});
+  const r2=X.r2(M[iM],TE.X,TE.y); $('#iStats').innerHTML=stat('c1',(100*IMP.mdi[5]).toFixed(1)+'%','MDI share: listing code (noise)')+stat('c1',(100*IMP.mdi[4]).toFixed(1)+'%','MDI share: garden (real)')+stat('c4',IMP.pi[5].mean.toFixed(3),'R² drop: listing code')+stat('c4',IMP.pi[4].mean.toFixed(3),'R² drop: garden')+stat('c3',r2.toFixed(3),'test R² of this model'); }
+ML.bindSeg('iModel',v=>{iM=v;getImp();}); $('#iRun').onclick=()=>{iSeed++;getImp();}; pImp.onResize=drawImp;
+
+/* ---- 5 PDP / ICE ---- */
+const pPdp=new ML.Plot('#pPdp',{equal:false}); let pF=2, pM='gbm'; const ICEROWS=TE.X.slice(0,40);
+$('#pFeat').innerHTML=F.map((f,j)=>`<button data-v="${j}"${j===pF?' class="on"':''}>${f.name.replace(' (noise)','')}</button>`).join(''); ML.tileRow('pFeat');
+function drawPdp(){ const P=ML.palette(), m=M[pM], grid=X.grid(TR.X,pF,30), ice=X.ice(m,ICEROWS,pF,grid), pd=grid.map((_,g)=>X.mean(ice.map(c=>c[g]))), tru=X.pdp({predict:X.truth},ICEROWS,pF,grid);
+  const cent=$('#pCent').checked, sh=a=>cent?a.map(v=>v-a[0]):a, I=ice.map(sh), PD=sh(pd), TT=sh(tru);
+  const all=[...I.flat(),...TT], lo=Math.min(...all), hi=Math.max(...all), pad=(hi-lo)*.06+1;
+  const cf=pF===0?3:0, cv=ICEROWS.map(r=>r[cf]), cmin=Math.min(...cv), cmax=Math.max(...cv);
+  const ser=I.map((a,i)=>({pts:grid.map((g,k)=>[g,a[k]]),color:mix(P.c3,P.c2,(cv[i]-cmin)/(cmax-cmin||1)),width:1.1}));
+  ser.push({pts:grid.map((g,k)=>[g,TT[k]]),color:P.ink,width:2,dash:[6,4]}); ser.push({pts:grid.map((g,k)=>[g,PD[k]]),color:P.c1,width:4});
+  const fr=ML.chart(pPdp,ser,{x0:grid[0],x1:grid[grid.length-1],y0:lo-pad,y1:hi+pad,xl:F[pF].name+(F[pF].unit?' ('+F[pF].unit+')':'')}); const c=pPdp.ctx;
+  c.save(); c.globalAlpha=.5; c.strokeStyle=P.muted; TR.X.forEach(r=>{ const x=fr.fx(r[pF]); if(x>=44&&x<=pPdp.w-10){ c.beginPath(); c.moveTo(x,pPdp.h-28); c.lineTo(x,pPdp.h-33); c.stroke(); } }); c.restore();
+  c.save(); c.font='11px Inter,system-ui'; c.fillStyle=P.muted; c.fillText((cent?'change in ':'')+'predicted price ↑'+(pF===0?'   (colour: distance, near → far)':''),50,22); c.restore();
+  const range=Math.max(...PD)-Math.min(...PD), spread=Math.max(...I.map(a=>a[a.length-1]-a[0]))-Math.min(...I.map(a=>a[a.length-1]-a[0]));
+  $('#pStats').innerHTML=stat('c1',range.toFixed(1),'range of the PD curve (thousands)')+stat('c2',spread.toFixed(1),'spread of end-to-end change across houses')+stat('c3',(grid.length*ICEROWS.length).toLocaleString(),'predictions for this plot'); }
+ML.bindSeg('pFeat',v=>{pF=+v;drawPdp();}); ML.bindSeg('pModel',v=>{pM=v;drawPdp();}); $('#pCent').onchange=drawPdp; pPdp.onResize=drawPdp;
+
+/* ---- 6 ALE vs PDP ---- */
+const pAleS=new ML.Plot('#pAleS',{equal:false}), pAleC=new ML.Plot('#pAleC',{equal:false}); let aRho=.9, AL={};
+function runAle(){ const R=X.rng(4), Xs=[], y=[]; for(let i=0;i<400;i++){ const a=R()*2-1, b=Math.max(-1,Math.min(1,aRho*a+Math.sqrt(1-aRho*aRho)*(R()*2-1))); Xs.push([a,b]); y.push(a+2*b*b+.1*R.gauss()); }
+  const m=X.gbm(Xs,y,{trees:150,minLeaf:5}), grid=X.grid(Xs,0,25), pd=X.pdp(m,Xs,0,grid), al=X.ale(m,Xs,0,12); const pm=X.mean(pd);
+  AL={Xs, grid, pd:pd.map(v=>v-pm), al}; drawAle(); }
+function slope(xs,ys){ const mx=X.mean(xs), my=X.mean(ys); let a=0,b=0; xs.forEach((x,i)=>{ a+=(x-mx)*(ys[i]-my); b+=(x-mx)**2; }); return a/b; }
+function drawAle(){ if(!AL.Xs) return; const P=ML.palette(); let fr=frame(pAleS,-1.05,1.05,-1.05,1.05,'x₁'), c=pAleS.ctx;
+  AL.Xs.forEach(([a,b])=>{ c.beginPath(); c.arc(fr.fx(a),fr.fy(b),2.6,0,7); c.fillStyle=P.c3; c.globalAlpha=.55; c.fill(); }); c.globalAlpha=1;
+  const near=(a,b)=>AL.Xs.some(([u,v])=>Math.hypot(u-a,v-b)<.12); let off=0;
+  AL.Xs.slice(0,120).forEach(([,b])=>{ const ok=near(.8,b); if(!ok) off++; c.beginPath(); c.arc(fr.fx(.8),fr.fy(b),3.2,0,7); if(ok){ c.fillStyle=P.c5; c.fill(); } else { c.strokeStyle=P.c2; c.lineWidth=1.6; c.stroke(); } });
+  c.save(); c.font='11px Inter,system-ui'; c.fillStyle=P.muted; c.fillText('x₂ ↑',50,22); c.restore();
+  const tr=AL.grid.map(g=>g), ser=[{pts:AL.grid.map((g,k)=>[g,tr[k]]),color:P.ink,width:2,dash:[6,4]},{pts:AL.grid.map((g,k)=>[g,AL.pd[k]]),color:P.c1,width:3.5},{pts:AL.al.x.map((g,k)=>[g,AL.al.y[k]]),color:P.c4,width:3.5}];
+  fr=ML.chart(pAleC,ser,{x0:-1,x1:1,y0:-1.2,y1:1.2,xl:'x₁'}); c=pAleC.ctx; c.save(); c.font='12px Inter,system-ui'; c.fillStyle=P.c1; c.fillText('PD',52,24); c.fillStyle=P.c4; c.fillText('ALE',82,24); c.fillStyle=P.ink; c.fillText('truth',116,24); c.restore();
+  const sP=slope(AL.grid,AL.pd), sA=slope(AL.al.x,AL.al.y);
+  $('#aStats').innerHTML=stat('c1',sP.toFixed(2),'PD slope (truth 1.00)')+stat('c4',sA.toFixed(2),'ALE slope (truth 1.00)')+stat('c2',Math.round(100*off/120)+'%','PD points with no real data nearby'); }
+ML.bindRange('aRho',v=>{aRho=v;runAle();},v=>v.toFixed(2)); pAleS.onResize=drawAle; pAleC.onResize=drawAle;
+
+/* ---- 7 surrogate ---- */
+let sD=2; const GP=TR.X.map(r=>M.gbm.predict(r));
+function sgrow(idx,depth){ const g=GP; let s=0; idx.forEach(i=>s+=g[i]); const v=s/idx.length; if(depth>=sD||idx.length<20) return {v,n:idx.length};
+  let best=null; for(let f=0;f<6;f++){ const so=idx.slice().sort((a,b)=>TR.X[a][f]-TR.X[b][f]); let ls=0; for(let k=0;k<so.length-1;k++){ ls+=g[so[k]]; const nl=k+1, nr=so.length-nl; if(nl<10||nr<10||TR.X[so[k]][f]===TR.X[so[k+1]][f]) continue; const gain=ls*ls/nl+(s-ls)**2/nr; if(!best||gain>best.gain) best={gain,f,t:(TR.X[so[k]][f]+TR.X[so[k+1]][f])/2}; } }
+  if(!best) return {v,n:idx.length}; const L=idx.filter(i=>TR.X[i][best.f]<=best.t), Rr=idx.filter(i=>TR.X[i][best.f]>best.t); return {f:best.f,t:best.t,v,n:idx.length,l:sgrow(L,depth+1),r:sgrow(Rr,depth+1)}; }
+function drawSur(){ const t=sgrow([...Array(400).keys()],0); const pr=r=>X.treePred(t,r);
+  const fid=(()=>{ const m=X.mean(GP); let a=0,b=0; TR.X.forEach((r,i)=>{ a+=(GP[i]-pr(r))**2; b+=(GP[i]-m)**2; }); return 1-a/b; })();
+  const fmtT=(f,t)=>f===4?'no garden':`${F[f].name.replace(' (noise)','')} ≤ ${t<10?t.toFixed(1):t.toFixed(0)}${F[f].unit?' '+F[f].unit:''}`, fmtF=(f,t)=>f===4?'garden':`${F[f].name.replace(' (noise)','')} &gt; ${t<10?t.toFixed(1):t.toFixed(0)}${F[f].unit?' '+F[f].unit:''}`;
+  const node=(n)=> n.f===undefined ? `<div class="sg-leaf"><b>${n.v.toFixed(0)}</b> thousand <span>(${n.n} houses)</span></div>` : `<ul><li><span class="sg-if">if ${fmtT(n.f,n.t)}</span>${node(n.l)}</li><li><span class="sg-if">if ${fmtF(n.f,n.t)}</span>${node(n.r)}</li></ul>`;
+  $('#sTree').innerHTML=`<div class="sg-root">all houses: <b>${t.v.toFixed(0)}</b> thousand</div>`+node(t);
+  let leaves=0; (function c(n){ if(n.f===undefined) leaves++; else { c(n.l); c(n.r); } })(t);
+  drawSurPlot(); $('#sStats').innerHTML=stat('c1',fid.toFixed(3),'fidelity R² (imitating the model)')+stat('c3',leaves,'leaves to read')+stat('c4',X.r2({predict:pr},TE.X,TE.y).toFixed(3),'surrogate test R² on real prices'); }
+const pSur=new ML.Plot('#pSur',{equal:false}); let FID=null;
+function drawSurPlot(){ const P=ML.palette(); if(!FID){ const keep=sD; FID=[]; for(let d=1;d<=6;d++){ sD=d; const t=sgrow([...Array(400).keys()],0), m=X.mean(GP); let a=0,b=0; TR.X.forEach((r,i)=>{ a+=(GP[i]-X.treePred(t,r))**2; b+=(GP[i]-m)**2; }); FID.push([d,1-a/b]); } sD=keep; }
+  const fr=ML.chart(pSur,[{pts:FID,color:P.c1,width:3,dots:true,r:4}],{x0:.8,x1:6.2,y0:0,y1:1,xl:'surrogate depth'}); const c=pSur.ctx, q=FID[sD-1]; c.beginPath(); c.arc(fr.fx(q[0]),fr.fy(q[1]),8,0,7); c.strokeStyle=P.c4; c.lineWidth=3; c.stroke();
+  c.save(); c.font='11px Inter,system-ui'; c.fillStyle=P.muted; c.fillText('fidelity R² ↑',50,22); c.restore(); }
+pSur.onResize=drawSurPlot; ML.bindRange('sDepth',v=>{sD=v;drawSur();});
+
+ML.onTheme(()=>{ drawSurPlot(); drawData(); drawCoef(); drawCol(); drawImp(); drawPdp(); drawAle(); });
+drawData(); drawCoef(); runCol(); drawPdp(); runAle(); drawSur(); setTimeout(getImp,30);
+})();
+</script>
+<style>
+.sgt{font-size:14px;margin-top:12px}
+.sg-root{font-weight:600;margin-bottom:4px}
+.sgt ul{list-style:none;margin:0;padding-left:18px;border-left:2px solid var(--line)}
+.sgt li{margin:6px 0}
+.sg-if{display:inline-block;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px;background:var(--soft);border-radius:6px;padding:2px 7px;color:var(--c1)}
+.sg-leaf{margin:4px 0 0 18px}.sg-leaf b{color:var(--c4)}.sg-leaf span{color:var(--muted);font-size:12px}
+</style>
+<script>ML.nav('interpretability'); ML.renderMath(document.body);</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Graph neural networks</title>
+<meta name="description" content="Step 9 of the learning path. Learning from connections: graphs as matrices, message passing, graph convolution and attention, and where GNNs are used.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<style>
+.hubgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:18px}
+.hubcard{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;text-decoration:none;color:var(--ink);transition:transform .2s,border-color .2s}
+a.hubcard:hover{transform:translateY(-3px);border-color:var(--c1)}
+.hubcard.soon{border-style:dashed;box-shadow:none;background:transparent}
+.ml-art{background:linear-gradient(135deg,#1e1b4b,#4c1d95 55%,#831843);padding:12px 16px}
+.ml-art svg{display:block;width:100%;height:auto}
+.ml-art text{font:600 13px Inter,system-ui,sans-serif}
+.ml-body{padding:16px 18px 18px}.ml-body h3{margin:6px 0;font-size:19px}.ml-body p{margin:0;color:var(--muted);font-size:14px}
+.ml-body .tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--c5)}
+.ml-go{display:inline-block;margin-top:10px;font-weight:700;color:var(--c1);font-size:14px}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-gnn">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Step 9</p>
+  <h1>Graph neural networks, <span class="grad">interactively</span></h1>
+  <p class="lede">Step 9 of the learning path. Learning from connections: graphs as matrices, message passing, graph convolution and attention, and where GNNs are used.</p>
+</section>
+<div class="evo-slot" data-evo="gnn"></div>
+<div class="hubgrid">
+<a class="hubcard" href="gnn/"><div class="ml-art" aria-hidden="true"><svg viewBox="0 0 320 150"><line x1="60" y1="40" x2="110" y2="30" stroke="#e2e8f0" stroke-opacity="0.35" stroke-width="2"/><line x1="60" y1="40" x2="90" y2="90" stroke="#e2e8f0" stroke-opacity="0.35" stroke-width="2"/><line x1="110" y1="30" x2="90" y2="90" stroke="#e2e8f0" stroke-opacity="0.35" stroke-width="2"/><line x1="90" y1="90" x2="40" y2="110" stroke="#e2e8f0" stroke-opacity="0.35" stroke-width="2"/><line x1="90" y1="90" x2="150" y2="70" stroke="#a78bfa" stroke-opacity="0.9" stroke-width="3"/><line x1="110" y1="30" x2="150" y2="70" stroke="#a78bfa" stroke-opacity="0.9" stroke-width="3"/><line x1="150" y1="70" x2="200" y2="40" stroke="#a78bfa" stroke-opacity="0.9" stroke-width="3"/><line x1="150" y1="70" x2="180" y2="125" stroke="#a78bfa" stroke-opacity="0.9" stroke-width="3"/><line x1="200" y1="40" x2="270" y2="60" stroke="#e2e8f0" stroke-opacity="0.35" stroke-width="2"/><line x1="200" y1="40" x2="230" y2="100" stroke="#e2e8f0" stroke-opacity="0.35" stroke-width="2"/><line x1="230" y1="100" x2="270" y2="60" stroke="#e2e8f0" stroke-opacity="0.35" stroke-width="2"/><line x1="230" y1="100" x2="290" y2="120" stroke="#e2e8f0" stroke-opacity="0.35" stroke-width="2"/><line x1="180" y1="125" x2="230" y2="100" stroke="#e2e8f0" stroke-opacity="0.35" stroke-width="2"/><line x1="270" y1="60" x2="290" y2="120" stroke="#e2e8f0" stroke-opacity="0.35" stroke-width="2"/><circle cx="60" cy="40" r="8" fill="#22d3ee"/><circle cx="110" cy="30" r="8" fill="#22d3ee"/><circle cx="90" cy="90" r="8" fill="#22d3ee"/><circle cx="40" cy="110" r="8" fill="#22d3ee"/><circle cx="150" cy="70" r="11" fill="#fbbf24"/><circle cx="200" cy="40" r="8" fill="#fb7185"/><circle cx="230" cy="100" r="8" fill="#fb7185"/><circle cx="270" cy="60" r="8" fill="#fb7185"/><circle cx="180" cy="125" r="8" fill="#fb7185"/><circle cx="290" cy="120" r="8" fill="#fb7185"/><text x="12" y="146" fill="#fbbf24">h′ = σ(ÂHW)</text></svg></div><div class="ml-body"><span class="tag">Graph neural networks</span><h3>GNNs: message passing, GCN &amp; GAT</h3><p>A real social network as a matrix, receptive fields you can grow, a GCN trained live from two labels, over-smoothing, graph attention, and GNNs for fraud, molecules and recommendations.</p><span class="ml-go">Open &rarr;</span></div></a>
+</div>
+<p class="foot">Everything on these pages is written from scratch in plain JavaScript and runs in your browser; the networks marked "trained live" learn while you watch. Underlined words are clickable definitions.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../dl/assets/evo.js"></script>
+<script>NLP.nav('gnn','hub');</script>
+</body>
+</html>

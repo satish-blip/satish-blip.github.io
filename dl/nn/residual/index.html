@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Residual connections</title>
+<meta name="description" content="Why x + F(x) lets networks go hundreds of layers deep: train a deep plain network and the same network with skip connections side by side, watch gradients flow, delete layers one at a time, and see the unrolled ensemble of paths.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nn">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Foundations</p>
+  <h1>Residual connections: <span class="grad">x + F(x)</span></h1>
+  <p class="lede">Stacking more layers should never hurt: the extra layers could just learn to copy their input. Yet before 2015, deep plain networks trained <i>worse</i> than shallow ones. A residual connection adds the input back to the output of each block, so copying becomes the default and gradients get a highway straight to the early layers.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#idea">1 · The idea</a><a href="#train">2 · Plain vs residual, live</a><a href="#grad">3 · Gradient flow</a><a href="#paths">4 · An ensemble of paths</a><a href="#delete">5 · Delete a layer</a><a href="#where">6 · Variants and transformers</a><a href="#code">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a residual connection, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>Depth should only help: a 56-layer network can copy a 20-layer one and set its extra 36 layers to "do nothing". Yet in 2015 the deeper network trained to a <i>worse</i> training error. The extra layers could not even learn to do nothing, because "do nothing" means learning an exact identity map through weights and non-linearities, and the gradient reaching the early layers had faded away. The fix is almost embarrassingly simple: give every block a free copy of its input.</p>
+      <h3>The idea</h3><p>In a plain deep network each <a class="term" data-t="layer">layer</a> must rebuild the whole signal from scratch. A <a class="term" data-t="residual">residual connection</a> (or skip connection) adds the block’s input straight to its output: \(x + F(x)\). The block now only has to learn a <i>correction</i> to its input, and doing nothing (<a class="term" data-t="identity">the identity</a>) is the easy default.</p><p>During training the gradient also gets a direct path back through the "+" to the early layers, so it does not <a class="term" data-t="vanishing-gradient">vanish</a>. This is what made 100+ layer <a class="term" data-t="residual">ResNets</a> and every <a class="term" data-t="transformer">transformer</a> trainable.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Compute the block’s usual output \(F(x)\) (layers and activations).</li><li>Add the untouched input: \(y = x + F(x)\).</li><li>Stack many such blocks.</li><li>On the way back, the gradient flows through both the block and the shortcut.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Editing a document with "track changes" instead of retyping it: each editor only adds small corrections, and the original text always survives to the end.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Very deep networks train reliably</li><li>Adding blocks rarely hurts</li><li>Used in ResNets, transformers, diffusion models</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Shapes must match (or use a projection)</li><li>Activations can grow with depth: pair with normalisation</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="residual">Residual connection</a><a class="term" data-t="identity">Identity mapping</a><a class="term" data-t="degradation">Degradation problem</a><a class="term" data-t="vanishing-gradient">Vanishing gradients</a><a class="term" data-t="backprop">Backpropagation</a><a class="term" data-t="jacobian">Jacobian</a><a class="term" data-t="ensemble">Ensemble</a><a class="term" data-t="layernorm">LayerNorm</a><a class="term" data-t="transformer">Transformer</a><a class="term" data-t="residual-stream">Residual stream</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="idea" class="card">
+  <h2><span class="num">1</span>The idea</h2>
+  <div class="grid2">
+    <div><svg class="diagram" viewBox="0 0 520 250" id="blockSvg"></svg>
+      <p class="hint">Left: a plain block must learn the whole mapping \(H(x)\). Right: a residual block only learns the change \(F(x)=H(x)-x\); the skip line carries \(x\) through untouched.</p></div>
+    <div class="prose">
+      <div class="mathbox c1">$$x_{l+1}=x_l+F(x_l;\,W_l)$$</div>
+      <p><b>Easy to do nothing.</b> If the best thing a block can do is pass its input through, a plain block has to learn \(W\approx I\) through a non-linearity, which is hard. A residual block just drives \(F\to0\), which weight decay and small initial weights already push towards. So adding blocks can no longer make the training loss worse.</p>
+      <p><b>Gradients get a shortcut.</b> Unrolling from block \(l\) to the last block \(L\):</p>
+      <div class="mathbox c3">$$x_L=x_l+\sum_{i=l}^{L-1}F(x_i)\quad\Rightarrow\quad \frac{\partial\mathcal L}{\partial x_l}=\frac{\partial\mathcal L}{\partial x_L}\Big(I+\frac{\partial}{\partial x_l}\sum_{i=l}^{L-1}F(x_i)\Big)$$</div>
+      <p>The identity term \(I\) means part of the gradient reaches layer \(l\) <i>without being multiplied by any weight matrix or activation slope</i>. In a plain network every path is a product of \(L-l\) Jacobians, which shrinks or explodes exponentially (see <a href="../activations/#vanish">vanishing gradients</a>).</p>
+      <div class="note">He, Zhang, Ren and Sun (2015): on CIFAR-10 a 56-layer plain network had <b>higher training error</b> than a 20-layer one (the <i>degradation problem</i>, not overfitting). With residual connections they trained 110 layers, then 152 on ImageNet, and later 1001.</div>
+    </div>
+  </div>
+</section>
+
+<section id="train" class="card hl">
+  <h2><span class="num">2</span>Plain vs residual, trained live</h2>
+  <p class="sub">Two deep networks of identical shape (2 → width → … → width → 1) start from <b>exactly the same weights</b>. The only difference is the skip connection around every hidden block after the first. Same optimiser (Adam), same data.</p>
+  <div class="row" style="justify-content:space-between"><div class="dsrow" id="dsPick"></div></div>
+  <div class="grid3 g3w" style="margin-top:12px">
+    <div><div class="plot sq" id="pPlain"></div><div class="hint" style="text-align:center" id="tPlain"></div></div>
+    <div><div class="plot sq" id="pRes"></div><div class="hint" style="text-align:center" id="tRes"></div></div>
+    <div class="controls">
+      <div class="ctl"><label for="depth"><span>Hidden layers</span><output id="depthOut"></output></label><input type="range" id="depth" min="2" max="40" value="20"></div>
+      <div class="ctl"><label for="width"><span>Width</span><output id="widthOut"></output></label><input type="range" id="width" min="4" max="16" value="10"></div>
+      <div class="ctl"><span class="lbl">Activation</span><div class="seg" id="act"><button data-v="sigmoid" class="on">sigmoid</button><button data-v="tanh">tanh</button><button data-v="relu">ReLU</button></div></div>
+      <div class="player"><button class="btn primary" id="tRun">Train both</button><button class="btn" id="tReset">Reset</button><span class="pos" id="tEp"></span></div>
+      <div class="plot short" id="tLoss"></div>
+      <div class="legend"><span><i class="sw" style="background:#64748b"></i>plain</span><span><i class="sw" style="background:#7c3aed"></i>residual</span></div>
+    </div>
+  </div>
+  <div class="note" style="margin-top:12px"><b>Try:</b> sigmoid at 20 layers: the plain network's output barely moves from 50/50 while the residual one learns the shape. Drop to 3 layers and the two behave alike. With ReLU the plain network survives longer (its slope is 1), but push the depth to 40.</div>
+</section>
+
+<section id="grad" class="card">
+  <h2><span class="num">3</span>Gradient flow at initialisation</h2>
+  <div class="grid2">
+    <div><div class="plot wide" id="gPlot"></div>
+      <div class="legend"><span><i class="sw" style="background:#64748b"></i>plain</span><span><i class="sw" style="background:#7c3aed"></i>residual</span></div>
+      <p class="hint">Gradient norm \(\lVert\partial\mathcal L/\partial W^{(l)}\rVert\) in every layer of the two networks from section 2, before any training (log scale, averaged over 3 seeds). Uses the depth, width and activation chosen above.</p></div>
+    <div class="prose">
+      <p>In the plain network the gradient at layer \(l\) is a product of \(L-l\) factors \(W^{(k)\top}\operatorname{diag}\phi'(z^{(k)})\). If those factors are a bit smaller than 1 the product collapses geometrically, and the first layers receive almost nothing.</p>
+      <p>In the residual network each factor becomes \(I+W^{(k)\top}\operatorname{diag}\phi'(z^{(k)})\). Even if the second part is small, the product stays near \(I\), so the curve stays <b>flat</b>: every layer learns at a similar rate.</p>
+      <div class="stats" id="gStats"></div>
+      <div class="algo"><h5 class="algo-h">Algorithm: forward and backward through residual blocks</h5><ol>
+        <li><span class="kw">input</span> \(x_0\), blocks \(F_1,\dots,F_L\) (each e.g. norm → linear → ReLU → linear)</li>
+        <li><span class="kw">for</span> \(l=1\) <span class="kw">to</span> \(L\) <span class="kw">do</span> \(x_l\leftarrow x_{l-1}+F_l(x_{l-1})\) <span class="cm">skip: add the input back</span></li>
+        <li>\(\mathcal L\leftarrow\) loss on \(x_L\); \(g\leftarrow\partial\mathcal L/\partial x_L\)</li>
+        <li><span class="kw">for</span> \(l=L\) <span class="kw">down to</span> 1 <span class="kw">do</span></li>
+        <li class="i1">backprop \(g\) through \(F_l\) to get its weight gradients and \(g_F=J_{F_l}^\top g\)</li>
+        <li class="i1">\(g\leftarrow g+g_F\) <span class="cm">identity path: g passes through untouched</span></li>
+        <li><span class="kw">return</span> all weight gradients</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: a residual network as an ensemble of paths</summary><div>
+        <p>Expand \(x_L\) for three blocks: \(x_3=x_0+F_1+F_2(x_0+F_1)+F_3(\dots)\). Every block is either used or skipped, so there are \(2^L\) paths from input to output, of every length from 0 to \(L\). Veit, Wilber and Belongie (2016) measured that most of the gradient in a 110-layer ResNet flows through paths only 10 to 34 blocks long, and that deleting a single block at test time barely hurts (unlike a plain network, where it is fatal). Section 5 on this page lets you try that. The effective depth is far smaller than the nominal depth, which is one reason why such networks are easy to train.</p>
+        <p>In a transformer, the stream \(x_l\) is called the <i>residual stream</i>: every attention and MLP block reads from it and writes an update back into it, and pre-norm (normalise the input of \(F\), never the stream itself) keeps the identity path perfectly clean.</p>
+      </div></details>
+      <div class="note warn">Residuals alone can let activations <i>grow</i> with depth (each block adds variance). That is why real ResNets pair them with <a href="../normalisation/">normalisation</a>, and why some initialisations (Fixup, "zero-init the last layer of each block") start every \(F\) at zero.</div>
+    </div>
+  </div>
+</section>
+
+<section id="paths" class="card">
+  <h2><span class="num">4</span>An ensemble of paths</h2>
+  <div class="grid2">
+    <div><svg class="diagram" viewBox="0 0 520 210" id="unrollSvg"></svg>
+      <p class="hint">Three residual blocks unrolled: \(x_3=(1+F_3)(1+F_2)(1+F_1)\,x_0\). Every block can be taken or skipped, so there are \(2^3=8\) paths from input to output.</p></div>
+    <div class="prose">
+      <p>Expanding the product shows a residual network is a collection of \(2^L\) paths of different lengths. The number of paths that pass through exactly \(k\) blocks is \(\binom{L}{k}\), so most paths have length about \(L/2\), and gradients along the long paths vanish anyway. Veit, Wilber and Belongie (2016) found the gradient in a 110-layer ResNet comes mostly from paths only 10 to 34 blocks long: the network <b>behaves like an ensemble of shallow networks</b>.</p>
+      <div class="ctl"><label for="pl"><span>Number of blocks \(L\)</span><output id="plOut"></output></label><input type="range" id="pl" min="2" max="54" value="18"></div>
+      <div class="plot short" id="pathPlot"></div>
+      <div class="stats" id="pathStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="delete" class="card">
+  <h2><span class="num">5</span>Delete a layer</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>If a residual network is an ensemble, removing one block should only remove some paths, and the rest should still work. In a plain network every input goes through every layer, so removing one breaks the only path.</p>
+      <p>This takes the two networks you trained in section 2 and, for each hidden block in turn, replaces it by the identity (output = input) and measures training accuracy. Train them first for a good comparison.</p>
+      <div class="row"><button class="btn primary" id="delRun">Delete each layer in turn</button></div>
+      <div class="stats" id="delStats" style="margin-top:10px"></div>
+    </div>
+    <div><div class="plot short" id="delPlot"></div>
+      <div class="legend"><span><i class="sw" style="background:#64748b"></i>plain</span><span><i class="sw" style="background:#7c3aed"></i>residual</span><span class="mono">- - full network</span></div>
+      <p class="hint">Accuracy after deleting block \(l\) (x-axis). Dashed lines: accuracy of the intact networks.</p></div>
+  </div>
+</section>
+
+<section id="where" class="card">
+  <h2><span class="num">6</span>Variants, and where you meet them</h2>
+  <div class="grid3 prose">
+    <div><h3>Projection shortcut</h3><div class="mathbox c1">$$x_{l+1}=W_sx_l+F(x_l)$$</div><p>When \(F\) changes the shape (more channels, smaller image), the skip uses a \(1\times1\) convolution or linear map \(W_s\) to match. Used only where needed; elsewhere the skip is the pure identity.</p></div>
+    <div><h3>Highway networks</h3><div class="mathbox c4">$$x_{l+1}=T\odot F(x_l)+(1-T)\odot x_l$$</div><p>Srivastava et al. (2015): a learned gate \(T=\sigma(W_Tx+b)\) decides how much to transform. The same idea as the LSTM cell state (see <a href="../../nlp/memory/">memory in RNNs</a>), which is why LSTMs fight vanishing gradients too.</p></div>
+    <div><h3>DenseNet</h3><div class="mathbox c3">$$x_{l+1}=\big[x_0,x_1,\dots,x_l,F(\cdot)\big]$$</div><p>Huang et al. (2017) concatenate every earlier output instead of adding. More reuse of features, more memory.</p></div>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <div><svg class="diagram" viewBox="0 0 520 240" id="lnSvg"></svg></div>
+    <div class="prose">
+      <h3>In every transformer</h3>
+      <p>Each transformer layer has two residual sub-blocks: attention, then a feed-forward MLP. The residual stream \(x\) runs straight from the embeddings to the output, and every sub-block reads from it and <i>adds</i> its result back:</p>
+      <div class="mathbox c1">$$\begin{aligned}x&\leftarrow x+\operatorname{Attn}(\operatorname{LN}(x))\\x&\leftarrow x+\operatorname{MLP}(\operatorname{LN}(x))\end{aligned}$$</div>
+      <p>This is <b>pre-LN</b> (GPT-2 onwards): normalise the input to the block, keep the skip path clean. The original 2017 transformer was <b>post-LN</b>, \(x\leftarrow\operatorname{LN}(x+\operatorname{Attn}(x))\), which puts a normalisation on the highway and needs careful learning-rate warm-up. See <a href="../normalisation/#where">normalisation</a> and <a href="../../nlp/transformers/">transformers</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">7</span>The same thing in Python (PyTorch)</h2>
+<pre class="code"><span class="k">class</span> <span class="f">ResBlock</span>(nn.Module):
+    <span class="k">def</span> <span class="f">__init__</span>(self, d):
+        super().__init__()
+        self.norm = nn.LayerNorm(d)
+        self.f = nn.Sequential(nn.Linear(d, 4*d), nn.GELU(), nn.Linear(4*d, d))
+        nn.init.zeros_(self.f[2].weight)          <span class="c"># start as the identity map</span>
+    <span class="k">def</span> <span class="f">forward</span>(self, x):
+        <span class="k">return</span> x + self.f(self.norm(x))            <span class="c"># pre-norm residual</span>
+
+model = nn.Sequential(nn.Linear(2, 64), *[ResBlock(64) <span class="k">for</span> _ <span class="k">in</span> range(<span class="s">50</span>)], nn.Linear(64, 1))
+<span class="c"># torchvision.models.resnet50() uses the same pattern with convolutions + BatchNorm</span></pre>
+</section>
+
+<p class="foot">Part of the <a href="../">neural network foundations</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/nn.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML; const GREY='#64748b', PUR='#7c3aed';
+/* ---- diagrams ---- */
+function box(x,y,w,h,t,c){ return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" style="fill:color-mix(in srgb,${c} 16%,var(--card));stroke:${c};stroke-width:1.6"/><text x="${x+w/2}" y="${y+h/2+4}" text-anchor="middle">${t}</text>`; }
+function arr(x1,y1,x2,y2,c){ return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="stroke:${c||'var(--muted)'};stroke-width:1.8" marker-end="url(#ah)"/>`; }
+const defs=`<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" style="fill:var(--muted)"/></marker></defs>`;
+$('#blockSvg').innerHTML=defs+
+ `<text x="120" y="14" text-anchor="middle">Plain block</text>`+
+ `<text x="120" y="232" text-anchor="middle" class="mut">x</text>`+arr(120,220,120,196)+box(70,160,100,34,'weight layer','#64748b')+arr(120,160,120,138)+box(70,104,100,34,'φ, weight layer','#64748b')+arr(120,104,120,62)+`<text x="120" y="52" text-anchor="middle">H(x)</text>`+
+ `<text x="380" y="14" text-anchor="middle">Residual block</text>`+
+ `<text x="360" y="232" text-anchor="middle" class="mut">x</text>`+arr(360,220,360,196)+box(310,160,100,34,'weight layer','#7c3aed')+arr(360,160,360,138)+box(310,104,100,34,'φ, weight layer','#7c3aed')+`<text x="300" y="128" text-anchor="end" class="mut">F(x)</text>`+arr(360,104,360,82)+
+ `<circle cx="360" cy="70" r="12" style="fill:var(--card);stroke:#db2777;stroke-width:2"/><text x="360" y="75" text-anchor="middle">+</text>`+
+ `<path d="M360,212 L460,212 L460,70 L376,70" style="fill:none;stroke:#db2777;stroke-width:2.4" marker-end="url(#ah)"/><text x="468" y="145" class="mut">identity x</text>`+
+ arr(360,58,360,40)+`<text x="372" y="48">F(x) + x</text>`;
+const U=document.getElementById('unrollSvg'); let s=defs; const xs=[30,150,270,390,500];
+s+=`<line x1="20" y1="110" x2="505" y2="110" style="stroke:#db2777;stroke-width:3"/>`;
+[0,1,2].forEach(i=>{ const x=xs[i]+60; s+=`<path d="M${x-40},110 Q${x-40},50 ${x},50 Q${x+40},50 ${x+40},110" style="fill:none;stroke:#7c3aed;stroke-width:2.2"/>`+box(x-24,34,48,30,'F'+(i+1),'#7c3aed')+`<circle cx="${x+40}" cy="110" r="9" style="fill:var(--card);stroke:#db2777;stroke-width:2"/><text x="${x+40}" y="114" text-anchor="middle">+</text>`; });
+s+=`<text x="20" y="135" class="mut">x₀</text><text x="490" y="135" class="mut">x₃</text><text x="260" y="170" text-anchor="middle" class="mut">each “+” lets the signal either go through F or skip it</text><text x="260" y="192" text-anchor="middle" class="mut">8 paths: lengths 0 (1 path), 1 (3), 2 (3), 3 (1)</text>`;
+U.innerHTML=s;
+$('#lnSvg').innerHTML=defs+`<text x="130" y="18" text-anchor="middle">Pre-LN (GPT, LLaMA)</text><text x="390" y="18" text-anchor="middle">Post-LN (original 2017)</text>`+
+ `<line x1="60" y1="225" x2="60" y2="40" style="stroke:#db2777;stroke-width:3"/>`+box(110,150,110,30,'LayerNorm','#0891b2')+box(110,100,110,30,'Attention','#7c3aed')+`<path d="M60,200 L165,200 L165,180" style="fill:none;stroke:var(--muted);stroke-width:1.6"/>`+arr(165,150,165,132)+`<path d="M165,100 L165,80 L72,80" style="fill:none;stroke:var(--muted);stroke-width:1.6" marker-end="url(#ah)"/><circle cx="60" cy="80" r="9" style="fill:var(--card);stroke:#db2777;stroke-width:2"/><text x="60" y="84" text-anchor="middle">+</text><text x="20" y="225" class="mut">x</text><text x="72" y="44" class="mut">clean highway</text>`+
+ `<line x1="320" y1="225" x2="320" y2="120" style="stroke:#db2777;stroke-width:3"/>`+box(370,160,110,30,'Attention','#7c3aed')+`<path d="M320,205 L425,205 L425,190" style="fill:none;stroke:var(--muted);stroke-width:1.6"/><path d="M425,160 L425,120 L332,120" style="fill:none;stroke:var(--muted);stroke-width:1.6" marker-end="url(#ah)"/><circle cx="320" cy="120" r="9" style="fill:var(--card);stroke:#db2777;stroke-width:2"/><text x="320" y="124" text-anchor="middle">+</text>`+box(265,62,110,30,'LayerNorm','#0891b2')+arr(320,111,320,94)+arr(320,62,320,40)+`<text x="385" y="74" class="mut">norm on</text><text x="385" y="90" class="mut">the highway</text>`;
+
+/* ---- 2. live training ---- */
+const T={ds:'moons',act:'sigmoid',plain:null,res:null,timer:null,ep:0,data:null,hist:{p:[],r:[]}};
+const pP=new ML.Plot('#pPlain'), pR=new ML.Plot('#pRes'), lP=new ML.Plot('#tLoss',{equal:false});
+function sizes(){ const D=+$('#depth').value, W=+$('#width').value; return [2,...Array(D).fill(W),1]; }
+function build(){ stop(); T.data=ML.dataset(T.ds,200,0.2,7); T.ep=0; T.hist={p:[],r:[]};
+  T.plain=NN.MLP(sizes(),{act:T.act,seed:4}); T.res=NN.MLP(sizes(),{act:T.act,seed:4,residual:true}); T.plain.lastLoss=T.res.lastLoss=null; draw(); drawGrad(); }
+function draw(){ [[T.plain,pP,'#tPlain','Plain'],[T.res,pR,'#tRes','Residual']].forEach(([n,p,id,name])=>{ p.clear(); p.regions((x,y)=>n.predict([x,y]),5); p.contour((x,y)=>n.predict([x,y])-0.5,0,{width:2}); p.points(T.data.X,T.data.y,{r:2.8});
+    const acc=ML.accuracy({proba:x=>n.predict(x)},T.data.X,T.data.y); $(id).innerHTML=`<b style="color:var(--ink)">${name}</b> · accuracy ${ML.pct(acc)} · loss ${n.lastLoss!=null?fmt(n.lastLoss,3):'–'}`; });
+  ML.chart(lP,[{pts:T.hist.p,color:GREY,width:2.4},{pts:T.hist.r,color:PUR,width:2.4}],{y0:0,y1:0.8,xl:'epoch'}); $('#tEp').textContent='epoch '+T.ep; }
+function stop(){ if(T.timer){ clearInterval(T.timer); T.timer=null; $('#tRun').textContent='Train both'; } }
+$('#tRun').onclick=()=>{ if(T.timer){ stop(); return; } $('#tRun').textContent='Pause'; T.timer=setInterval(()=>{ for(let k=0;k<2;k++){ T.plain.train(T.data.X,T.data.y,{name:'adam',lr:0.01},1); T.res.train(T.data.X,T.data.y,{name:'adam',lr:0.01},1); T.ep++; T.hist.p.push([T.ep,T.plain.lastLoss]); T.hist.r.push([T.ep,T.res.lastLoss]); } draw(); if(T.ep>=800) stop(); },40); };
+$('#tReset').onclick=build;
+ML.datasetPicker('dsPick',T.ds,id=>{ T.ds=id; build(); });
+ML.bindSeg('act',v=>{ T.act=v; ML.setSeg('act',v); build(); });
+ML.bindRange('depth',build); ML.bindRange('width',build);
+pP.onResize=draw; pR.onResize=draw; lP.onResize=draw;
+
+/* ---- 3. gradient flow ---- */
+const gP=new ML.Plot('#gPlot',{equal:false});
+function drawGrad(){ const sz=sizes(), d=ML.dataset('moons',64,0.2,3); const run=res=>{ const sum=new Array(sz.length-1).fill(0); for(let s=0;s<3;s++){ const n=NN.MLP(sz,{act:T.act,seed:4+s,residual:res}); n.backward(d.X,d.y); n.gradNorms.forEach((g,l)=>sum[l]+=g/3); } return sum; };
+  const a=run(false), b=run(true); const S=[{pts:a.map((g,l)=>[l+1,Math.log10(g+1e-30)]),color:GREY,width:2.6,dots:true,r:2.6},{pts:b.map((g,l)=>[l+1,Math.log10(g+1e-30)]),color:PUR,width:2.6,dots:true,r:2.6}];
+  ML.chart(gP,S,{xl:'layer (1 = closest to the input)',yfmt:v=>'1e'+v.toFixed(0)});
+  const ratio=(v)=>v[0]/v[v.length-2]; $('#gStats').innerHTML=[['c4',ratio(a).toExponential(1),'plain: first ÷ last hidden-layer gradient'],['c1',ratio(b).toExponential(1),'residual: same ratio']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+gP.onResize=drawGrad;
+
+/* ---- 4. paths ---- */
+const paP=new ML.Plot('#pathPlot',{equal:false});
+function lnC(n,k){ let s=0; for(let i=1;i<=k;i++) s+=Math.log10((n-k+i)/i); return s; }
+function drawPaths(){ const L=+$('#pl').value, pts=[]; for(let k=0;k<=L;k++) pts.push([k,Math.pow(10,lnC(L,k)-L*Math.log10(2))]);
+  ML.chart(paP,[{pts,color:PUR,width:2.4,dots:true,r:3}],{y0:0,xl:'path length (blocks used)',yfmt:v=>(100*v).toFixed(0)+'%'});
+  const sd=Math.sqrt(L)/2; $('#pathStats').innerHTML=[['c1','2^'+L,'paths in total'],['c3',(L/2).toFixed(1),'average path length'],['c5',Math.max(0,L/2-2*sd).toFixed(0)+'–'+Math.min(L,L/2+2*sd).toFixed(0),'lengths of 95% of paths']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+ML.bindRange('pl',drawPaths); paP.onResize=drawPaths;
+
+/* ---- 5. delete a layer ---- */
+const dP=new ML.Plot('#delPlot',{equal:false});
+function fwdSkip(net,x,skip){ let a=Float64Array.from(x); net.layers.forEach((ly,l)=>{ const z=new Float64Array(ly.nout); for(let j=0;j<ly.nout;j++){ let s=ly.b[j]; for(let k=0;k<ly.nin;k++) s+=ly.W[j*ly.nin+k]*a[k]; z[j]=s; }
+  if(!ly.hidden){ a=z; return; } if(l===skip) return; const h=z.map(net.act.f); a= ly.res ? h.map((v,j)=>v+a[j]) : h; }); return a[0]; }
+function acc(net,skip){ let c=0; T.data.X.forEach((x,i)=>{ if((fwdSkip(net,x,skip)>0)===(T.data.y[i]===1)) c++; }); return c/T.data.X.length; }
+$('#delRun').onclick=()=>{ const L=T.plain.layers.length-1, ap=[], ar=[]; for(let l=1;l<L;l++){ ap.push([l,acc(T.plain,l)]); ar.push([l,acc(T.res,l)]); }
+  const fp=acc(T.plain,-1), fr=acc(T.res,-1), avg=a=>a.reduce((s,p)=>s+p[1],0)/a.length;
+  ML.chart(dP,[{pts:ap,color:GREY,width:2.2,dots:true,r:3.5},{pts:ar,color:PUR,width:2.2,dots:true,r:3.5},{pts:[[1,fp],[L-1,fp]],color:GREY,width:1.4,dash:[5,4]},{pts:[[1,fr],[L-1,fr]],color:PUR,width:1.4,dash:[5,4]}],{y0:0.3,y1:1.02,xl:'deleted block',yfmt:v=>(100*v).toFixed(0)+'%'});
+  $('#delStats').innerHTML=[['c4',ML.pct(fp)+' → '+ML.pct(avg(ap)),'plain: intact → average after one deletion'],['c1',ML.pct(fr)+' → '+ML.pct(avg(ar)),'residual: intact → average after one deletion']].map(([c,v,l])=>`<div class="stat ${c}"><b style="font-size:16px">${v}</b><span>${l}</span></div>`).join(''); };
+
+ML.onTheme(()=>{ draw(); drawGrad(); drawPaths(); });
+build(); drawPaths();
+})();
+</script>
+<script>NLP.nav('nn','residual'); ML.renderMath(document.body);</script>
+</body>
+</html>

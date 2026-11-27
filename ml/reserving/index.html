@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stochastic Reserving Playground</title>
+<meta name="description" content="Claims reserving in your browser, from the chain ladder to stochastic models: link ratios, tail factors, Bornhuetter–Ferguson, Cape Cod, Mack, the over-dispersed Poisson GLM, the ODP and Mack bootstraps, Merz–Wüthrich one-year risk, Clark growth curves and gamma GLMs, checked against Hindley (2017), with Python code for every step.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/ml.css">
+<link rel="stylesheet" href="../playground/pg.css">
+<link rel="stylesheet" href="../glm-studio/studio.css">
+<link rel="stylesheet" href="res.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+<script defer src="../assets/core.js"></script>
+<script defer src="../assets/glm.js"></script>
+<script defer src="../assets/reserve.js"></script>
+<script defer src="../assets/cas-tri.js"></script>
+<script defer src="res-core.js"></script>
+<script defer src="../playground/carousel.js"></script>
+<script defer src="res-tabs.js"></script>
+<script defer src="res-py.js"></script>
+<script defer src="res-code.js"></script>
+<script defer src="../playground/explain.js"></script>
+<script defer src="../playground/shell.js"></script>
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../">&larr; Home</a><span class="sect">Play</span><nav class="algnav playnav" aria-label="Play"><a href="../playground/">ML Playground</a><a href="../glm-studio/">GLM pricing</a><a class="on" href="./" aria-current="page">Reserving</a><a href="../../word2vec/">Word2vec</a><a href="../../dl/lab/">DL lab</a><a href="../../learn/">Learn ML &rarr;</a></nav></div></header>
+
+<main class="wrap">
+<section class="pg-hero">
+  <div class="hero-l"><h1><span class="grad">Stochastic Reserving Playground</span></h1></div>
+  <div class="status" id="status"></div>
+</section>
+
+<div class="tabbar"><nav class="tabs wrap" id="tabs" role="tablist">
+  <button class="tab on" data-tab="data" role="tab"><span class="n">1</span><span>Triangle<span class="sub">triangle</span></span></button>
+  <button class="tab" data-tab="dev" role="tab"><span class="n">2</span><span>Development factors<span class="sub">link ratios</span></span></button>
+  <button class="tab" data-tab="methods" role="tab"><span class="n">3</span><span>Deterministic methods<span class="sub">CL, BF, Cape Cod</span></span></button>
+  <button class="tab" data-tab="mack" role="tab"><span class="n">4</span><span>Mack<span class="sub">prediction error</span></span></button>
+  <button class="tab" data-tab="odp" role="tab"><span class="n">5</span><span>ODP &amp; bootstrap<span class="sub">GLM, bootstrap</span></span></button>
+  <button class="tab" data-tab="oneyear" role="tab"><span class="n">6</span><span>One-year risk<span class="sub">Merz–Wüthrich</span></span></button>
+  <button class="tab" data-tab="compare" role="tab"><span class="n">7</span><span>Compare &amp; export<span class="sub">all methods, code</span></span></button>
+</nav></div>
+
+<section class="pane on" id="pane-data"></section>
+<section class="pane" id="pane-dev"></section>
+<section class="pane" id="pane-methods"></section>
+<section class="pane" id="pane-mack"></section>
+<section class="pane" id="pane-odp"></section>
+<section class="pane" id="pane-oneyear"></section>
+<section class="pane" id="pane-compare"></section>
+
+<p class="footnote">The reserving engine is written from scratch in JavaScript and checked against the worked examples in Hindley (2017) on the Taylor &amp; Ashe triangle (see <i>Checks against the book</i> on the last stage) and against Python. Nothing leaves your browser.</p>
+</main>
+
+<div class="drawer-bg" id="drawerBg"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="Code">
+  <div class="drawer-h"><div style="flex:1;min-width:0"><h3 id="drawerTitle">Code</h3><p id="drawerSub"></p></div>
+    <button class="btn sm" id="drawerCopy">Copy</button><button class="btn sm" id="drawerDl">Download</button><button class="drawer-close" id="drawerX" aria-label="Close the code panel" title="Close (Esc)"><span aria-hidden="true">&times;</span> Close</button></div>
+  <div class="seg" id="drawerSeg"><button data-v="py" class="on">Python</button><button data-v="js">JavaScript · runs on this page</button></div>
+  <pre><code id="drawerCode"></code></pre>
+</aside>
+<div class="toast" id="toast"></div>
+<dialog class="help" id="help" aria-labelledby="helpT">
+  <div class="help-h"><h2 id="helpT">From the chain ladder to stochastic reserving</h2><button class="x" id="helpX" aria-label="Close">&times;</button></div>
+  <div class="help-b">
+    <p class="help-lede">A reserve is the money an insurer sets aside for claims that have happened but are not yet paid. The stages go from the simplest estimate of it to models that say how wrong that estimate could be. Every panel has a <b>&lt;/&gt; Code</b> button with the same calculation in Python, and every setting a <b>?</b> that explains it.</p>
+    <ol class="help-steps">
+      <li><b>Triangle.</b> Start with the Taylor &amp; Ashe triangle (the book’s example) or a synthetic one, or upload your own. Look at the development curves first: the methods assume every year develops alike. <button class="btn sm" data-help-go="data">Open</button></li>
+      <li><b>Development factors.</b> The chain ladder averages each column of link ratios into a factor. Choose the average, click ratios to leave them out, and add a tail for development after the last column. <button class="btn sm" data-help-go="dev">Open</button></li>
+      <li><b>Deterministic methods.</b> Chain ladder trusts the claims paid so far; the expected loss ratio method trusts the premium; Bornhuetter–Ferguson and Cape Cod blend the two by how developed each year is. Type premiums and prior loss ratios in the table. <button class="btn sm" data-help-go="methods">Open</button></li>
+      <li><b>Mack.</b> The same chain-ladder reserve with its standard error, split into process error (randomness to come) and estimation error (uncertain factors). A lognormal turns it into percentiles. <button class="btn sm" data-help-go="mack">Open</button></li>
+      <li><b>ODP &amp; bootstrap.</b> The over-dispersed Poisson GLM gives the chain ladder again, as a statistical model. The bootstrap resamples its residuals thousands of times to get the whole distribution of the reserve, by year and in total. <button class="btn sm" data-help-go="odp">Open</button></li>
+      <li><b>One-year risk.</b> Merz–Wüthrich: how much the estimate could move in the next 12 months, the horizon Solvency II uses. <button class="btn sm" data-help-go="oneyear">Open</button></li>
+      <li><b>Compare &amp; export.</b> Every method side by side with its error and percentiles, the checks against the book, a CSV of the results and the full Python script. <button class="btn sm" data-help-go="compare">Open</button></li>
+    </ol>
+    <h3>Basic and Advanced</h3>
+    <p>The <b>Basic / Advanced</b> switch keeps the everyday path short. <b>Basic</b> covers the triangle, the chain ladder with exclusions and a tail, BF, Cape Cod and the expected loss ratio method, Mack with a lognormal distribution, the ODP model and its bootstrap, and the one-year view. <b>Advanced</b> adds, each marked with a purple <span class="advb">Advanced</span> tag: regression factors, fitting the tail from a chosen period and smoothing single factors with the curve, generalised Cape Cod (decay), Benktander, Mack’s α, the last-σ rule, tail σ and se, the cross-product term, residual plots by fitted value, origin, development and calendar year, the degrees-of-freedom adjustment, non-constant scale, cash flows by calendar year, the Mack bootstrap, Clark’s loglogistic and Weibull growth curves (LDF and Cape Cod, capped or not) and gamma, Gaussian and inverse Gaussian GLMs.</p>
+    <h3>Reading the results</h3>
+    <ul class="help-tips">
+      <li><b>Standard error (prediction error)</b> is the typical distance between the reserve and what will really be paid. The <b>CV</b> is that as a share of the reserve: 13% for Mack on Taylor &amp; Ashe.</li>
+      <li><b>Mack, ODP and the bootstrap</b> give the same reserve but different errors, because they assume different things about the variance. Big differences are worth understanding before choosing.</li>
+      <li><b>The 99.5th percentile</b> of the reserve over the whole run-off is not the Solvency II capital: that uses the one-year view (stage 6), which is usually about half the variance.</li>
+      <li><b>Check the residuals</b> (Advanced): a trend by calendar year is inflation the chain ladder does not model, and the bootstrap copies whatever pattern the residuals have.</li>
+    </ul>
+    <h3>Sources</h3>
+    <p class="help-lede">Adapted from: <b>David Hindley, <i>Claims Reserving in General Insurance</i></b>, Cambridge University Press (International Series on Actuarial Science), 2017. The methods, worked examples and table numbers on this page follow that book; section numbers beside each panel point to it. Also: Taylor &amp; Ashe (1983) for the data; Mack (1993, 1999); England &amp; Verrall (1999, 2002, 2006); Merz &amp; Wüthrich (2008); Clark (2003). The code is written from scratch and checked against the book’s tables and against Python (numpy, statsmodels and the <i>chainladder</i> package). The synthetic triangles are made up.</p>
+    <p class="help-lede">Real triangles (the dropdown on the Triangle stage) come from the <b>CASdatasets</b> R package by Christophe Dutang and Arthur Charpentier (GPL-2 or later, github.com/dutangc/CASdatasets), made cumulative where it stores increments. Original sources: RAA (1991) as used by Mack (1994); Wacek (2007); Dahms (2008) and Merz &amp; Wüthrich (2010); Kirschner, Kerley &amp; Isaacs (2002); Neuhaus (2004); Braun (2004); Taylor (2000); Frees (2010); Quarg &amp; Mack (2008).</p>
+  </div>
+</dialog>
+</body>
+</html>

@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Audio & speech deep learning: waveforms, spectrograms, mel features, CTC, Whisper and TTS</title>
+<meta name="description" content="Sound as numbers you can hear: sampling and aliasing, a live spectrogram with the time–frequency trade-off, mel filterbanks and MFCCs, CTC decoding and the forward algorithm step by step, and how Whisper, wav2vec 2.0 and text-to-speech systems are built.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<style>
+.src{font-size:12.5px;color:var(--muted);margin:10px 0 0;border-left:3px solid var(--line);padding-left:10px}
+.src a{color:inherit;text-decoration:underline;text-decoration-color:var(--line)}
+.au-cv{width:100%;height:auto;display:block;border-radius:8px;border:1px solid var(--line);background:#0b1020;image-rendering:pixelated}
+.au-ax{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin:2px 2px 8px}
+.au-in{width:100%;box-sizing:border-box;font:14px/1.4 "JetBrains Mono",ui-monospace,monospace;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--ink)}
+.au-steps{font:13px/1.9 "JetBrains Mono",ui-monospace,monospace;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;word-break:break-all}
+.au-steps b{color:var(--c1)}
+.au-tab{width:100%;border-collapse:collapse;font-size:13px}
+.au-tab th,.au-tab td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+.au-tab th{background:var(--soft);font-weight:600}
+</style>
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Vision &amp; multimodal &middot; Audio</p>
+  <h1>Audio &amp; speech: <span class="grad">sound as numbers</span></h1>
+  <p class="lede">A microphone produces one number tens of thousands of times a second. Speech recognition turns that stream into words; speech synthesis turns words back into it. This page follows the pipeline: sampling and why it has a speed limit, the spectrogram that turns sound into a picture, the mel scale that bends it to match our ears, the CTC trick that lets a network output text without knowing where each letter starts, and the models (Whisper, wav2vec 2.0, modern text-to-speech) built on top. Every signal here is generated in your browser, and you can listen to it.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#wave">1 · Sampling</a><a href="#spec">2 · Spectrogram</a><a href="#mel">3 · Mel &amp; MFCC</a><a href="#ctc">4 · CTC</a><a href="#models">5 · Whisper, wav2vec 2.0, TTS</a><a href="#py">6 · Python</a><a href="#credits">7 · Sources &amp; credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>How do networks hear, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>One second of audio at 16 kHz is 16,000 numbers, and the word “hello” can take 0.3 s or 0.8 s depending on who says it. The information that matters (pitch, vowels, consonants) is in how fast the air vibrates, not in individual samples. And the transcript is far shorter than the audio, with no marks saying which samples belong to which letter.</p>
+      <h3>The idea</h3><p>Describe sound by its <b>frequencies over time</b>: a <a class="term" data-t="spectrogram">spectrogram</a>, computed with the <a class="term" data-t="stft">short-time Fourier transform</a>, then squeezed onto the <a class="term" data-t="mel-scale">mel scale</a> that matches human hearing. Treat it like an image or a sequence of tokens. For the length mismatch, let the network output one symbol per frame, including a “blank”, and let <a class="term" data-t="ctc">CTC</a> sum over every way those frames could spell the transcript; or use an encoder–decoder that writes the text token by token, as <a class="term" data-t="whisper">Whisper</a> does.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Sample the waveform (16 kHz is standard for speech).</li><li>Cut it into short overlapping frames (25 ms, every 10 ms) and take each frame's spectrum.</li><li>Pool the spectrum into 80 mel bands and take the log: a log-mel spectrogram.</li><li>Feed it to a CNN or transformer encoder.</li><li>Decode text with CTC or an attention decoder.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Sheet music. A recording is a wobbly line, but a musician writes it as which notes sound when: frequency against time. That is a spectrogram. The piano keyboard is spaced so each octave gets the same number of keys, although an octave near the top covers far more hertz than one near the bottom; the mel scale does the same for our ears.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Spectrograms make sound look like images, so vision models work</li><li>Self-supervised pre-training needs only raw audio</li><li>Large models handle accents, noise and many languages</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Window length trades time detail against frequency detail</li><li>Sampling too slowly folds high sounds into false low ones</li><li>Hallucinated words in silence; voice cloning misuse</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="sample-rate">Sample rate</a><a class="term" data-t="nyquist">Nyquist frequency</a><a class="term" data-t="aliasing">Aliasing</a><a class="term" data-t="stft">STFT</a><a class="term" data-t="spectrogram">Spectrogram</a><a class="term" data-t="mel-scale">Mel scale</a><a class="term" data-t="mfcc">MFCC</a><a class="term" data-t="ctc">CTC</a><a class="term" data-t="wav2vec">wav2vec 2.0</a><a class="term" data-t="whisper">Whisper</a><a class="term" data-t="vocoder">Vocoder</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. The Play buttons use your browser's audio; start with your volume low.</p>
+    </div>
+  </div>
+</section>
+
+<section id="wave" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Sampling and aliasing</h2>
+    <p class="sub">A pure tone, and the samples a recorder takes of it. Push the tone above half the sample rate and the samples trace a different, lower tone: the one you would hear back.</p>
+    <div class="plot wide" id="wvPlot" style="aspect-ratio:16/8"></div>
+    <div class="ctl"><label for="wvF"><span>Tone frequency</span><output id="wvFOut"></output></label><input type="range" id="wvF" min="100" max="7900" step="50" value="1200"></div>
+    <div class="ctl"><div class="seg" id="wvSR"><button data-v="4000">4 kHz</button><button data-v="8000" class="on">8 kHz</button><button data-v="16000">16 kHz</button></div></div>
+    <div class="row" style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap"><button class="btn primary" id="wvPlay">Play the tone</button><button class="btn" id="wvPlayS">Play what the samples encode</button></div>
+    <div class="stats" id="wvStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Sound is a pressure wave. A microphone turns it into a voltage, and an analogue-to-digital converter measures that voltage \(f_s\) times a second, the <a class="term" data-t="sample-rate">sample rate</a>, giving a sequence \(x[n]=x(n/f_s)\). Speech models usually use \(f_s=16\) kHz; music uses 44.1 or 48 kHz.</p>
+      <p>How fast must we sample? The Nyquist–Shannon theorem says a signal containing no frequencies above \(B\) is perfectly recoverable from its samples if \(f_s&gt;2B\). Half the sample rate is the <a class="term" data-t="nyquist">Nyquist frequency</a>. A tone above it is not lost, it is disguised: its samples are identical to those of a lower tone, the <a class="term" data-t="aliasing">alias</a>,</p>
+      <div class="mathbox c1">$$f_{\text{alias}}=\big|\,f-f_s\cdot\mathrm{round}(f/f_s)\,\big| .$$</div>
+      <p>In the lab at 8 kHz, a 5 kHz tone produces exactly the samples of a 3 kHz tone, and that is what you hear back. Recorders therefore apply a low-pass filter <i>before</i> sampling. Speech fits comfortably in 16 kHz: the important energy of vowels and most consonants is below 8 kHz, which is also why old telephone audio at 8 kHz sounds muffled, with “s” and “f” hard to tell apart.</p>
+      <p>Each sample is stored with a fixed number of bits: 16-bit audio has 65,536 levels. Networks usually take samples as floats in \([-1,1]\).</p>
+      <p class="src">Adapted from: Shannon, Communication in the presence of noise (1949); Smith, <a href="https://www.dspguide.com/" target="_blank" rel="noopener"><i>The Scientist and Engineer's Guide to Digital Signal Processing</i></a>, ch. 3.</p>
+    </div>
+  </div>
+</section>
+
+<section id="spec" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>The spectrogram and the time–frequency trade-off</h2>
+    <p class="sub">One second of audio. Change the window length and watch the picture trade sharp timing for sharp pitch. Low frequencies are at the bottom; brighter means louder.</p>
+    <canvas class="au-cv" id="spCv" width="500" height="256"></canvas>
+    <div class="au-ax"><span>0 s</span><span>time →</span><span>1 s</span></div>
+    <div class="ctl"><div class="seg" id="spSig"><button data-v="scene" class="on">Chirp, chord, clicks</button><button data-v="vowel">A sung vowel</button><button data-v="close">Two close tones</button></div></div>
+    <div class="ctl"><label for="spW"><span>Window length</span><output id="spWOut"></output></label><input type="range" id="spW" min="6" max="11" step="1" value="9"></div>
+    <div class="row" style="margin:8px 0"><button class="btn" id="spPlay">Play</button></div>
+    <div class="stats" id="spStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The Fourier transform writes a signal as a sum of sine waves and tells us how much of each frequency it contains. Speech changes every few milliseconds, so we take it over short windows: the <a class="term" data-t="stft">short-time Fourier transform</a>. Slide a window \(w\) of \(N\) samples along the signal in hops of \(H\), and for each frame \(m\) compute</p>
+      <div class="mathbox c1">$$X[m,k]=\sum_{n=0}^{N-1}x[n+mH]\,w[n]\,e^{-2\pi i\,kn/N},\qquad k=0,\dots,\tfrac N2 .$$</div>
+      <p>Bin \(k\) corresponds to frequency \(k f_s/N\). The <a class="term" data-t="spectrogram">spectrogram</a> is \(|X[m,k]|^2\), usually in decibels, drawn as an image. The window (here a Hann window, \(w[n]=\sin^2(\pi n/N)\)) tapers each frame so its edges do not create false frequencies.</p>
+      <p>The window length cannot be chosen to be good at everything:</p>
+      <div class="mathbox c1">$$\Delta f=\frac{f_s}{N},\qquad \Delta t\approx\frac{N}{f_s},\qquad \Delta f\cdot\Delta t\approx 1 .$$</div>
+      <p>A long window separates the two close tones (440 and 470 Hz) into two lines, but smears the clicks across many frames; a short window pins the clicks but blurs the tones into one band. This is the uncertainty principle of signal processing. Speech systems settle on about 25 ms windows (400 samples at 16 kHz) with a 10 ms hop: long enough to resolve the harmonics of a voice, short enough to follow consonants.</p>
+      <div class="algo" data-anim="stft"><h5 class="algo-h">Algorithm: spectrogram by STFT</h5><ol>
+        <li><span class="kw">input</span> samples \(x\), window length \(N\), hop \(H\)</li>
+        <li><span class="kw">for</span> \(m=0,1,\dots\) while \(mH+N\le\) length of \(x\)</li>
+        <li class="i1">frame \(\leftarrow x[mH : mH+N]\cdot w\) <span class="cm">Hann taper</span></li>
+        <li class="i1">\(X[m,:]\leftarrow\text{FFT}(\text{frame})\), keep bins \(0..N/2\)</li>
+        <li class="i1">column \(m\) of the image \(\leftarrow 10\log_{10}(|X[m,:]|^2+\epsilon)\)</li>
+        <li><span class="kw">return</span> the image: frequency up, time across</li>
+      </ol></div>
+      <p class="src">Adapted from: Allen and Rabiner, A unified approach to short-time Fourier analysis (1977); Müller, <i>Fundamentals of Music Processing</i> (2015), ch. 2.</p>
+    </div>
+  </div>
+</section>
+
+<section id="mel" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Mel filterbanks and MFCCs</h2>
+    <p class="sub">Triangular filters spaced evenly on the mel scale, so they crowd together at low frequencies like our hearing does. Below: the same one-second scene as a log-mel spectrogram, and its MFCCs.</p>
+    <div class="plot wide" id="mlPlot" style="aspect-ratio:16/7"></div>
+    <div class="ctl"><label for="mlN"><span>Mel bands</span><output id="mlNOut"></output></label><input type="range" id="mlN" min="8" max="80" step="4" value="40"></div>
+    <canvas class="au-cv" id="mlCv" width="500" height="160"></canvas>
+    <div class="au-ax"><span>log-mel spectrogram</span><span>(bands up, time across)</span></div>
+    <canvas class="au-cv" id="mfCv" width="500" height="78"></canvas>
+    <div class="au-ax"><span>first 13 MFCCs</span><span>(coefficient up, time across)</span></div>
+    <div class="stats" id="mlStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>We hear pitch roughly logarithmically: 100 → 200 Hz sounds like the same step as 1,000 → 2,000 Hz. The <a class="term" data-t="mel-scale">mel scale</a> captures this:</p>
+      <div class="mathbox c1">$$m(f)=2595\,\log_{10}\!\Big(1+\frac{f}{700}\Big).$$</div>
+      <p>It is nearly linear below about 1 kHz and logarithmic above. A <b>mel filterbank</b> places \(M\) triangular filters with centres evenly spaced in mel, so each filter is narrow at low frequencies and wide at high ones, and pools the power spectrum with them: \(S[m,j]=\sum_k H_j[k]\,|X[m,k]|^2\). Taking \(\log S\) compresses the huge dynamic range of sound, as our ears do. The result, the <b>log-mel spectrogram</b> with \(M=80\) bands, is the input to Whisper and most modern speech models: it keeps what matters for speech and shrinks 201 frequency bins to 80.</p>
+      <p><a class="term" data-t="mfcc">MFCCs</a> go one step further. A discrete cosine transform along the band axis,</p>
+      <div class="mathbox c1">$$c[m,q]=\sum_{j=1}^{M}\log S[m,j]\,\cos\!\Big(\frac{\pi q}{M}\big(j-\tfrac12\big)\Big),$$</div>
+      <p>keeps the first 13 coefficients, which describe the smooth shape of the spectrum (the vocal tract's resonances, which distinguish vowels) and discard the fine ripple (the pitch harmonics). The DCT also decorrelates the features, which suited the Gaussian mixture models of classical speech recognition. Deep networks learn their own decorrelation, so today log-mel features are preferred and MFCCs survive mostly in small and classical systems.</p>
+      <p class="src">Adapted from: Stevens, Volkmann and Newman, the mel scale (1937); Davis and Mermelstein, Comparison of parametric representations for monosyllabic word recognition (1980); O'Shaughnessy's mel formula as used in librosa (<code>htk=True</code>).</p>
+    </div>
+  </div>
+</section>
+
+<section id="ctc" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>CTC: text from frames without alignments</h2>
+    <p class="sub">A CTC model outputs one symbol per frame, with “_” meaning blank. Type a frame sequence and see it decode. Below, a toy network's probabilities for 8 frames: compare the single best path with the total probability of the word.</p>
+    <input class="au-in" id="ctIn" value="hh_ee_l_ll_ooo__" aria-label="Frame-level CTC output">
+    <div class="au-steps" id="ctSteps"></div>
+    <div class="plot wide" id="ctPlot" style="aspect-ratio:16/8"></div>
+    <div class="ctl"><label for="ctS"><span>Network confidence</span><output id="ctSOut"></output></label><input type="range" id="ctS" min="0.5" max="4" step="0.1" value="1.6"></div>
+    <div class="stats" id="ctStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>An acoustic encoder produces a vector every 20 ms or so: a 2-second clip gives about 100 frames for a transcript of maybe 15 characters. Nobody has marked which frames belong to which letter. <a class="term" data-t="ctc">Connectionist temporal classification</a> (Graves et al., 2006) solves this without any alignment. Add a <b>blank</b> symbol “_” to the vocabulary and let the network output a distribution over symbols at every frame. A frame-level path \(\pi\) maps to text by a collapse function \(\mathcal B\):</p>
+      <ol><li>merge consecutive repeats;</li><li>remove blanks.</li></ol>
+      <p>So <code>hh_ee_l_ll_ooo</code> → <code>h_e_l_l_o</code> → <code>hello</code>. The blank does two jobs: it fills frames between letters, and it separates genuine double letters (“ll” needs a blank between the two l's, or the repeats merge). The probability of a transcript \(y\) is the sum over every path that collapses to it, assuming frames are conditionally independent given the audio:</p>
+      <div class="mathbox c1">$$P(y\mid x)=\sum_{\pi\in\mathcal B^{-1}(y)}\ \prod_{t=1}^{T}p_t(\pi_t\mid x),$$ $$\mathcal L_{\text{CTC}}=-\log P(y\mid x).$$</div>
+      <p>There are exponentially many paths, but the <b>forward algorithm</b>, a dynamic programme over the target with blanks inserted (<code>_c_a_t_</code>), sums them in \(O(T\cdot|y|)\). The lab computes it: the best single path usually carries only a small share of the total probability, which is why training on the sum is better than on one guessed alignment. At test time, <b>greedy decoding</b> takes the most likely symbol per frame and collapses; <b>beam search</b>, often with a language model, does better.</p>
+      <div class="algo" data-anim="ctcfwd"><h5 class="algo-h">Algorithm: CTC forward pass</h5><ol>
+        <li><span class="kw">input</span> per-frame probabilities \(p_t(\cdot)\), target \(y\)</li>
+        <li>\(y'\leftarrow\) \(y\) with blanks around every symbol (length \(2|y|+1\))</li>
+        <li>\(\alpha_1(1)\leftarrow p_1(\_)\), \(\alpha_1(2)\leftarrow p_1(y'_2)\)</li>
+        <li><span class="kw">for</span> \(t=2..T\), each position \(s\): \(\alpha_t(s)\leftarrow p_t(y'_s)\,[\alpha_{t-1}(s)+\alpha_{t-1}(s-1)+\alpha_{t-1}(s-2)]\)</li>
+        <li class="i1">the \(s-2\) jump only if \(y'_s\) is not blank and \(y'_s\ne y'_{s-2}\)</li>
+        <li><span class="kw">return</span> \(P(y\mid x)=\alpha_T(\text{last})+\alpha_T(\text{last}-1)\)</li>
+      </ol></div>
+      <p class="src">Adapted from: Graves et al., <a href="https://www.cs.toronto.edu/~graves/icml_2006.pdf" target="_blank" rel="noopener">Connectionist Temporal Classification</a> (ICML 2006); Hannun, <a href="https://distill.pub/2017/ctc/" target="_blank" rel="noopener">Sequence Modeling with CTC</a> (Distill, 2017).</p>
+    </div>
+  </div>
+</section>
+
+<section id="models" class="card">
+  <h2><span class="num">5</span>Whisper, wav2vec 2.0 and text-to-speech</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>wav2vec 2.0: self-supervised speech</h3>
+      <p>A CNN turns raw 16 kHz audio into a latent vector every 20 ms. Spans of these are masked, a transformer reads the rest, and for each masked frame it must pick the true (quantised) latent out of distractors: a contrastive task, the speech version of the ideas in <a href="../self-supervised/">self-supervised learning</a>. Pre-trained on 53,000 hours of unlabelled audio and fine-tuned with a CTC head, <a class="term" data-t="wav2vec">wav2vec 2.0</a> reached usable recognition with just 10 minutes of labelled speech. HuBERT and WavLM refine the target (predict cluster labels instead).</p>
+      <h3>Whisper: weak supervision at scale</h3>
+      <p><a class="term" data-t="whisper">Whisper</a> takes the opposite route: 680,000 hours of audio paired with transcripts found on the web, noisy but enormous. The model is a plain encoder–decoder transformer. The encoder reads 30 s of 80-band log-mel spectrogram (through two convolution layers that halve the frame rate); the decoder writes text tokens, steered by special tokens that choose the task: language, transcribe or translate to English, with or without timestamps. One model handles about 100 languages and is robust to noise and accents. Its weakness is the decoder's: like any language model, it can <a class="term" data-t="hallucination">hallucinate</a> fluent text, especially over silence or music.</p>
+    </div>
+    <div>
+      <h3>Text-to-speech: the pipeline in reverse</h3>
+      <p>Classic neural TTS runs in two stages. An acoustic model (Tacotron 2, FastSpeech 2) turns characters or phonemes into a mel spectrogram, predicting how long each sound lasts and its pitch. A <a class="term" data-t="vocoder">vocoder</a> then turns the mel spectrogram into a waveform; since the log-mel throws away phase, this is a generation problem. WaveNet did it sample by sample (slow); HiFi-GAN does it with a GAN in one fast pass. End-to-end models (VITS) train both together.</p>
+      <p>Newer systems treat speech like text. A <b>neural audio codec</b> (SoundStream, EnCodec) compresses audio into discrete tokens at a few dozen per second; a language model then predicts those tokens from text and a few seconds of a speaker's voice (VALL-E), and the codec decodes them. The same tokens power music generation and speech-to-speech assistants, and the same risk follows: convincing voice cloning from seconds of audio.</p>
+    </div>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="au-tab">
+    <tr><th>Model</th><th>Input</th><th>Training signal</th><th>Output</th></tr>
+    <tr><td>wav2vec 2.0 (2020)</td><td>Raw waveform</td><td>Self-supervised contrastive, then CTC fine-tuning</td><td>Characters per frame</td></tr>
+    <tr><td>Whisper (2022)</td><td>80-band log-mel, 30 s</td><td>Supervised on 680k hours of web transcripts</td><td>Text tokens (multilingual, translation, timestamps)</td></tr>
+    <tr><td>Tacotron 2 + HiFi-GAN</td><td>Characters / phonemes</td><td>Supervised mel regression; GAN vocoder</td><td>Mel spectrogram → waveform</td></tr>
+    <tr><td>VALL-E-style codec LM</td><td>Text + 3 s voice prompt</td><td>Next-token prediction on codec tokens</td><td>Audio codec tokens → waveform</td></tr>
+  </table>
+  </div>
+  <div class="prose"><p class="src">Adapted from: Baevski et al., <a href="https://arxiv.org/abs/2006.11477" target="_blank" rel="noopener">wav2vec 2.0</a> (2020); Radford et al., <a href="https://arxiv.org/abs/2212.04356" target="_blank" rel="noopener">Robust Speech Recognition via Large-Scale Weak Supervision</a> (Whisper, 2022); Shen et al., Tacotron 2 (2018); Kong et al., HiFi-GAN (2020); Défossez et al., EnCodec (2022); Wang et al., VALL-E (2023).</p></div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+  <p class="sub">Features with librosa, speech recognition with Whisper and wav2vec 2.0 through Hugging Face Transformers, and a CTC loss in PyTorch.</p>
+<pre class="code"><span class="c"># pip install librosa soundfile torch transformers</span>
+<span class="k">import</span> numpy <span class="k">as</span> np, librosa, torch
+
+<span class="c"># ---- 1. Waveform -> spectrogram -> log-mel -> MFCC ----</span>
+y, sr = librosa.load(librosa.ex(<span class="s">"libri1"</span>), sr=16000)          <span class="c"># resample to 16 kHz</span>
+S = np.abs(librosa.stft(y, n_fft=400, hop_length=160, window=<span class="s">"hann"</span>)) ** 2   <span class="c"># 25 ms windows, 10 ms hop</span>
+mel = librosa.feature.melspectrogram(S=S, sr=sr, n_mels=80)  <span class="c"># 80 mel bands</span>
+log_mel = librosa.power_to_db(mel)                           <span class="c"># (80, frames)</span>
+mfcc = librosa.feature.mfcc(S=log_mel, n_mfcc=13)            <span class="c"># (13, frames)</span>
+<span class="f">print</span>(S.shape, log_mel.shape, mfcc.shape)
+
+<span class="c"># ---- 2. Speech recognition with Whisper (encoder-decoder) ----</span>
+<span class="k">from</span> transformers <span class="k">import</span> pipeline
+asr = <span class="f">pipeline</span>(<span class="s">"automatic-speech-recognition"</span>, model=<span class="s">"openai/whisper-small"</span>)
+<span class="f">print</span>(<span class="f">asr</span>({<span class="s">"raw"</span>: y, <span class="s">"sampling_rate"</span>: sr}, return_timestamps=<span class="k">True</span>)[<span class="s">"text"</span>])
+
+<span class="c"># ---- 3. wav2vec 2.0 with a CTC head: greedy decoding ----</span>
+<span class="k">from</span> transformers <span class="k">import</span> Wav2Vec2Processor, Wav2Vec2ForCTC
+proc = Wav2Vec2Processor.from_pretrained(<span class="s">"facebook/wav2vec2-base-960h"</span>)
+w2v = Wav2Vec2ForCTC.from_pretrained(<span class="s">"facebook/wav2vec2-base-960h"</span>)
+<span class="k">with</span> torch.no_grad():
+    logits = <span class="f">w2v</span>(<span class="f">proc</span>(y, sampling_rate=sr, return_tensors=<span class="s">"pt"</span>).input_values).logits   <span class="c"># (1, frames, vocab)</span>
+ids = logits.argmax(-1)                                       <span class="c"># best symbol per frame</span>
+<span class="f">print</span>(proc.batch_decode(ids)[0])                              <span class="c"># merges repeats and removes blanks</span>
+
+<span class="c"># ---- 4. The CTC loss itself ----</span>
+T, C = 50, 28                                                 <span class="c"># frames, vocabulary (blank = 0)</span>
+log_probs = torch.randn(T, 1, C).log_softmax(-1)              <span class="c"># (time, batch, classes)</span>
+target = torch.tensor([[3, 1, 20]])                           <span class="c"># "c a t"</span>
+loss = torch.nn.CTCLoss(blank=0)(log_probs, target, torch.tensor([T]), torch.tensor([3]))
+<span class="f">print</span>(<span class="s">"CTC loss:"</span>, loss.item())
+</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">7</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page is written for this site in its own words; every signal and lab is generated in the browser. The methods come from these sources:</p>
+    <ul>
+      <li>Shannon (1949); Allen and Rabiner (1977); Smith, <i>The Scientist and Engineer's Guide to DSP</i>; Müller, <i>Fundamentals of Music Processing</i> (2015).</li>
+      <li>Stevens, Volkmann and Newman (1937); Davis and Mermelstein (1980).</li>
+      <li>Graves et al., CTC (2006); Hannun, <a href="https://distill.pub/2017/ctc/" target="_blank" rel="noopener">Sequence Modeling with CTC</a> (2017).</li>
+      <li>Baevski et al., wav2vec 2.0 (2020); Radford et al., Whisper (2022); Shen et al., Tacotron 2 (2018); Kong et al., HiFi-GAN (2020); van den Oord et al., WaveNet (2016); Défossez et al., EnCodec (2022); Wang et al., VALL-E (2023).</li>
+      <li>librosa, PyTorch and Hugging Face Transformers documentation, for the Python section.</li>
+    </ul>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"Audio is sampled at 8 kHz. What do you hear when a 5 kHz tone is recorded without a low-pass filter?","o":["A 5 kHz tone","A 3 kHz tone","Silence","A 13 kHz tone"],"a":1,"e":"The Nyquist frequency is 4 kHz; 5 kHz aliases to |5 − 8| = 3 kHz."},
+{"q":"You double the STFT window length. What happens?","o":["Better time resolution and better frequency resolution","Better frequency resolution, worse time resolution","Worse frequency resolution, better time resolution","Nothing changes"],"a":1,"e":"Δf = f_s/N halves, but each frame now spans twice as long, so events are smeared in time."},
+{"q":"Why are mel filters narrow at low frequencies and wide at high ones?","o":["To save memory","To match human hearing, which resolves pitch roughly logarithmically","Because the FFT is less accurate at high frequencies","To remove noise"],"a":1,"e":"The mel scale is close to linear below about 1 kHz and logarithmic above, like our perception of pitch."},
+{"q":"What does the CTC frame sequence “cc_aa_tt_” decode to?","o":["ccaatt","cat","c_a_t","caat"],"a":1,"e":"Merge repeats (c_a_t_) then remove blanks: cat."},
+{"q":"How does CTC training handle the unknown alignment between frames and letters?","o":["It requires hand-labelled alignments","It sums the probability of every frame path that collapses to the transcript, using the forward algorithm","It uses only the single best path","It pads the transcript to the number of frames"],"a":1,"e":"P(y|x) is the sum over all valid paths, computed efficiently by dynamic programming."}
+]</script>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/gen.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette();
+const SR=16000;
+/* ---------- audio helpers ---------- */
+let AC=null; function play(samples, sr){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const b=AC.createBuffer(1,samples.length,sr); b.getChannelData(0).set(samples); const s=AC.createBufferSource(); s.buffer=b; const g=AC.createGain(); g.gain.value=.25; s.connect(g); g.connect(AC.destination); s.start(); }catch(e){} }
+function fft(re,im){ const n=re.length; for(let i=1,j=0;i<n;i++){ let bit=n>>1; for(;j&bit;bit>>=1) j^=bit; j^=bit; if(i<j){ [re[i],re[j]]=[re[j],re[i]]; [im[i],im[j]]=[im[j],im[i]]; } }
+  for(let len=2;len<=n;len<<=1){ const a=-2*Math.PI/len, wr=Math.cos(a), wi=Math.sin(a); for(let i=0;i<n;i+=len){ let cr=1,ci=0; for(let j=0;j<len/2;j++){ const ur=re[i+j],ui=im[i+j], vr=re[i+j+len/2]*cr-im[i+j+len/2]*ci, vi=re[i+j+len/2]*ci+im[i+j+len/2]*cr; re[i+j]=ur+vr; im[i+j]=ui+vi; re[i+j+len/2]=ur-vr; im[i+j+len/2]=ui-vi; const t=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=t; } } } }
+function stft(x,N,H){ const w=Float32Array.from({length:N},(_,n)=>Math.pow(Math.sin(Math.PI*n/N),2)), out=[];
+  for(let m=0;m*H+N<=x.length;m++){ const re=new Float64Array(N), im=new Float64Array(N); for(let n=0;n<N;n++) re[n]=x[m*H+n]*w[n]; fft(re,im); const p=new Float32Array(N/2+1); for(let k=0;k<=N/2;k++) p[k]=re[k]*re[k]+im[k]*im[k]; out.push(p); } return out; }
+function signal(kind){ const n=SR, x=new Float32Array(n), r=ML.rng(5);
+  for(let i=0;i<n;i++){ const t=i/SR; let v=0;
+    if(kind==='scene'){ if(t<.4){ const f0=300, f1=3000, ph=2*Math.PI*(f0*t+(f1-f0)*t*t/(2*.4)); v=.6*Math.sin(ph); }
+      else if(t>=.45&&t<.75){ v=.3*(Math.sin(2*Math.PI*440*t)+Math.sin(2*Math.PI*554.37*t)+Math.sin(2*Math.PI*659.25*t)); }
+      [.82,.88,.94].forEach(c=>{ const d=t-c; if(d>=0&&d<.004) v+=(r()*2-1)*.9*(1-d/.004); }); }
+    else if(kind==='vowel'){ const f0=140*(1+.03*Math.sin(2*Math.PI*5*t)); for(let h=1;h<40;h++){ const f=h*140; if(f>7500) break; const env=[700,1220,2600].reduce((s,F,j)=>s+[1,.6,.25][j]*Math.exp(-Math.pow((f-F)/110,2)),0)+.02; v+=.2*env*Math.sin(2*Math.PI*h*f0*t); } v*=Math.min(1,t*20,(1-t)*20); }
+    else { v=.4*Math.sin(2*Math.PI*440*t)+.4*Math.sin(2*Math.PI*470*t); }
+    x[i]=v; }
+  return x; }
+const SIG={}; const sig=k=>SIG[k]||(SIG[k]=signal(k));
+function heat(cv, cols, lo, hi, flip=true){ const c=cv.getContext('2d'), W=cv.width, H=cv.height, img=c.createImageData(W,H), nT=cols.length, nF=cols[0].length;
+  const ramp=v=>{ v=Math.max(0,Math.min(1,v)); const r=Math.min(255,Math.max(0,255*(1.6*v-.35))), g=Math.min(255,255*Math.pow(v,1.4)*1.1), b=Math.min(255,90+200*v*(1-v)*2.2+40*v); return [r,g,b]; };
+  for(let x=0;x<W;x++){ const m=Math.min(nT-1,Math.floor(x*nT/W)); for(let y=0;y<H;y++){ const k=Math.min(nF-1,Math.floor((flip?H-1-y:y)*nF/H)); const [r,g,b]=ramp((cols[m][k]-lo)/(hi-lo)); const o=(y*W+x)*4; img.data[o]=r; img.data[o+1]=g; img.data[o+2]=b; img.data[o+3]=255; } }
+  c.putImageData(img,0,0); }
+
+/* ---------- 1. sampling ---------- */
+const wvP=new ML.Plot('#wvPlot',{equal:false}); let wvSR=8000;
+const alias=(f,fs)=>Math.abs(f-fs*Math.round(f/fs));
+function drawWv(){ const P=P0(), f=+$('#wvF').value, fs=wvSR, fa=alias(f,fs), T=0.004, cont=[], smp=[], al=[];
+  for(let i=0;i<=600;i++){ const t=T*i/600; cont.push([t*1000,Math.sin(2*Math.PI*f*t)]); al.push([t*1000,Math.sin(2*Math.PI*fa*t)*(Math.sin(2*Math.PI*f*0)>=0?1:1)]); }
+  for(let n=0;n/fs<=T;n++){ const t=n/fs; smp.push([t*1000,Math.sin(2*Math.PI*f*t)]); }
+  const sgn=(()=>{ const t=1/fs/3; return Math.sign(Math.sin(2*Math.PI*f*(1/fs)))===Math.sign(Math.sin(2*Math.PI*fa*(1/fs)))?1:-1; })();
+  const ser=[{pts:cont,color:P.c3,width:1.6,label:'tone '+f+' Hz'},{pts:smp,color:P.c2,noline:true,dots:true,r:4,label:'samples at '+fs/1000+' kHz'}];
+  if(f>fs/2) ser.push({pts:al.map(p=>[p[0],sgn*p[1]]),color:P.c2,width:2,dash:[5,4],label:'alias '+fa+' Hz'});
+  GX.chart(wvP,ser,{x0:0,x1:T*1000,y0:-1.2,y1:1.2,xl:'time (ms)'});
+  GX.stats('#wvStats',[[fs/2+' Hz','Nyquist frequency','c3'],[f>fs/2?fa+' Hz':f+' Hz','what the samples encode',f>fs/2?'c2':'c5'],[f>fs/2?'aliased':'faithful','verdict',f>fs/2?'c2':'c5']]); }
+ML.bindRange('wvF',drawWv,v=>v+' Hz'); ML.bindSeg('wvSR',v=>{ wvSR=+v; drawWv(); }); wvP.onResize=drawWv; drawWv();
+const tone=f=>Float32Array.from({length:SR*0.8},(_,i)=>Math.sin(2*Math.PI*f*i/SR)*Math.min(1,i/800,(SR*0.8-i)/800));
+$('#wvPlay').onclick=()=>play(tone(+$('#wvF').value),SR); $('#wvPlayS').onclick=()=>{ const f=+$('#wvF').value; play(tone(f>wvSR/2?alias(f,wvSR):f),SR); };
+
+/* ---------- 2. spectrogram ---------- */
+let spSig='scene';
+function drawSp(){ const N=Math.pow(2,+$('#spW').value), H=Math.max(16,N/4), x=sig(spSig), S=stft(x,N,H).map(c=>Array.from(c,v=>10*Math.log10(v+1e-10))), kmax=Math.round(4000/(SR/N));
+  const cols=S.map(c=>c.slice(0,kmax+1)); let hi=-1e9; cols.forEach(c=>c.forEach(v=>{ if(v>hi) hi=v; }));
+  heat($('#spCv'),cols,hi-70,hi);
+  GX.stats('#spStats',[[N+' samples ('+(1000*N/SR).toFixed(0)+' ms)','window','c1'],[(SR/N).toFixed(1)+' Hz','frequency resolution Δf','c5'],[(1000*N/SR).toFixed(0)+' ms','time smearing Δt','c2'],['0–4 kHz','shown','c3']]); }
+ML.bindRange('spW',drawSp,v=>Math.pow(2,v)+' ('+(1000*Math.pow(2,v)/SR).toFixed(0)+' ms)'); ML.bindSeg('spSig',v=>{ spSig=v; drawSp(); }); $('#spPlay').onclick=()=>play(sig(spSig),SR); drawSp();
+
+/* ---------- 3. mel ---------- */
+const mel=f=>2595*Math.log10(1+f/700), imel=m=>700*(Math.pow(10,m/2595)-1);
+const mlP=new ML.Plot('#mlPlot',{equal:false}); const NF=512, SPEC=stft(sig('scene'),NF,160);
+function filters(M){ const fmax=SR/2, pts=[...Array(M+2)].map((_,i)=>imel(mel(0)+(mel(fmax)-mel(0))*i/(M+1))), bins=NF/2+1;
+  return [...Array(M)].map((_,j)=>{ const a=pts[j], b=pts[j+1], c=pts[j+2]; return Float32Array.from({length:bins},(_,k)=>{ const f=k*SR/NF; return f<=a||f>=c?0:f<=b?(f-a)/(b-a):(c-f)/(c-b); }); }); }
+function drawMl(){ const P=P0(), M=+$('#mlN').value, F=filters(M), cols=[P.c1,P.c2,P.c5,P.c4];
+  GX.chart(mlP,F.map((h,j)=>({pts:Array.from(h,(v,k)=>[k*SR/NF,v]).filter((p,k)=>k%2===0),color:cols[j%4],width:1.4})),{x0:0,x1:8000,y0:0,y1:1.05,xl:'frequency (Hz)',legend:false,xfmt:v=>v>=1000?(v/1000)+'k':String(v)});
+  const LM=SPEC.map(p=>F.map(h=>{ let s=0; for(let k=0;k<h.length;k++) s+=h[k]*p[k]; return 10*Math.log10(s+1e-10); }));
+  let hi=-1e9; LM.forEach(c=>c.forEach(v=>{ if(v>hi) hi=v; })); heat($('#mlCv'),LM,hi-70,hi);
+  const MF=LM.map(c=>[...Array(13)].map((_,q)=>c.reduce((s,v,j)=>s+v*Math.cos(Math.PI*q/M*(j+.5)),0)));
+  const mx=Math.max(...MF.flatMap(r=>r.slice(1).map(Math.abs))); heat($('#mfCv'),MF.map(r=>r.map((v,q)=>q===0?0:v)),-mx,mx);
+  const w1=imel(mel(0)+(mel(8000))*2/(M+1))-0, wTop=8000-imel(mel(8000)-mel(8000)*2/(M+1));
+  GX.stats('#mlStats',[[String(M),'mel bands (FFT has '+(NF/2+1)+' bins)','c1'],[w1.toFixed(0)+' Hz','width of the lowest filter','c5'],[wTop.toFixed(0)+' Hz','width of the highest filter','c2']]); }
+ML.bindRange('mlN',drawMl); mlP.onResize=drawMl; drawMl();
+
+/* ---------- 4. CTC ---------- */
+function collapse(s){ let a=''; for(let i=0;i<s.length;i++) if(i===0||s[i]!==s[i-1]) a+=s[i]; return [a,a.replace(/_/g,'')]; }
+function drawCtIn(){ const s=$('#ctIn').value.replace(/\s/g,''), [m,o]=collapse(s);
+  $('#ctSteps').innerHTML=`frames: ${NLP.esc(s)}<br>merge repeats: ${NLP.esc(m)}<br>remove blanks: <b>${NLP.esc(o)||'(empty)'}</b>`; }
+$('#ctIn').addEventListener('input',drawCtIn); drawCtIn();
+const SYM=['_','c','a','t'], TT=8, LOG=(()=>{ /* toy logits: c around frames 1-2, a 3-4, t 6 */ const r=ML.rng(9), want=['_','c','c','a','a','_','t','_'];
+  return want.map(w=>SYM.map(s=>(s===w?1.3:0)+.3*r.gauss())); })();
+const ctP=new ML.Plot('#ctPlot',{equal:false});
+function ctcForward(p,y){ const yp=['_']; y.split('').forEach(ch=>{ yp.push(ch,'_'); }); const S=yp.length, idx=s=>SYM.indexOf(s); let a=new Float64Array(S); a[0]=p[0][0]; a[1]=p[0][idx(yp[1])];
+  for(let t=1;t<p.length;t++){ const b=new Float64Array(S); for(let s=0;s<S;s++){ let v=a[s]+(s>0?a[s-1]:0); if(s>1&&yp[s]!=='_'&&yp[s]!==yp[s-2]) v+=a[s-2]; b[s]=v*p[t][idx(yp[s])]; } a=b; } return a[S-1]+a[S-2]; }
+function drawCt(){ const P=P0(), k=+$('#ctS').value, p=LOG.map(l=>GX.softmax(l.map(v=>v*k)));
+  const cols=[P.muted,P.c1,P.c5,P.c2];
+  GX.chart(ctP,SYM.map((s,j)=>({pts:p.map((r,t)=>[t+1,r[j]]),color:cols[j],width:2.2,dots:true,label:s==='_'?'blank':s})),{x0:1,x1:TT,y0:0,y1:1,xl:'frame'});
+  const best=p.map(r=>SYM[r.indexOf(Math.max(...r))]).join(''), bp=p.reduce((s,r)=>s*Math.max(...r),0+1), out=collapse(best)[1];
+  const total=ctcForward(p,'cat'), paths=(()=>{ let n=0; const rec=(t,s)=>{ if(t===TT){ if(collapse(s)[1]==='cat') n++; return; } for(const c of SYM) rec(t+1,s+c); }; rec(0,''); return n; })();
+  const bestCat=(()=>{ let m=0; const rec=(t,s,pr)=>{ if(t===TT){ if(collapse(s)[1]==='cat'&&pr>m) m=pr; return; } SYM.forEach((c,j)=>rec(t+1,s+c,pr*p[t][j])); }; rec(0,'',1); return m; })();
+  GX.stats('#ctStats',[[best+' → '+(out||'∅'),'greedy decode','c1'],[total.toExponential(2),'P(“cat”) summed over '+paths+' paths','c5'],[(100*bestCat/total).toFixed(0)+'%','share from the single best “cat” path','c2']]); }
+ML.bindRange('ctS',drawCt,v=>(+v).toFixed(1)); ctP.onResize=drawCt; drawCt();
+})();
+</script>
+<script>NLP.nav('nlp','audio'); ML.renderMath(document.body);</script>
+</body>
+</html>

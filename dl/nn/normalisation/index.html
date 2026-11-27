@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Normalisation: BatchNorm, LayerNorm, RMSNorm</title>
+<meta name="description" content="See which axis BatchNorm, LayerNorm and RMSNorm normalise over, watch activations explode or saturate through depth without them, train deep networks with and without normalisation side by side, and learn why transformers use LayerNorm.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nn">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Foundations</p>
+  <h1>Normalisation: <span class="grad">keep every layer in range</span></h1>
+  <p class="lede">Each layer's output is the next layer's input. If those inputs drift to huge values, tanh and sigmoid saturate and gradients die; if they shrink, the signal disappears. Normalisation re-centres and re-scales activations inside the network, at every step, so each layer always sees inputs of a sensible size.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#axes">1 · Which axis?</a><a href="#depth">2 · Activations through depth</a><a href="#train">3 · Training with and without</a><a href="#batch">4 · BatchNorm's batch problem</a><a href="#maths">5 · The maths</a><a href="#where">6 · Which one where</a><a href="#code">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is normalisation, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>Imagine a 20-layer network halfway through training. Layer 12 has learned to expect inputs of a certain size. Then the layers below it update, and suddenly its inputs are three times bigger, or all shifted positive. Layer 12 has to re-adapt, and so does everything above it, every step. With saturating activations, big inputs also mean flat slopes and vanishing gradients. We would like each layer to receive inputs on a predictable scale no matter what the layers below are doing.</p>
+      <h3>The idea</h3><p>Each layer’s outputs are the next layer’s inputs. If they drift to huge values, <a class="term" data-t="tanh">tanh</a> and <a class="term" data-t="sigmoid">sigmoid</a> units <a class="term" data-t="saturation">saturate</a>; if they shrink, the signal fades away. A <a class="term" data-t="normalisation">normalisation layer</a> rescales the numbers inside the network to a standard size (average 0, spread 1) at every step, then lets the network choose its own scale and shift with two learned numbers \(\gamma, \beta\).</p><p>The variants differ in <i>which numbers</i> they average over: <a class="term" data-t="batchnorm">BatchNorm</a> uses the same feature across a <a class="term" data-t="mini-batch">mini-batch</a>, <a class="term" data-t="layernorm">LayerNorm</a> uses all features of one example, <a class="term" data-t="rmsnorm">RMSNorm</a> skips the centring.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Compute the <a class="term" data-t="mean">mean</a> and <a class="term" data-t="variance">variance</a> over the chosen axis.</li><li>Subtract the mean and divide by the standard deviation.</li><li>Multiply by \(\gamma\) and add \(\beta\) (learned).</li><li>For BatchNorm, keep <a class="term" data-t="running-average">running averages</a> to use at test time.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Grading on a curve: every exam is rescaled so the class average and spread are the same, whatever the difficulty, so later decisions always see marks on a familiar scale.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Trains faster, tolerates higher learning rates</li><li>Less sensitive to initialisation</li><li>BatchNorm adds a mild regularising noise</li></ul></div><div class="con"><b>Watch out for</b><ul><li>BatchNorm: tiny batches and train/test mismatch (model.eval())</li><li>Placement matters in transformers (pre-LN vs post-LN)</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="normalisation">Normalisation</a><a class="term" data-t="batchnorm">BatchNorm</a><a class="term" data-t="layernorm">LayerNorm</a><a class="term" data-t="rmsnorm">RMSNorm</a><a class="term" data-t="mean">Mean</a><a class="term" data-t="variance">Variance</a><a class="term" data-t="mini-batch">Mini-batch</a><a class="term" data-t="running-average">Running average</a><a class="term" data-t="saturation">Saturation</a><a class="term" data-t="initialisation">Initialisation</a><a class="term" data-t="residual">Residual connection</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="axes" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Which axis gets normalised?</h2>
+    <p class="sub">A mini-batch of 6 examples (rows) with 6 features each (columns), as one hidden layer sees it. Features have very different scales. Click any cell to see its calculation.</p>
+    <div class="seg" id="kind"><button data-v="none">raw activations</button><button data-v="batch" class="on">BatchNorm</button><button data-v="layer">LayerNorm</button><button data-v="rms">RMSNorm</button></div>
+    <div id="heatIn" style="margin-top:12px"></div>
+    <p class="hint" id="axisHint"></p>
+    <div id="heatOut" style="margin-top:8px"></div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Calculation for the selected cell</h3>
+    <div class="mathbox c1" id="calc" style="font-size:14px"></div>
+    <div class="kv" id="calcKv"></div>
+    <div class="note" style="margin-top:12px"><b>BatchNorm</b> uses statistics of one <i>feature</i> across the batch (a column). <b>LayerNorm</b> uses statistics of one <i>example</i> across its features (a row). <b>RMSNorm</b> is LayerNorm without subtracting the mean: just divide by the root-mean-square. All three then apply a learnable scale \(\gamma\) and (except RMSNorm) shift \(\beta\), here \(\gamma=1,\beta=0\).</div>
+  </div>
+</section>
+
+<section id="depth" class="card">
+  <h2><span class="num">2</span>Activations through depth</h2>
+  <p class="sub">A freshly initialised 20-layer tanh network (width 16) on the moons data. Make the initial weights too large or too small and see what each layer's outputs look like, with and without normalisation.</p>
+  <div class="grid2">
+    <div>
+      <div class="ctl"><label for="im"><span>Initial weight scale (× Xavier)</span><output id="imOut"></output></label><input type="range" id="im" min="-1" max="1" step="0.05" value="0.7"></div>
+      <div class="plot wide" id="stdPlot" style="margin-top:8px"></div>
+      <div class="legend" id="stdLeg"></div>
+      <p class="hint">Standard deviation of each layer's outputs (log scale). Without normalisation it shrinks or grows geometrically with depth.</p>
+    </div>
+    <div>
+      <div class="plot wide" id="satPlot"></div>
+      <div class="legend" id="satLeg"></div>
+      <p class="hint">Share of tanh units that are <b>saturated</b> (\(|a|>0.97\), slope below 0.06): they pass almost no gradient.</p>
+      <div class="stats" id="depthStats" style="margin-top:8px"></div>
+    </div>
+  </div>
+  <div class="note"><b>Read it:</b> at scale ×5 about two thirds of the plain network's units in layer 20 are pinned at ±1, and at ×10 more than 80%: much of the network passes almost no gradient before training even starts. At ×0.1 the opposite happens: each layer shrinks the signal about tenfold, so layer 20 outputs are effectively zero. With BatchNorm or LayerNorm the pre-activations are rescaled to mean 0, variance 1 in every layer, so the curves stay flat whatever the initial scale.</div>
+</section>
+
+<section id="train" class="card hl">
+  <h2><span class="num">3</span>Training with and without normalisation</h2>
+  <p class="sub">Three identical deep tanh networks (2 → 12 × 8 → 1) from the same initial weights, trained with plain gradient descent on the whole dataset. Normalisation makes training tolerate bad initial scales and much larger learning rates.</p>
+  <div class="row" style="justify-content:space-between"><div class="dsrow" id="dsPick"></div><div class="player"><button class="btn primary" id="tRun">Train all</button><button class="btn" id="tReset">Reset</button><span class="pos" id="tEp"></span></div></div>
+  <div class="grid3 mini" style="margin-top:12px" id="tGrid"></div>
+  <div class="grid2" style="margin-top:10px">
+    <div class="controls">
+      <div class="ctl"><label for="tlr"><span>Learning rate</span><output id="tlrOut"></output></label><input type="range" id="tlr" min="-2" max="0.5" step="0.05" value="-0.3"></div>
+      <div class="ctl"><label for="tim"><span>Initial weight scale (× Xavier)</span><output id="timOut"></output></label><input type="range" id="tim" min="-1" max="1" step="0.05" value="0.3"></div>
+    </div>
+    <div><div class="plot short" id="tLoss"></div><div class="legend" id="tLeg"></div></div>
+  </div>
+</section>
+
+<section id="batch" class="card">
+  <h2><span class="num">4</span>BatchNorm's batch problem</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>BatchNorm normalises one example with statistics computed from <i>the other examples in its batch</i>. So the same input gets a slightly different output every time it lands in a different batch. That noise acts as a mild regulariser, but:</p>
+      <ul>
+        <li><b>Small batches</b> give noisy estimates of \(\mu\) and \(\sigma\) (error shrinks like \(1/\sqrt{B}\)).</li>
+        <li><b>At test time</b> there may be one example, so BatchNorm switches to <i>running averages</i> collected during training. Train and test behave differently, a common bug source (<code>model.eval()</code>).</li>
+        <li><b>Sequences</b> have different lengths and text is generated one token at a time, so batch statistics make little sense. This is why transformers use LayerNorm or RMSNorm.</li>
+      </ul>
+      <div class="ctl"><label for="bsz"><span>Batch size \(B\)</span><output id="bszOut"></output></label><input type="range" id="bsz" min="2" max="128" value="8"></div>
+      <div class="stats" id="bStats"></div>
+    </div>
+    <div><div class="plot wide" id="bPlot"></div>
+      <p class="hint">One fixed example with raw value 1.5 for a feature distributed as \(\mathcal N(0.5,\,1)\). Each dot is its BatchNorm output in one of 200 random batches of size \(B\). The dashed line is the value using the true mean and variance, which running averages approximate at test time. LayerNorm's output would not depend on the batch at all.</p></div>
+  </div>
+</section>
+
+<section id="maths" class="card">
+  <h2><span class="num">5</span>The maths</h2>
+  <div class="grid3 prose">
+    <div><h3>BatchNorm (Ioffe &amp; Szegedy, 2015)</h3>
+      <div class="mathbox c1">$$\begin{aligned}\mu_j&=\tfrac1B\textstyle\sum_i z_{ij}\\ \sigma_j^2&=\tfrac1B\textstyle\sum_i(z_{ij}-\mu_j)^2\\ \hat z_{ij}&=\dfrac{z_{ij}-\mu_j}{\sqrt{\sigma_j^2+\epsilon}}\\ y_{ij}&=\gamma_j\hat z_{ij}+\beta_j\end{aligned}$$</div>
+      <p>Per feature \(j\), over the batch. At test time \(\mu_j,\sigma_j^2\) are exponential moving averages from training (momentum 0.1 here and in PyTorch). For images, the statistics are taken over batch, height and width for each channel.</p></div>
+    <div><h3>LayerNorm (Ba, Kiros &amp; Hinton, 2016)</h3>
+      <div class="mathbox c3">$$\begin{aligned}\mu_i&=\tfrac1D\textstyle\sum_j z_{ij}\\ \sigma_i^2&=\tfrac1D\textstyle\sum_j(z_{ij}-\mu_i)^2\\ y_{ij}&=\gamma_j\dfrac{z_{ij}-\mu_i}{\sqrt{\sigma_i^2+\epsilon}}+\beta_j\end{aligned}$$</div>
+      <p>Per example \(i\), over its \(D\) features. Identical in training and testing, and independent of the batch.</p></div>
+    <div><h3>RMSNorm (Zhang &amp; Sennrich, 2019)</h3>
+      <div class="mathbox c5">$$y_{ij}=\gamma_j\dfrac{z_{ij}}{\sqrt{\tfrac1D\sum_k z_{ik}^2+\epsilon}}$$</div>
+      <p>Drops the mean subtraction and \(\beta\). About as good as LayerNorm and cheaper, so LLaMA, Mistral and most recent LLMs use it.</p></div>
+  </div>
+  <div class="grid2 prose" style="margin-top:12px">
+    <div>
+      <h3>The same recipe, two directions</h3>
+      <p>All three methods do the same three things: measure a mean and a spread, standardise, then let the network rescale. The only difference is <i>which numbers are pooled together</i>: down a column of the batch (BatchNorm) or along a row, one example at a time (LayerNorm).</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: BatchNorm and LayerNorm forward pass</h5><ol>
+        <li><span class="kw">input</span> activations \(Z\) (\(B\) examples × \(D\) features), learnable \(\gamma,\beta\in\mathbb R^D\), \(\epsilon\)</li>
+        <li><span class="kw">BatchNorm</span>: <span class="kw">for</span> each feature (column) \(j\) <span class="kw">do</span></li>
+        <li class="i1">\(\mu_j\leftarrow\) mean of column \(j\); \(\sigma_j^2\leftarrow\) its variance <span class="cm">pooled over the batch</span></li>
+        <li class="i1">\(\hat Z_{:,j}\leftarrow(Z_{:,j}-\mu_j)/\sqrt{\sigma_j^2+\epsilon}\)</li>
+        <li class="i1">update running averages of \(\mu_j,\sigma_j^2\) <span class="cm">used at test time instead</span></li>
+        <li><span class="kw">LayerNorm</span>: <span class="kw">for</span> each example (row) \(i\) <span class="kw">do</span></li>
+        <li class="i1">\(\mu_i\leftarrow\) mean of row \(i\); \(\sigma_i^2\leftarrow\) its variance <span class="cm">pooled over features</span></li>
+        <li class="i1">\(\hat Z_{i,:}\leftarrow(Z_{i,:}-\mu_i)/\sqrt{\sigma_i^2+\epsilon}\)</li>
+        <li><span class="kw">return</span> \(Y=\gamma\odot\hat Z+\beta\) <span class="cm">same final step for both</span></li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: why BatchNorm behaves differently at test time</summary><div>
+        <p>During training, each example's output depends on the other examples in its batch, through \(\mu_j\) and \(\sigma_j\). That is a mild source of noise (a regulariser) but a problem for prediction: the answer for one test image must not depend on which other images happen to be processed with it, and a batch of size 1 has no variance at all. So at test time BatchNorm switches to fixed population estimates, the running averages \(\bar\mu\leftarrow(1-m)\bar\mu+m\mu_{\text{batch}}\) collected in training. The train/test mismatch causes real bugs: forgetting <code>model.eval()</code>, tiny batches, or a distribution shift between training and deployment.</p>
+        <p>LayerNorm never looks across examples, so it is identical in training and testing and works with any batch size, including the one-token-at-a-time generation of a language model. That, plus variable sequence lengths, is why transformers use LayerNorm or RMSNorm.</p>
+      </div></details>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:12px">
+    <div><h3>Why \(\gamma\) and \(\beta\)?</h3><p>Forcing every layer to mean 0, variance 1 would limit what the network can represent (a sigmoid would only ever see its near-linear middle). The learnable \(\gamma,\beta\) let the layer undo the normalisation if that is best, with \(\gamma=\sigma,\beta=\mu\). What changes is the <i>parameterisation</i>: scale and shift are now two direct knobs instead of an emergent property of all the weights below.</p></div>
+    <div><h3>Backward pass (BatchNorm)</h3>
+      <div class="mathbox c2">$$\frac{\partial\mathcal L}{\partial z_{ij}}=\frac{\gamma_j}{\sigma_j}\Big(g_{ij}-\overline{g}_{j}-\hat z_{ij}\,\overline{g\hat z}_{j}\Big)$$</div>
+      <p>with \(g=\partial\mathcal L/\partial y\) and bars meaning averages over the batch. The gradient is projected so it cannot change the batch mean or variance: this is what the engine on this site implements (a gradient check agrees to about \(10^{-4}\)). LayerNorm has the same formula with averages over features.</p></div>
+  </div>
+  <div class="note"><b>Why does it work?</b> The original paper argued it reduces "internal covariate shift" (layer inputs changing distribution as earlier layers learn). Santurkar et al. (2018) showed the bigger effect is a <b>smoother loss landscape</b>: gradients change less from step to step, so larger learning rates are safe. Normalised layers are also <b>scale invariant</b> (multiplying the weights below by \(c\) changes nothing), which keeps them from blowing up.</div>
+</section>
+
+<section id="where" class="card">
+  <h2><span class="num">6</span>Which one where</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Method</th><th>Statistics over</th><th>Depends on batch?</th><th>Typical home</th></tr>
+    <tr><td><b>BatchNorm</b></td><td>batch (+ spatial) per channel</td><td>yes, running averages at test</td><td>CNNs: ResNet, EfficientNet</td></tr>
+    <tr><td><b>LayerNorm</b></td><td>all features of one example</td><td>no</td><td>Transformers (BERT, GPT-2), RNNs</td></tr>
+    <tr><td><b>RMSNorm</b></td><td>all features, no centring</td><td>no</td><td>LLaMA, Mistral, Gemma, T5</td></tr>
+    <tr><td><b>GroupNorm</b></td><td>groups of channels in one example</td><td>no</td><td>detection and segmentation with small batches, diffusion U-Nets</td></tr>
+    <tr><td><b>InstanceNorm</b></td><td>one channel of one example (spatial)</td><td>no</td><td>style transfer</td></tr>
+  </table></div>
+  <p class="hint">Placement matters too: in a transformer, <b>pre-LN</b> (normalise the input of each sub-block, keep the <a href="../residual/#where">residual</a> path clean) trains stably without warm-up; <b>post-LN</b> (normalise after adding) was the 2017 original and needs care. In CNNs the classic order is convolution → BatchNorm → ReLU.</p>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">7</span>The same thing in Python (PyTorch)</h2>
+<pre class="code">bn  = nn.BatchNorm1d(<span class="s">64</span>)      <span class="c"># over the batch, per feature; uses running stats in eval()</span>
+ln  = nn.LayerNorm(<span class="s">64</span>)        <span class="c"># over the last dimension of each example</span>
+rms = nn.RMSNorm(<span class="s">64</span>)          <span class="c"># PyTorch 2.4+; LLaMA-style</span>
+
+model = nn.Sequential(nn.Linear(<span class="s">2</span>, <span class="s">64</span>), nn.BatchNorm1d(<span class="s">64</span>), nn.Tanh(),
+                      nn.Linear(<span class="s">64</span>, <span class="s">64</span>), nn.BatchNorm1d(<span class="s">64</span>), nn.Tanh(), nn.Linear(<span class="s">64</span>, <span class="s">1</span>))
+model.train()   <span class="c"># batch statistics, updates running_mean / running_var</span>
+model.eval()    <span class="c"># running averages: ALWAYS switch before evaluating</span></pre>
+</section>
+
+<p class="foot">Part of the <a href="../">neural network foundations</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/nn.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML;
+const COL={none:'#64748b',batch:'#7c3aed',layer:'#0891b2'}, NAME={none:'No normalisation',batch:'BatchNorm',layer:'LayerNorm'};
+
+/* ---- 1. axes ---- */
+const rng=ML.rng(12), scales=[0.2,1,5,0.5,3,10], shifts=[0,2,-4,1,10,-3];
+const Z=Array.from({length:6},()=>scales.map((s,j)=>+(shifts[j]+s*rng.gauss()).toFixed(2)));
+const rows=['ex 1','ex 2','ex 3','ex 4','ex 5','ex 6'], cols=['f1','f2','f3','f4','f5','f6'];
+let K='batch', sel=[2,4];
+const mean=a=>a.reduce((s,v)=>s+v,0)/a.length, vr=a=>{ const m=mean(a); return mean(a.map(v=>(v-m)**2)); };
+function norm(kind){ if(kind==='none') return Z.map(r=>r.slice());
+  if(kind==='batch'){ const st=cols.map((_,j)=>{ const c=Z.map(r=>r[j]); return [mean(c),Math.sqrt(vr(c)+1e-5)]; }); return Z.map(r=>r.map((v,j)=>(v-st[j][0])/st[j][1])); }
+  if(kind==='layer') return Z.map(r=>{ const m=mean(r), s=Math.sqrt(vr(r)+1e-5); return r.map(v=>(v-m)/s); });
+  return Z.map(r=>{ const s=Math.sqrt(mean(r.map(v=>v*v))+1e-5); return r.map(v=>v/s); }); }
+function drawAxes(){ const [i,j]=sel, N=norm(K), hi=K==='batch'?{selCol:j}:K==='none'?{}:{selRow:i};
+  const mask=K==='batch'?((a,b)=>b!==j):K==='none'?null:((a,b)=>a!==i);
+  NLP.heat('#heatIn',Z,rows,cols,Object.assign({diverging:true,max:12,sel:[i,j],onCell:(a,b)=>{ sel=[a,b]; drawAxes(); }},hi));
+  NLP.heat('#heatOut',N,rows,cols.map(c=>c+'′'),Object.assign({diverging:true,max:K==='none'?12:2.5,sel:[i,j],onCell:(a,b)=>{ sel=[a,b]; drawAxes(); }},hi));
+  $('#axisHint').innerHTML= K==='none'?'Raw activations. Below: unchanged.': K==='batch'?`Highlighted: column <b>${cols[j]}</b>, the values BatchNorm averages over. Below: every column now has mean 0, variance 1.`:`Highlighted: row <b>${rows[i]}</b>, the values ${K==='layer'?'LayerNorm':'RMSNorm'} averages over. Below: every row now has ${K==='layer'?'mean 0, variance 1':'root-mean-square 1'}.`;
+  const v=Z[i][j]; let tex, kv;
+  if(K==='none'){ tex=`y=z=${v.toFixed(2)}`; kv=[['z',v.toFixed(2)]]; }
+  else if(K==='rms'){ const r=Z[i], s=Math.sqrt(mean(r.map(x=>x*x))+1e-5); tex=`y=\\frac{z}{\\text{RMS}(\\text{row})}=\\frac{${v.toFixed(2)}}{${s.toFixed(3)}}=${(v/s).toFixed(3)}`; kv=[['values used',r.map(x=>x.toFixed(2)).join(', ')],['RMS',s.toFixed(3)]]; }
+  else { const vals=K==='batch'?Z.map(r=>r[j]):Z[i], m=mean(vals), s=Math.sqrt(vr(vals)+1e-5); tex=`y=\\frac{z-\\mu}{\\sigma}=\\frac{${v.toFixed(2)}-(${m.toFixed(3)})}{${s.toFixed(3)}}=${((v-m)/s).toFixed(3)}`; kv=[['values used',vals.map(x=>x.toFixed(2)).join(', ')],['μ ('+(K==='batch'?'column':'row')+' mean)',m.toFixed(3)],['σ ('+(K==='batch'?'column':'row')+' std)',s.toFixed(3)]]; }
+  $('#calc').innerHTML=ML.tex(tex,true); $('#calcKv').innerHTML=kv.map(([a,b])=>`<span>${a}</span><b>${b}</b>`).join(''); }
+ML.bindSeg('kind',v=>{ K=v; ML.setSeg('kind',v); drawAxes(); });
+
+/* ---- 2. depth ---- */
+const sP=new ML.Plot('#stdPlot',{equal:false}), tP=new ML.Plot('#satPlot',{equal:false}); const KINDS=['none','batch','layer'];
+function drawDepth(){ const m=Math.pow(10,+$('#im').value), d=ML.dataset('moons',128,0.2,3), sz=[2,...Array(20).fill(16),1]; const res={};
+  KINDS.forEach(k=>{ const st=new Array(20).fill(0), sat=new Array(20).fill(0); for(let s=0;s<3;s++){ const n=NN.MLP(sz,{act:'tanh',norm:k,seed:30+s,initMul:m}); const outs=n.layerOutputs(d.X).slice(0,20);
+      outs.forEach((O,l)=>{ const all=O.flatMap(r=>[...r]); st[l]+=Math.sqrt(vr(all))/3; sat[l]+=all.filter(v=>Math.abs(v)>0.97).length/all.length/3; }); } res[k]={st,sat}; });
+  ML.chart(sP,KINDS.map(k=>({pts:res[k].st.map((v,l)=>[l+1,Math.log10(v+1e-12)]),color:COL[k],width:2.6,dots:true,r:2.6})),{xl:'layer',yfmt:v=>'1e'+v.toFixed(1)});
+  ML.chart(tP,KINDS.map(k=>({pts:res[k].sat.map((v,l)=>[l+1,v]),color:COL[k],width:2.6,dots:true,r:2.6})),{y0:0,y1:1,xl:'layer',yfmt:v=>(100*v).toFixed(0)+'%'});
+  const leg=KINDS.map(k=>`<span><i class="sw" style="background:${COL[k]}"></i>${NAME[k]}</span>`).join(''); $('#stdLeg').innerHTML=leg; $('#satLeg').innerHTML=leg;
+  $('#depthStats').innerHTML=KINDS.map((k,i)=>`<div class="stat ${['c4','c1','c3'][i]}"><b>${ML.pct(res[k].sat[19])}</b><span>${NAME[k]}: saturated in layer 20</span></div>`).join(''); }
+ML.bindRange('im',drawDepth,v=>'×'+Math.pow(10,v).toPrecision(2)); sP.onResize=drawDepth; tP.onResize=drawDepth;
+
+/* ---- 3. training ---- */
+const T={ds:'moons',nets:[],plots:[],hist:{},timer:null,ep:0,data:null}; const lP=new ML.Plot('#tLoss',{equal:false});
+$('#tGrid').innerHTML=KINDS.map(k=>`<div><div class="plot sq"></div><div class="hint" style="text-align:center" data-k="${k}"></div></div>`).join('');
+T.plots=[...$('#tGrid').querySelectorAll('.plot')].map(h=>new ML.Plot(h));
+function tBuild(){ tStop(); T.data=ML.dataset(T.ds,200,0.2,7); T.ep=0; const m=Math.pow(10,+$('#tim').value); T.nets=KINDS.map(k=>NN.MLP([2,...Array(8).fill(12),1],{act:'tanh',norm:k,seed:8,initMul:m})); KINDS.forEach(k=>T.hist[k]=[]); tDraw(); }
+function tDraw(){ T.nets.forEach((n,i)=>{ const p=T.plots[i], k=KINDS[i]; p.clear(); p.regions((x,y)=>n.predict([x,y]),6); p.contour((x,y)=>n.predict([x,y])-0.5,0,{width:2}); p.points(T.data.X,T.data.y,{r:2.8});
+    const acc=ML.accuracy({proba:x=>n.predict(x)},T.data.X,T.data.y); $('#tGrid').querySelector(`[data-k="${k}"]`).innerHTML=`<b style="color:${COL[k]}">${NAME[k]}</b> · accuracy ${ML.pct(acc)} · loss ${n.lastLoss!=null&&isFinite(n.lastLoss)?fmt(n.lastLoss,3):n.lastLoss!=null?'diverged':'–'}`; });
+  ML.chart(lP,KINDS.map(k=>({pts:T.hist[k],color:COL[k],width:2.4})),{y0:0,y1:1,xl:'epoch'}); $('#tLeg').innerHTML=KINDS.map(k=>`<span><i class="sw" style="background:${COL[k]}"></i>${NAME[k]}</span>`).join(''); $('#tEp').textContent='epoch '+T.ep; }
+function tStop(){ if(T.timer){ clearInterval(T.timer); T.timer=null; $('#tRun').textContent='Train all'; } }
+$('#tRun').onclick=()=>{ if(T.timer){ tStop(); return; } $('#tRun').textContent='Pause'; const lr=()=>Math.pow(10,+$('#tlr').value);
+  T.timer=setInterval(()=>{ for(let s=0;s<3;s++){ T.nets.forEach((n,i)=>{ n.train(T.data.X,T.data.y,{name:'sgd',lr:lr()},1); T.hist[KINDS[i]].push([T.ep+1,Math.min(1,n.lastLoss)]); }); T.ep++; } tDraw(); if(T.ep>=600) tStop(); },50); };
+$('#tReset').onclick=tBuild; ML.datasetPicker('dsPick',T.ds,id=>{ T.ds=id; tBuild(); });
+ML.bindRange('tlr',()=>{},v=>Math.pow(10,v).toPrecision(2)); ML.bindRange('tim',tBuild,v=>'×'+Math.pow(10,v).toPrecision(2));
+T.plots.forEach(p=>p.onResize=tDraw); lP.onResize=tDraw;
+
+/* ---- 4. batch noise ---- */
+const bP=new ML.Plot('#bPlot',{equal:false});
+function drawB(){ const B=+$('#bsz').value, r=ML.rng(5), pts=[]; for(let t=0;t<200;t++){ const xs=[1.5]; for(let i=1;i<B;i++) xs.push(0.5+r.gauss()); const m=mean(xs), s=Math.sqrt(vr(xs)+1e-5); pts.push([t,(1.5-m)/s]); }
+  const P=ML.palette(); ML.chart(bP,[{pts,color:P.c1,dots:true,r:2.6,noline:true},{pts:[[0,1],[199,1]],color:P.ink,width:1.5,dash:[5,4]}],{y0:-1,y1:4,xl:'random batch #'});
+  const sd=Math.sqrt(vr(pts.map(p=>p[1]))); $('#bStats').innerHTML=[['c1',sd.toFixed(3),'spread (std) of the output across batches'],['c3','1.000','output with true μ, σ (test time)']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+ML.bindRange('bsz',drawB); bP.onResize=drawB;
+
+ML.onTheme(()=>{ drawAxes(); drawDepth(); tDraw(); drawB(); });
+drawAxes(); drawDepth(); tBuild(); drawB();
+})();
+</script>
+<script>NLP.nav('nn','normalisation'); ML.renderMath(document.body);</script>
+</body>
+</html>

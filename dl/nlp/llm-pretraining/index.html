@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LLM pre-training & scaling laws</title>
+<meta name="description" content="How a large language model is pre-trained: next-token prediction on trillions of tokens, the data that goes in, counting the compute (C ≈ 6ND), Chinchilla compute-optimal scaling laws you can explore, and whether emergent abilities are real. Interactive, with a character-level model trained in your browser.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<style>
+.src{font-size:12.5px;color:var(--muted);margin:10px 0 0;border-left:3px solid var(--line);padding-left:10px}
+.src a{color:inherit;text-decoration:underline;text-decoration-color:var(--line)}
+.gx-sample{font:13px/1.6 "JetBrains Mono",ui-monospace,monospace;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:10px 12px;white-space:pre-wrap;word-break:break-word;height:132px;overflow:auto;margin:8px 0}
+.gx-sample b{color:var(--c1)}
+</style>
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP &middot; Large language models</p>
+  <h1>LLM pre-training: <span class="grad">predict the next token, a trillion times</span></h1>
+  <p class="lede">Every large language model starts the same way. Take a transformer with random weights, show it an enormous amount of text, and ask it again and again to guess the next token. That one dull task, done at a scale that costs millions of dollars, is where the model's knowledge of language, facts and reasoning comes from. This page trains a tiny next-character model in your browser, counts the compute a real run needs, and works through the scaling laws that tell labs how big a model to train and on how much data.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#ntp">1 · Next-token prediction</a><a href="#data">2 · The data</a><a href="#compute">3 · Counting the compute</a><a href="#scaling">4 · Scaling laws &amp; Chinchilla</a><a href="#emergent">5 · Emergent abilities</a><a href="#py">6 · Python</a><a href="#credits">7 · Sources &amp; credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is pre-training, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>We want one model that can write, summarise, translate, answer questions and write code. Labelled data for each of those jobs is scarce and expensive. Plain text, on the other hand, is everywhere: the web, books, papers, code. How do we learn from text that nobody has labelled?</p>
+      <h3>The idea</h3><p>Make the text label itself. In “The cat sat on the ___”, the next word is the answer, and it is already in the data. <a class="term" data-t="next-token-prediction">Next-token prediction</a> turns every position of every document into a training example. A model that gets very good at it has to learn grammar, facts (“Paris is the capital of ___”), and some reasoning (“3 + 4 = ___”). This first, most expensive stage is <a class="term" data-t="pretraining">pre-training</a>; the result is a <a class="term" data-t="base-model">base model</a>.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Collect, clean and de-duplicate trillions of <a class="term" data-t="token">tokens</a> of text and code.</li><li>Pick a model size \(N\) and a data budget \(D\) using a <a class="term" data-t="scaling-law">scaling law</a>.</li><li>Train a decoder-only transformer to minimise cross-entropy on the next token, for weeks, on thousands of GPUs.</li><li>Hand the base model to <a href="../llm-post-training/">post-training</a>, which turns it into an assistant.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A child who has read every book in a huge library, with one rule: before turning each page, guess the first word on it. Nobody explains grammar or history; the guessing game alone forces the child to absorb both. The child ends up knowing a lot, but has never been taught to answer a question politely. That comes later.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Uses unlabelled data, of which there is a vast amount</li><li>One objective, many skills: knowledge, syntax, code, translation</li><li>Predictable: loss falls smoothly as a power law in size, data and compute</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Enormously expensive, and mistakes are found only after weeks</li><li>The model absorbs the biases and errors in its data</li><li>A base model continues text; it does not follow instructions</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="next-token-prediction">Next-token prediction</a><a class="term" data-t="cross-entropy">Cross-entropy</a><a class="term" data-t="perplexity">Perplexity</a><a class="term" data-t="base-model">Base model</a><a class="term" data-t="flops">FLOPs</a><a class="term" data-t="scaling-law">Scaling law</a><a class="term" data-t="compute-optimal">Compute-optimal</a><a class="term" data-t="chinchilla">Chinchilla</a><a class="term" data-t="data-mixture">Data mixture</a><a class="term" data-t="deduplication">Deduplication</a><a class="term" data-t="emergent-ability">Emergent ability</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="ntp" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Next-token prediction, live</h2>
+    <p class="sub">A character-level <a class="term" data-t="n-gram">n-gram</a> model learns from 85% of the sentences of a small corpus (a short story plus simple sentences) and is scored on the other 15%. Move the sliders: how much text it sees, and how many previous characters it may look at.</p>
+    <div class="plot wide" id="ntpPlot"></div>
+    <div class="ctl"><label for="ntpN"><span>Training characters seen</span><output id="ntpNOut"></output></label><input type="range" id="ntpN" min="0" max="1" step="0.01" value="1"></div>
+    <div class="ctl"><label for="ntpK"><span>Context length k (characters)</span><output id="ntpKOut"></output></label><input type="range" id="ntpK" min="0" max="5" step="1" value="3"></div>
+    <div class="stats" id="ntpStats"></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="ntpGo">Generate 220 characters</button></div>
+    <div class="gx-sample" id="ntpOut"></div>
+    <p class="hint">Each curve is one context length. Lower is better; the dashed line is a model that guesses uniformly among all characters. Generation backs off to a shorter context when the current one was never seen. Real LLMs do the same thing with ~100k-token vocabularies, thousands of tokens of context and a transformer in place of the count table.</p>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Write a document as a sequence of tokens \(x_1,x_2,\dots,x_T\). By the chain rule of probability, the probability of the whole document factorises into one prediction per position:</p>
+      <div class="mathbox c1">$$p_\theta(x_1,\dots,x_T)=\prod_{t=1}^{T}p_\theta\big(x_t\mid x_{&lt;t}\big).$$</div>
+      <p>So a model of “what comes next” is automatically a model of text. How do we choose the parameters \(\theta\)? By <a href="../../../math/mle/">maximum likelihood</a>: make the real documents as probable as possible. Taking minus the log and averaging over all \(T\) positions gives the pre-training loss, the average <a class="term" data-t="cross-entropy">cross-entropy</a>:</p>
+      <div class="mathbox c1">$$\mathcal L(\theta)=-\frac1T\sum_{t=1}^{T}\log p_\theta\big(x_t\mid x_{&lt;t}\big).$$</div>
+      <p>Each term says: how surprised was the model by the token that actually came next? A model that put probability 0.5 on the right token pays \(\log 2\approx0.69\) nats (1 bit); one that put 0.01 pays 4.6 nats. \(e^{\mathcal L}\) is the <a class="term" data-t="perplexity">perplexity</a>, the effective number of tokens the model is choosing between.</p>
+      <p>The lab uses the simplest possible model: count how often each character followed each context of length \(k\) in the training text, and predict with those counts (plus a little smoothing so nothing has probability zero). Three lessons carry over directly to real LLMs:</p>
+      <ul>
+        <li><b>More data lowers the loss</b>, and with diminishing returns: each doubling of the text buys a smaller drop.</li>
+        <li><b>A bigger model needs more data.</b> With \(k=5\) the model has far more “parameters” (one count per context) than \(k=1\). On little data it is worse than the small model, because most contexts were never seen; on more data it overtakes. That crossing is the scaling-law story of section 4 in miniature.</li>
+        <li><b>The samples get better as the loss falls.</b> At \(k=0\) the text is letter soup with the right letter frequencies; at \(k=3\) real words appear. A transformer replaces the count table with a network that shares strength between similar contexts, so it can use thousands of tokens of context without having seen each one.</li>
+      </ul>
+      <div class="algo" data-anim="pretrain"><h5 class="algo-h">Algorithm: pre-training a language model</h5><ol>
+        <li><span class="kw">input</span> token stream from the corpus, model \(p_\theta\), context length \(n\), batch size \(B\)</li>
+        <li><span class="kw">repeat</span> until the token budget \(D\) is used</li>
+        <li class="i1">cut \(B\) windows of \(n+1\) tokens from the stream</li>
+        <li class="i1">inputs \(\leftarrow\) tokens \(1..n\); targets \(\leftarrow\) tokens \(2..n{+}1\) <span class="cm">shift by one</span></li>
+        <li class="i1">one forward pass gives \(p_\theta(\cdot\mid x_{&lt;t})\) at every position <span class="cm">causal mask</span></li>
+        <li class="i1">\(\mathcal L\leftarrow\) mean of \(-\log p_\theta(\text{target}_t)\) over all \(B\cdot n\) positions</li>
+        <li class="i1">\(\theta\leftarrow\) AdamW step on \(\nabla_\theta\mathcal L\), with warm-up and decaying learning rate</li>
+        <li><span class="kw">return</span> the base model \(p_\theta\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: why one forward pass trains on every position at once</summary><div>
+        <p>A recurrent network must read token 1 before token 2. A transformer with a <a href="../self-attention/#mask">causal mask</a> computes the prediction for every position in parallel, each one allowed to look only at earlier tokens. A window of 4,096 tokens therefore yields 4,096 training examples from a single pass. This parallelism, more than anything else, is why transformers replaced RNNs for pre-training.</p>
+        <p>Cross-entropy also has a floor. Text contains genuine randomness (which of several equally good words a writer picks), so even a perfect model has loss equal to the entropy of language. Scaling laws model this floor as the constant \(E\) in section 4.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="data" class="card">
+  <h2><span class="num">2</span>What goes in: the pre-training data</h2>
+  <div class="grid2 prose">
+    <div>
+      <p>The objective is simple; the data is where most of the craft lies. A modern pre-training corpus is built in stages:</p>
+      <ol>
+        <li><b>Collect.</b> Web crawls (Common Crawl), books, Wikipedia, scientific papers, code from public repositories, maths, conversations, and increasingly text in many languages.</li>
+        <li><b>Extract and filter.</b> Strip HTML, drop pages in the wrong language, and remove spam, boilerplate and toxic content with heuristics and small quality classifiers.</li>
+        <li><b><a class="term" data-t="deduplication">De-duplicate</a>.</b> The web repeats itself: licences, templates, mirrored pages. Exact and near-duplicate removal (MinHash) makes training more efficient and reduces memorisation of repeated text.</li>
+        <li><b>Decontaminate.</b> Remove copies of benchmark test sets, or scores become meaningless (see <a href="../../../ml/datasets/#leak">leakage and contamination</a>).</li>
+        <li><b>Tokenise and mix.</b> Convert to tokens with a <a href="../tokenisation/#bpe">BPE tokeniser</a> and decide the <a class="term" data-t="data-mixture">data mixture</a>: how often each source is sampled.</li>
+      </ol>
+      <p>Mixture weights matter because sources differ in quality and size. Small, high-quality sources (Wikipedia, books) are often seen more than once, while the web is seen less than once.</p>
+    </div>
+    <div>
+      <p>For a concrete example, here is the published mixture of the first LLaMA models (1.4 trillion tokens):</p>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Source</th><th>Share of samples</th><th>Epochs</th><th>Size on disk</th></tr>
+        <tr><td>CommonCrawl</td><td>67.0%</td><td>1.10</td><td>3.3 TB</td></tr>
+        <tr><td>C4</td><td>15.0%</td><td>1.06</td><td>783 GB</td></tr>
+        <tr><td>GitHub</td><td>4.5%</td><td>0.64</td><td>328 GB</td></tr>
+        <tr><td>Wikipedia</td><td>4.5%</td><td>2.45</td><td>83 GB</td></tr>
+        <tr><td>Books</td><td>4.5%</td><td>2.23</td><td>85 GB</td></tr>
+        <tr><td>ArXiv</td><td>2.5%</td><td>1.06</td><td>92 GB</td></tr>
+        <tr><td>StackExchange</td><td>2.0%</td><td>1.03</td><td>78 GB</td></tr>
+      </table></div>
+      <p>Later models train on far more: Llama 3 used about 15 trillion tokens, with more code and multilingual text, and many recent models add synthetic data written by earlier models. A common recipe also <b>anneals</b> at the end of training: the learning rate decays to zero while the mixture shifts towards the highest-quality data.</p>
+      <div class="note"><b>Why “tokens” and not “words”?</b> The model reads tokens from a fixed vocabulary of sub-word pieces (often 32k to 200k of them). In English one token is about ¾ of a word, so 1 trillion tokens is roughly 750 billion words.</div>
+    </div>
+  </div>
+  <p class="src">Mixture table from Touvron et al., <a href="https://arxiv.org/abs/2302.13971" target="_blank" rel="noopener">LLaMA: Open and Efficient Foundation Language Models</a> (2023), Table 1.</p>
+</section>
+
+<section id="compute" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Counting the compute: C ≈ 6ND</h2>
+    <p class="sub">Pick a famous model or set your own size and data. The calculator counts the floating-point operations, the GPU time, and the memory just to hold the training state.</p>
+    <div class="ctl"><label for="cPre"><span>Preset</span></label><select id="cPre"><option value="custom">Custom</option><option value="gpt3" selected>GPT-3 (175B params, 300B tokens)</option><option value="gopher">Gopher (280B, 300B)</option><option value="chin">Chinchilla (70B, 1.4T)</option><option value="l2">Llama 2 70B (70B, 2T)</option><option value="l38">Llama 3 8B (8B, 15T)</option><option value="l3405">Llama 3.1 405B (405B, 15.6T)</option></select></div>
+    <div class="ctl"><label for="cN"><span>Parameters N</span><output id="cNOut"></output></label><input type="range" id="cN" min="7" max="12.7" step="0.01" value="11.243"></div>
+    <div class="ctl"><label for="cD"><span>Training tokens D</span><output id="cDOut"></output></label><input type="range" id="cD" min="9" max="13.3" step="0.01" value="11.477"></div>
+    <div class="ctl"><label for="cG"><span>GPU</span></label><select id="cG"><option value="312">A100 (312 TFLOP/s bf16)</option><option value="989" selected>H100 (989 TFLOP/s bf16)</option><option value="2250">B200 (≈2,250 TFLOP/s bf16)</option></select></div>
+    <div class="ctl"><label for="cM"><span>Utilisation (MFU)</span><output id="cMOut"></output></label><input type="range" id="cM" min="0.2" max="0.6" step="0.01" value="0.4"></div>
+    <div class="ctl"><label for="cK"><span>Number of GPUs</span><output id="cKOut"></output></label><input type="range" id="cK" min="0" max="14" step="1" value="10"></div>
+    <div class="stats" id="cStats"></div>
+    <p class="hint">Dense bf16 peak figures without sparsity. Real runs also lose time to failures and restarts, so treat the days as a lower bound.</p>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>How much arithmetic does training take? Count it for one token passing through a network with \(N\) weights. In the forward pass each weight is used in one multiply and one add: about \(2N\) <a class="term" data-t="flops">FLOPs</a>. The backward pass needs the gradient with respect to the activations and with respect to the weights, each costing about as much as the forward pass: another \(4N\). Over \(D\) training tokens,</p>
+      <div class="mathbox c1">$$C\;\approx\;6\,N\,D\ \text{FLOPs}.$$</div>
+      <p>Check it on GPT-3: \(6\times175\times10^{9}\times300\times10^{9}=3.15\times10^{23}\) FLOPs, which is the figure in the GPT-3 paper. Attention adds a term that grows with context length, but for large models at typical context lengths it is small, and the rule of thumb holds.</p>
+      <p>Wall-clock time is compute divided by throughput:</p>
+      <div class="mathbox c3">$$\text{time}=\frac{C}{\#\text{GPUs}\times\text{peak FLOP/s}\times\text{MFU}} .$$</div>
+      <p>The <a class="term" data-t="mfu">model FLOPs utilisation</a> (MFU) is the share of the hardware's peak that does useful work; 35–50% is good for large runs, because GPUs also wait for memory and for each other.</p>
+      <p><b>Memory</b> is the other wall. With mixed-precision AdamW, each parameter needs about 16 bytes: 2 for the bf16 weight, 2 for its gradient, and 12 for the fp32 master copy and Adam's two moment estimates. A 70B model therefore needs about 1.1 TB just for this state, more than ten 80 GB GPUs, before counting activations. That is why training is spread across GPUs with data, tensor, pipeline and sharded (ZeRO/FSDP) parallelism.</p>
+      <details class="deeper"><summary>Going deeper: where the 6 comes from, layer by layer</summary><div>
+        <p>For a linear layer \(y=Wx\) with \(W\in\mathbb R^{m\times n}\): the forward pass is \(mn\) multiply-adds, 2 FLOPs each, so \(2mn\). The backward pass computes \(\partial L/\partial x=W^\top g\) (another \(2mn\)) and \(\partial L/\partial W=g\,x^\top\) (another \(2mn\)). Total \(6mn\) per token, and summing over layers gives \(6N\). Kaplan et al. add the attention scores, \(2\,n_{\text{layer}}\,n_{\text{ctx}}\,d\) per token forward, which matters only when the context is long compared with the model width.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="scaling" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Scaling laws: how big, on how much data?</h2>
+    <p class="sub">The Chinchilla scaling law predicts the final loss from model size \(N\) and tokens \(D\). Fix a compute budget: every point on a curve costs the same, trading parameters for data. Where is the bottom?</p>
+    <div class="plot wide" id="slPlot"></div>
+    <div class="ctl"><label for="slC"><span>Compute budget C (FLOPs)</span><output id="slCOut"></output></label><input type="range" id="slC" min="18" max="26" step="0.05" value="23.7"></div>
+    <div class="ctl"><div class="seg" id="slFit"><button data-v="b" class="on">Refit (Besiroglu et al. 2024)</button><button data-v="h">Published fit (Hoffmann et al. 2022)</button></div></div>
+    <div class="stats" id="slStats"></div>
+    <div class="tblwrap"><table class="tbl txt" id="slTbl" style="font-size:13px"></table></div>
+    <p class="hint">Curves are isoFLOP profiles at C/10, C and 10C. Dots mark each curve's minimum. The table puts real models at their own compute and compares them with the compute-optimal choice.</p>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>In 2020 Kaplan et al. found that the loss of a language model falls as a <b>power law</b> in parameters, data and compute, over many orders of magnitude, and barely depends on details such as depth versus width. That made LLM training predictable: train small models, fit the curve, and extrapolate to a run that costs a thousand times more.</p>
+      <p>Hoffmann et al. (2022) trained over 400 models and fitted a law in both \(N\) and \(D\):</p>
+      <div class="mathbox c1">$$L(N,D)=E+\frac{A}{N^{\alpha}}+\frac{B}{D^{\beta}},\qquad E=1.69,\;A=406.4,\;B=410.7,\;\alpha=0.34,\;\beta=0.28 .$$</div>
+      <p>Read it term by term. \(E\) is the irreducible loss, the entropy of text itself. \(A/N^\alpha\) is the penalty for a model too small to represent the patterns; \(B/D^\beta\) is the penalty for having seen too little data. Now pose the question a lab faces: <i>with a fixed budget \(C=6ND\), which \(N\) minimises the loss?</i> Substitute \(D=C/(6N)\):</p>
+      <div class="mathbox c1">$$L(N)=E+A\,N^{-\alpha}+B\Big(\frac{6N}{C}\Big)^{\beta}.$$</div>
+      <p>The first term falls with \(N\), the second rises, so there is a minimum. Setting \(dL/dN=0\) gives \(\alpha A N^{-\alpha}=\beta B\,(6N/C)^{\beta}\), whose solution is</p>
+      <div class="mathbox c1">$$N_{\text{opt}}=G\Big(\frac{C}{6}\Big)^{\frac{\beta}{\alpha+\beta}},\quad D_{\text{opt}}=G^{-1}\Big(\frac{C}{6}\Big)^{\frac{\alpha}{\alpha+\beta}},\quad G=\Big(\frac{\alpha A}{\beta B}\Big)^{\frac{1}{\alpha+\beta}} .$$</div>
+      <p>Since the exponents are both close to \(\tfrac12\), parameters and data should grow <b>in roughly equal proportion</b> with compute. The paper's headline rule of thumb, from its two other estimation methods, is about <b>20 tokens per parameter</b>. (The published constants above give noticeably more tokens per parameter than that; a 2024 replication found the fit itself was off, and its refit, the lab's default, agrees with about 20. Switch between them to see the difference.) GPT-3 and Gopher had used under 2: far too large for their data. To prove it, DeepMind trained <a class="term" data-t="chinchilla">Chinchilla</a> with the same compute as the 280B-parameter Gopher but as a 70B model on 1.4T tokens, and it beat Gopher on nearly every benchmark while being four times cheaper to run.</p>
+      <div class="algo" data-anim="isoflop"><h5 class="algo-h">Algorithm: choosing a compute-optimal model size (isoFLOP method)</h5><ol>
+        <li><span class="kw">for</span> each of several small budgets \(C_i\) <span class="kw">do</span></li>
+        <li class="i1">train models of 6–10 sizes \(N\), each on \(D=C_i/6N\) tokens</li>
+        <li class="i1">fit a parabola to final loss against \(\log N\); record its minimum \(N^*_i\)</li>
+        <li>fit a straight line \(\log N^*=a\log C+b\) through the points \((C_i,N^*_i)\)</li>
+        <li>extrapolate to the real budget \(C\): \(N^*=10^{b}C^{a}\), \(D^*=C/6N^*\)</li>
+        <li><span class="kw">return</span> \(N^*, D^*\) <span class="cm">Chinchilla found a ≈ 0.5</span></li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: Kaplan vs Chinchilla, the 2024 refit, and why Llama is “over-trained”</summary><div>
+        <p><b>Why did Kaplan et al. get a different answer?</b> They concluded that \(N\) should grow faster than \(D\) (\(N_{\text{opt}}\propto C^{0.73}\)), which is why GPT-3 was so large. Hoffmann et al. traced the difference to using one learning-rate schedule length for all runs and to small models; with a cosine schedule matched to each run's length, the optimum moves to \(a\approx0.5\).</p>
+        <p><b>The refit.</b> Besiroglu et al. (2024) reconstructed the Chinchilla data from the paper's figure and refitted the parametric law, getting \(E=1.82, A=482, B=2085, \alpha=0.35, \beta=0.37\). The published fit implied implausibly narrow confidence intervals and a different optimum from the paper's other methods; the refit's optimum is again close to 20 tokens per parameter, so the three methods agree.</p>
+        <p><b>Inference changes the answer.</b> Compute-optimal minimises <i>training</i> cost for a given loss. A model that will serve billions of requests should be smaller and trained longer, because every request pays for every parameter. Llama 3 8B saw about 15T tokens, roughly 1,900 per parameter, nearly a hundred times past the Chinchilla point, and its loss was still falling.</p>
+      </div></details>
+      <p class="src">Adapted from: Kaplan et al., <a href="https://arxiv.org/abs/2001.08361" target="_blank" rel="noopener">Scaling Laws for Neural Language Models</a> (2020); Hoffmann et al., <a href="https://arxiv.org/abs/2203.15556" target="_blank" rel="noopener">Training Compute-Optimal Large Language Models</a> (2022), equation 10 and its fitted constants; Besiroglu et al., <a href="https://arxiv.org/abs/2404.10102" target="_blank" rel="noopener">Chinchilla Scaling: A replication attempt</a> (2024).</p>
+    </div>
+  </div>
+</section>
+
+<section id="emergent" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Emergent abilities: sudden, or a trick of the metric?</h2>
+    <p class="sub">A model's chance of getting each token of an answer right improves smoothly with compute. Score it by exact match on a \(k\)-token answer and watch what happens to the curve.</p>
+    <div class="plot wide" id="emPlot"></div>
+    <div class="ctl"><label for="emK"><span>Answer length k (tokens that must all be right)</span><output id="emKOut"></output></label><input type="range" id="emK" min="1" max="30" step="1" value="10"></div>
+    <div class="ctl"><div class="seg" id="emY"><button data-v="lin" class="on">Linear axis</button><button data-v="log">Log axis</button></div></div>
+    <div class="stats" id="emStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Wei et al. (2022) collected tasks, such as multi-digit arithmetic, where small models score near zero and then, past some scale, accuracy jumps. They called these <a class="term" data-t="emergent-ability">emergent abilities</a>: abilities that are not present in smaller models and cannot be predicted by extrapolating them.</p>
+      <p>Schaeffer et al. (2023) offered a simpler explanation for many of them. Suppose the per-token accuracy \(p\) improves smoothly with compute. An answer of \(k\) tokens is exactly right only if every token is right, so</p>
+      <div class="mathbox c1">$$\text{exact match}=p^{k}.$$</div>
+      <p>With \(k=10\), going from \(p=0.6\) to \(p=0.9\) moves exact match from 0.6% to 35%: a sharp “emergence” built from a smooth improvement. Score the same models with a continuous metric (per-token accuracy, or the log-probability of the right answer) and the jump disappears. Switch the lab to a log axis and the exact-match curve, too, rises steadily.</p>
+      <p>This does not mean nothing new ever appears with scale; some abilities, such as following instructions in a prompt, really do become usable only above a size. The lesson is to look at continuous metrics before calling a capability unpredictable, and to remember that users experience the sharp, all-or-nothing version.</p>
+      <p class="src">Adapted from: Wei et al., <a href="https://arxiv.org/abs/2206.07682" target="_blank" rel="noopener">Emergent Abilities of Large Language Models</a> (2022); Schaeffer, Miranda and Koyejo, <a href="https://arxiv.org/abs/2304.15004" target="_blank" rel="noopener">Are Emergent Abilities of Large Language Models a Mirage?</a> (NeurIPS 2023).</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+  <p class="sub">The pre-training step in PyTorch for any decoder-only model, then the Chinchilla allocation as a function.</p>
+<pre class="code"><span class="c"># pip install torch transformers</span>
+<span class="k">import</span> math, torch, torch.nn.functional <span class="k">as</span> F
+<span class="k">from</span> transformers <span class="k">import</span> AutoConfig, AutoModelForCausalLM
+
+<span class="c"># a small GPT-style model with random weights (pre-training starts from scratch)</span>
+cfg = AutoConfig.from_pretrained(<span class="s">"gpt2"</span>, n_layer=6, n_head=8, n_embd=512)
+model = AutoModelForCausalLM.from_config(cfg).cuda()
+opt = torch.optim.AdamW(model.parameters(), lr=6e-4, betas=(0.9, 0.95), weight_decay=0.1)
+
+<span class="k">def</span> <span class="f">lr_at</span>(step, warmup=1000, total=100_000, peak=6e-4):
+    <span class="k">if</span> step &lt; warmup:                       <span class="c"># linear warm-up</span>
+        <span class="k">return</span> peak * step / warmup
+    t = (step - warmup) / (total - warmup)  <span class="c"># cosine decay to 10%</span>
+    <span class="k">return</span> peak * (0.1 + 0.45 * (1 + math.cos(math.pi * t)))
+
+<span class="k">def</span> <span class="f">train_step</span>(step, tokens):              <span class="c"># tokens: LongTensor [B, n+1] cut from the stream</span>
+    x, y = tokens[:, :-1], tokens[:, 1:]    <span class="c"># targets are the inputs shifted by one</span>
+    <span class="k">with</span> torch.autocast(<span class="s">"cuda"</span>, dtype=torch.bfloat16):
+        logits = <span class="f">model</span>(input_ids=x).logits  <span class="c"># [B, n, vocab], causal mask is built in</span>
+        loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), y.reshape(-1))
+    loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+    <span class="k">for</span> g <span class="k">in</span> opt.param_groups:
+        g[<span class="s">"lr"</span>] = <span class="f">lr_at</span>(step)
+    opt.step(); opt.zero_grad(set_to_none=<span class="k">True</span>)
+    <span class="k">return</span> loss.item()                      <span class="c"># perplexity = exp(loss)</span>
+
+<span class="c"># Chinchilla: compute-optimal N and D for a budget C (Hoffmann et al. 2022, eq. 10 fit)</span>
+<span class="k">def</span> <span class="f">chinchilla</span>(C, E=1.69, A=406.4, B=410.7, a=0.34, b=0.28):
+    G = (a * A / (b * B)) ** (1 / (a + b))
+    N = G * (C / 6) ** (b / (a + b))
+    D = C / (6 * N)
+    <span class="k">return</span> N, D, E + A / N**a + B / D**b
+
+N, D, L = <span class="f">chinchilla</span>(5.76e23)               <span class="c"># Gopher's budget</span>
+<span class="f">print</span>(<span class="s">f"N = {N/1e9:.0f}B params, D = {D/1e12:.2f}T tokens, {D/N:.0f} tokens/param, loss {L:.3f}"</span>)</pre>
+  <p class="hint">For real runs, libraries such as Megatron-LM, torchtitan or Hugging Face nanotron add the parallelism, checkpointing and data loading. Karpathy's nanoGPT is the clearest small reference implementation.</p>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">7</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page is written for this site in its own words, with its own labs. The equations and numbers come from these papers, credited where they are used:</p>
+    <ul>
+      <li>Kaplan et al., <a href="https://arxiv.org/abs/2001.08361" target="_blank" rel="noopener">Scaling Laws for Neural Language Models</a> (2020): power laws in N, D and C, and the 6ND compute count.</li>
+      <li>Hoffmann et al., <a href="https://arxiv.org/abs/2203.15556" target="_blank" rel="noopener">Training Compute-Optimal Large Language Models</a> (2022): the parametric loss, isoFLOP method and Chinchilla.</li>
+      <li>Besiroglu, Erdil, Barnett and You, <a href="https://arxiv.org/abs/2404.10102" target="_blank" rel="noopener">Chinchilla Scaling: A replication attempt</a> (2024).</li>
+      <li>Brown et al., <a href="https://arxiv.org/abs/2005.14165" target="_blank" rel="noopener">Language Models are Few-Shot Learners</a> (2020): GPT-3 size, data and compute.</li>
+      <li>Touvron et al., <a href="https://arxiv.org/abs/2302.13971" target="_blank" rel="noopener">LLaMA</a> (2023) and the Llama 3 report, <a href="https://arxiv.org/abs/2407.21783" target="_blank" rel="noopener">The Llama 3 Herd of Models</a> (2024): data mixtures and token counts.</li>
+      <li>Wei et al., <a href="https://arxiv.org/abs/2206.07682" target="_blank" rel="noopener">Emergent Abilities of Large Language Models</a> (2022); Schaeffer et al., <a href="https://arxiv.org/abs/2304.15004" target="_blank" rel="noopener">Are Emergent Abilities a Mirage?</a> (2023).</li>
+      <li>Andrej Karpathy, <a href="https://github.com/karpathy/nanoGPT" target="_blank" rel="noopener">nanoGPT</a>: the training-loop shape used in the Python section.</li>
+    </ul>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+{"q":"A transformer is pre-trained on a document of 2,048 tokens. How many next-token prediction examples does one forward pass train on?","o":["1, the last token","About 2,048, one per position","2,048², one per pair of positions","It depends on the batch size only"],"a":1,"e":"With a causal mask every position predicts its own next token in parallel, so a window of n tokens gives about n training examples in one pass."},
+{"q":"Using \\(C\\approx6ND\\), roughly how many FLOPs does training a 7B-parameter model on 2T tokens take?","o":["\\(8.4\\times10^{19}\\)","\\(8.4\\times10^{22}\\)","\\(1.4\\times10^{22}\\)","\\(8.4\\times10^{25}\\)"],"a":1,"e":"6 × 7×10⁹ × 2×10¹² = 8.4×10²²: about 2 for the forward pass and 4 for the backward pass, per parameter per token."},
+{"q":"What did the Chinchilla paper conclude about compute-optimal training?","o":["Make the model as large as possible and train on fewer tokens","Grow parameters and tokens in roughly equal proportion, about 20 tokens per parameter","Data does not matter once the model is large enough","Always train for exactly one epoch of the web"],"a":1,"e":"Both exponents of the fitted law are close to ½, so N and D should scale together; GPT-3 and Gopher were too large for their data."},
+{"q":"Llama 3 8B was trained on about 15T tokens, far past the Chinchilla point. Why might a lab choose that?","o":["Because the scaling law no longer applies above 1T tokens","Because a smaller model is cheaper for every one of its many future inference requests","Because more tokens reduce the memory needed for training","Because Chinchilla only applies to models above 70B"],"a":1,"e":"Compute-optimal minimises training cost only. If the model will be served heavily, a smaller model trained longer gives the same quality at a lower cost per request."},
+{"q":"Per-token accuracy rises smoothly from 0.5 to 0.9 as models grow. Exact match on 20-token answers then looks like…","o":["A smooth straight line","A sudden jump from near 0 to about 12%","A curve that falls","Exactly the same as per-token accuracy"],"a":1,"e":"Exact match is p^20: 0.5^20 ≈ 10⁻⁶ but 0.9^20 ≈ 0.12. A smooth improvement looks like sudden emergence under an all-or-nothing metric."}
+]</script>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/gen.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette();
+/* ---------- 1. character n-gram model ---------- */
+let CORPUS = `The river runs past the old mill and under the stone bridge. In the morning the water is cold and clear, and the fish rest in the shade of the bank. Children walk to school along the path by the river. They stop on the bridge to look at the water and to throw small sticks into the current. The sticks race under the bridge and come out on the other side. The child whose stick comes out first wins the game.
+In the afternoon the sun warms the stones, and the old miller sits by the door of the mill. He tells the children about the winter when the river froze, and about the spring when the water rose so high that it came into the mill. The children listen, and then they run home for supper. Their parents ask them what they learned at school, and they tell them about the river instead.
+At night the river is dark and quiet. The moon shines on the water, and the owls call from the trees by the bank. The mill wheel turns slowly in the current. The miller sleeps, and the children sleep, and the river runs on past the mill and under the bridge, the same as it has for a hundred years. In the morning the water is cold and clear again, and the children walk to school along the path by the river.
+When the rain comes, the river turns brown and fast. The fish hide under the stones, and the children are told to stay away from the bank. They watch from the bridge as branches and leaves rush past. The miller closes the gate of the mill race so the wheel will not turn too fast. After a few days the rain stops, the water slows down, and the river is clear again. The children go back to their game with the sticks, and the miller goes back to his chair by the door.`.replace(/\s+/g,' ') + ' ' + (()=>{ // plus simple sentences from a small grammar, so there is enough text to learn from
+  const r=ML.rng(7), pk=a=>a[r.int(a.length)];
+  const S=['the children','the miller','the old man','the girl','the boy','the farmer','the teacher','the fish','the owls','the river'], V=['walk to','look at','run past','sit by','swim under','sing near','wait at','rest by','play near','talk about'],
+        O=['the river','the old mill','the stone bridge','the bank','the water','the school','the trees','the door','the path','the field'], T=['in the morning','at night','after school','in the rain','in the spring','in the winter','before supper','every day'],
+        A=['cold','clear','quiet','dark','fast','slow','warm','brown'];
+  const out=[]; for(let i=0;i<260;i++){ const k=r.int(3); let t;
+    if(k===0) t=`${pk(S)} ${pk(V)} ${pk(O)} ${pk(T)}.`; else if(k===1) t=`${pk(O)} is ${pk(A)} ${pk(T)}.`; else t=`${pk(T)} ${pk(S)} ${pk(V)} ${pk(O)} and ${pk(V)} ${pk(O)}.`;
+    out.push(t[0].toUpperCase()+t.slice(1)); }
+  return out.join(' '); })();
+{ const r=ML.rng(11), sent=CORPUS.match(/[^.]+\./g).map(x=>x.trim()); r.shuffle(sent); CORPUS=sent.join(' '); } /* shuffle sentences so training and test text come from the same mix */
+const VOC=[...new Set(CORPUS)].sort(), V=VOC.length, cut=Math.floor(CORPUS.length*0.85), TR=CORPUS.slice(0,cut), TE=CORPUS.slice(cut), ALPHA=0.05;
+function counts(k,n){ const m=new Map(); for(let i=k;i<n;i++){ const c=TR.slice(i-k,i); let e=m.get(c); if(!e){ e={t:0,n:new Map()}; m.set(c,e); } e.t++; e.n.set(TR[i],(e.n.get(TR[i])||0)+1); } return m; }
+function loss(k,n){ const m=counts(k,n); let s=0, c=0; for(let i=k;i<TE.length;i++){ const e=m.get(TE.slice(i-k,i)); const num=(e?(e.n.get(TE[i])||0):0)+ALPHA, den=(e?e.t:0)+ALPHA*V; s-=Math.log2(num/den); c++; } return s/c; }
+const SIZES=[]; for(let i=0;i<=24;i++) SIZES.push(Math.round(Math.exp(Math.log(40)+(Math.log(TR.length)-Math.log(40))*i/24)));
+const CURVES=[0,1,2,3,4,5].map(k=>SIZES.map(n=>[n,loss(k,n)]));
+const ntpP=new ML.Plot('#ntpPlot',{equal:false}); let ntpS=1, ntpK=3;
+const nOf=f=>Math.round(Math.exp(Math.log(40)+(Math.log(TR.length)-Math.log(40))*f));
+function drawNtp(){ const P=P0(), n=nOf(ntpS), cols=[P.muted,P.c3,P.c5,P.c1,P.c4,P.c2];
+  const ser=CURVES.map((cv,k)=>({pts:cv,color:cols[k],width:k===ntpK?3.5:1.6,alpha:k===ntpK?1:.55,label:'k='+k}));
+  ser.push({pts:[[40,Math.log2(V)],[TR.length,Math.log2(V)]],color:P.muted,dash:[5,4],width:1.2});
+  const cur=loss(ntpK,n);
+  GX.chart(ntpP,ser,{logx:true,x0:40,x1:TR.length,y0:1.5,y1:Math.log2(V)+.3,xl:'training characters (log scale)',yl:'held-out loss (bits / char)',vline:n,marks:[{x:n,y:cur,color:cols[ntpK],label:cur.toFixed(2)+' bits'}]});
+  let best=0,bl=1e9; for(let k=0;k<=5;k++){ const l=loss(k,n); if(l<bl){ bl=l; best=k; } }
+  GX.stats('#ntpStats',[[cur.toFixed(2),'bits per character',' c1'],[Math.pow(2,cur).toFixed(1),'perplexity (choices per char)','c3'],[String(best),'best context length at this size','c5'],[String(counts(ntpK,n).size),'contexts in the table','c4']]);
+  $('#ntpNOut').textContent=n.toLocaleString()+' of '+TR.length.toLocaleString(); $('#ntpKOut').textContent=ntpK; }
+function sample(){ const n=nOf(ntpS), m=counts(ntpK,n), rng=ML.rng((Math.random()*1e9)|0); let s='The '; const start=s.length;
+  const tabs=[]; for(let j=0;j<=ntpK;j++) tabs.push(j===ntpK?m:counts(j,n));
+  for(let i=0;i<220;i++){ let e=null; for(let j=ntpK;j>=0&&!e;j--) e=tabs[j].get(s.slice(s.length-j)); /* back off to a shorter context if this one was never seen */ let r=rng()*e.t, pick=VOC[VOC.length-1]; /* sample from the raw counts; backing off already avoids unseen contexts */
+    for(const [ch,c] of e.n){ r-=c; if(r<=0){ pick=ch; break; } } s+=pick; }
+  $('#ntpOut').innerHTML='<b>'+NLP.esc(s.slice(0,start))+'</b>'+NLP.esc(s.slice(start)); }
+ML.bindRange('ntpN',v=>{ ntpS=v; drawNtp(); }); ML.bindRange('ntpK',v=>{ ntpK=v; drawNtp(); sample(); });
+$('#ntpGo').onclick=sample; ntpP.onResize=drawNtp; drawNtp(); sample();
+
+/* ---------- 3. compute calculator ---------- */
+const PRE={gpt3:[175e9,300e9],gopher:[280e9,300e9],chin:[70e9,1.4e12],l2:[70e9,2e12],l38:[8e9,15e12],l3405:[405e9,15.6e12]};
+const cN=$('#cN'), cD=$('#cD');
+function drawC(){ const N=Math.pow(10,+cN.value), D=Math.pow(10,+cD.value), C=6*N*D, g=+$('#cG').value*1e12, mfu=+$('#cM').value, k=Math.pow(2,+$('#cK').value);
+  $('#cNOut').textContent=GX.fmtN(N,1); $('#cDOut').textContent=GX.fmtN(D,1); $('#cMOut').textContent=Math.round(mfu*100)+'%'; $('#cKOut').textContent=k.toLocaleString();
+  const sec=C/(k*g*mfu), days=sec/86400, gpuh=C/(g*mfu)/3600, mem=16*N, minG=Math.ceil(mem/80e9);
+  GX.stats('#cStats',[[GX.sci(C),'training FLOPs (6ND)','c1'],[days<1?(sec/3600).toFixed(1)+' h':days<730?days.toFixed(days<10?1:0)+' days':(days/365).toFixed(1)+' yrs','wall-clock on '+k.toLocaleString()+' GPUs','c4'],[GX.fmtN(gpuh,1),'GPU-hours','c3'],[(D/N).toFixed(D/N<10?1:0),'tokens per parameter','c5'],[GX.bytes(mem),'weights + grads + Adam (16 B/param)','c2'],[minG.toLocaleString(),'80 GB GPUs just to hold that','c6']]); }
+$('#cPre').onchange=e=>{ const p=PRE[e.target.value]; if(p){ cN.value=Math.log10(p[0]); cD.value=Math.log10(p[1]); } drawC(); };
+[cN,cD].forEach(el=>el.addEventListener('input',()=>{ $('#cPre').value='custom'; drawC(); }));
+['cM','cK'].forEach(id=>$('#'+id).addEventListener('input',drawC)); $('#cG').onchange=drawC; drawC();
+
+/* ---------- 4. scaling laws ---------- */
+const FITS={h:{E:1.69,A:406.4,B:410.7,a:.34,b:.28},b:{E:1.82,A:482.01,B:2085.43,a:.3478,b:.3658}}; let fit='b';
+const Lf=(N,D,f)=>f.E+f.A/Math.pow(N,f.a)+f.B/Math.pow(D,f.b);
+const opt=(C,f)=>{ const G=Math.pow(f.a*f.A/(f.b*f.B),1/(f.a+f.b)), N=G*Math.pow(C/6,f.b/(f.a+f.b)); return [N,C/(6*N)]; };
+const slP=new ML.Plot('#slPlot',{equal:false}); let slC=23.7;
+const MODELS=[['GPT-3',175e9,300e9],['Gopher',280e9,300e9],['Chinchilla',70e9,1.4e12],['Llama 2 70B',70e9,2e12],['Llama 3 8B',8e9,15e12]];
+function drawSl(){ const P=P0(), f=FITS[fit], C=Math.pow(10,slC), Cs=[C/10,C,C*10], cols=[P.c3,P.c1,P.c4], ser=[], marks=[];
+  let lo=1e9, hi=0;
+  const lc=Math.log10(opt(C,f)[0]), xa=lc-2.6, xb=lc+2.6;
+  Cs.forEach((c,i)=>{ const pts=[]; for(let e=xa-1;e<=xb+1;e+=0.04){ const N=Math.pow(10,e), D=c/(6*N); const l=Lf(N,D,f); pts.push([N,l]); }
+    const [No,Do]=opt(c,f), lo2=Lf(No,Do,f); lo=Math.min(lo,lo2); hi=Math.max(hi,lo2);
+    ser.push({pts,color:cols[i],width:i===1?3.2:1.8,label:['C/10','C','10C'][i]}); marks.push({x:No,y:lo2,color:cols[i],label:i===1?GX.fmtN(No,0)+' params':''}); });
+  GX.chart(slP,ser,{logx:true,x0:Math.pow(10,xa),x1:Math.pow(10,xb),y0:Math.max(f.E,lo-0.12),y1:hi+0.55,xl:'parameters N (log scale)',yl:'predicted loss',marks});
+  const [No,Do]=opt(C,f);
+  GX.stats('#slStats',[[GX.sci(C),'budget C','c1'],[GX.fmtN(No,1),'optimal parameters','c5'],[GX.fmtN(Do,1),'optimal tokens','c3'],[(Do/No).toFixed(0),'tokens per parameter','c4'],[Lf(No,Do,f).toFixed(3),'predicted loss','c2']]);
+  $('#slCOut').textContent=GX.sci(C);
+  const sh=x=>GX.fmtN(x,x<1e10?1:0).replace(' ','');
+  $('#slTbl').innerHTML='<tr><th>Model</th><th>Params · tokens</th><th>Loss</th><th>Optimal, same compute</th><th>Loss</th></tr>'+MODELS.map(([n,N,D])=>{ const c=6*N*D, [a,b]=opt(c,f); return `<tr><td>${n}</td><td>${sh(N)} · ${sh(D)}</td><td>${Lf(N,D,f).toFixed(3)}</td><td>${sh(a)} · ${sh(b)}</td><td>${Lf(a,b,f).toFixed(3)}</td></tr>`; }).join(''); }
+ML.bindRange('slC',v=>{ slC=v; drawSl(); }); ML.bindSeg('slFit',v=>{ fit=v; drawSl(); }); slP.onResize=drawSl; drawSl();
+
+/* ---------- 5. emergence ---------- */
+const emP=new ML.Plot('#emPlot',{equal:false}); let emK=10, emLog=false;
+const pTok=lc=>0.02+0.97/(1+Math.exp(-1.25*(lc-22)));
+function drawEm(){ const P=P0(), a=[], b=[], c=[]; for(let lc=18;lc<=26.001;lc+=0.05){ const C=Math.pow(10,lc), p=pTok(lc); a.push([C,p]); b.push([C,Math.pow(p,emK)]); }
+  GX.chart(emP,[{pts:a,color:P.c3,width:2.5,label:'per-token accuracy p (smooth)'},{pts:b,color:P.c2,width:3,label:'exact match pᵏ'}],{logx:true,logy:emLog,y0:emLog?1e-6:0,y1:1,xl:'training compute (FLOPs, log scale)',yl:emLog?'score (log)':'score'});
+  $('#emKOut').textContent=emK;
+  const at=lc=>Math.pow(pTok(lc),emK);
+  GX.stats('#emStats',[[(100*at(21)).toFixed(2)+'%','exact match at 10²¹ FLOPs','c2'],[(100*at(23)).toFixed(1)+'%','exact match at 10²³','c2'],[(100*pTok(21)).toFixed(0)+'% → '+(100*pTok(23)).toFixed(0)+'%','per-token accuracy, same models','c3']]); }
+ML.bindRange('emK',v=>{ emK=v; drawEm(); }); ML.bindSeg('emY',v=>{ emLog=v==='log'; drawEm(); }); emP.onResize=drawEm; drawEm();
+ML.onTheme(()=>{ drawNtp(); drawSl(); drawEm(); });
+})();
+</script>
+<script>NLP.nav('nlp','llm-pretraining'); ML.renderMath(document.body);</script>
+</body>
+</html>

@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Probability and Bayes' theorem, explained interactively</title>
+<meta name="description" content="Probability from counting outcomes, conditional probability and independence on two dice, random variables, expectation and variance, common distributions, Bayes' theorem with a medical test, and Bayesian updating of a coin's bias.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-math">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Mathematical concepts &middot; Probability</p>
+  <h1>Probability and <span class="grad">Bayes' theorem</span></h1>
+  <p class="lede">Machine learning is learning under uncertainty. Labels are noisy, data is a sample, and a classifier should say "80% sure" rather than just "yes". Probability is the language for this. Bayes' theorem is the one rule that turns evidence into updated beliefs.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#basics">1 · Counting outcomes</a><a href="#rv">2 · Random variables</a><a href="#cov">3 · Covariance</a><a href="#bayes">4 · Bayes' theorem</a><a href="#update">5 · Learning from data</a><a href="#ml">6 · In ML</a><a href="#py">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is probability, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>A <a class="term" data-t="probability">probability</a> is a number between 0 and 1 that measures how likely something is. One way to read it: if you could repeat the situation many times, it is the fraction of times the thing happens. Another: it is a degree of belief, which should change when evidence arrives. Both readings obey the same rules, and both are used in ML.</p>
+      <p>The central question of this page is the email-filter question. You see the word "winner" in an email. How likely is it to be spam? You know how often spam contains "winner", but that is the reverse question. Bayes' theorem turns one into the other.</p>
+      <h3>How it works</h3>
+      <ol class="steps2"><li>List what can happen (the sample space) and assign probabilities that add to 1.</li><li>An event is a set of outcomes; its probability is the sum over those outcomes.</li><li>Learning that \(B\) happened shrinks the world to \(B\): that is conditional probability \(P(A\mid B)\).</li><li>Bayes' theorem flips the condition: \(P(A\mid B)=P(B\mid A)P(A)/P(B)\).</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>A weather forecast says 30% rain. Then you look out of the window and see dark clouds. Your belief goes up, not to 100%, but up. How far up depends on how often clouds come with rain, how often they come without it, and the 30% you started with. That everyday reasoning, made exact, is Bayes' theorem.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Saying how sure a prediction is</li><li>Combining prior knowledge with data</li><li>Giving loss functions a meaning (log-likelihood)</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Confusing \(P(A\mid B)\) with \(P(B\mid A)\)</li><li>Ignoring base rates: rare events stay fairly rare after weak evidence</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="sample-space">Sample space</a><a class="term" data-t="event">Event</a><a class="term" data-t="conditional-probability">Conditional probability</a><a class="term" data-t="independence">Independence</a><a class="term" data-t="random-variable">Random variable</a><a class="term" data-t="mean">Expectation</a><a class="term" data-t="variance">Variance</a><a class="term" data-t="bayes-rule">Bayes' theorem</a><a class="term" data-t="prior">Prior</a><a class="term" data-t="likelihood">Likelihood</a><a class="term" data-t="posterior">Posterior</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="basics" class="card">
+  <h2><span class="num">1</span>Probability by counting: two dice</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>Roll two fair dice. The <a class="term" data-t="sample-space">sample space</a> \(\Omega\) is all 36 ordered pairs \((d_1,d_2)\), each with probability \(1/36\). An <a class="term" data-t="event">event</a> is any set of outcomes, and when all outcomes are equally likely,</p>
+      <div class="mathbox c1">$$P(A)=\frac{|A|}{|\Omega|}=\frac{\text{outcomes in }A}{36}.$$</div>
+      <p>Now suppose someone tells you event \(B\) happened. Every outcome outside \(B\) is ruled out, so the world shrinks to \(B\). Among those outcomes, the ones where \(A\) also happens are \(A\cap B\). That gives the definition of <a class="term" data-t="conditional-probability">conditional probability</a>:</p>
+      <div class="mathbox c2">$$P(A\mid B)=\frac{|A\cap B|}{|B|}=\frac{P(A\cap B)}{P(B)} .$$</div>
+      <p>Rearranged, it is the <b>product rule</b>: \(P(A\cap B)=P(A\mid B)\,P(B)\). If learning \(B\) does not change the chance of \(A\), so \(P(A\mid B)=P(A)\), the events are <a class="term" data-t="independence">independent</a>, and then \(P(A\cap B)=P(A)P(B)\). Try "first die is even" with "second die is 6" (independent) and "sum is 7" with "sum is at least 10" (not independent).</p>
+      <details class="deeper"><summary>Going deeper: the axioms and the rules that follow</summary><div>
+        <p>Kolmogorov's three axioms: \(P(A)\ge0\); \(P(\Omega)=1\); and for disjoint events \(P(A\cup B)=P(A)+P(B)\) (also for countably many). Everything else is derived:</p>
+        <ul><li>Complement: \(P(A^c)=1-P(A)\), since \(A\) and \(A^c\) are disjoint and fill \(\Omega\).</li><li>Inclusion–exclusion: \(P(A\cup B)=P(A)+P(B)-P(A\cap B)\). The overlap was counted twice.</li><li><b>Law of total probability:</b> if \(B_1,\dots,B_k\) split \(\Omega\) into disjoint pieces, \(P(A)=\sum_iP(A\mid B_i)P(B_i)\). This is the denominator of Bayes' theorem.</li><li>Chain rule: \(P(A_1\cap\dots\cap A_n)=P(A_1)P(A_2\mid A_1)\cdots P(A_n\mid A_1,\dots,A_{n-1})\). A language model is this rule applied to words.</li></ul>
+        <p>For infinite sample spaces (the real line) we cannot assign a probability to every point, so we assign it to intervals through a density, and "events" are restricted to a well-behaved family of sets (a σ-algebra). For ML purposes, the rules above are all you need.</p>
+      </div></details>
+    </div>
+    <div>
+      <div class="row" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span class="hint">Event A</span><select id="evA"></select><span class="hint">Event B</span><select id="evB"></select></div>
+      <div id="dice" style="display:grid;grid-template-columns:28px repeat(6,minmax(0,1fr));gap:3px;margin:10px 0;max-width:420px"></div>
+      <div class="legend"><span><i style="background:color-mix(in srgb,var(--c1) 45%,var(--card))"></i>A only</span><span><i style="background:color-mix(in srgb,var(--c3) 45%,var(--card))"></i>B only</span><span><i style="background:color-mix(in srgb,var(--c4) 70%,var(--card))"></i>A and B</span></div>
+      <div class="stats" id="dStats" style="margin-top:10px"></div>
+      <div class="note" id="dNote"></div>
+    </div>
+  </div>
+</section>
+
+<section id="rv" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Random variables and their distributions</h2>
+    <p class="sub">Bars or curve: the distribution. Grey histogram: \(n\) random draws from it. The dashed line is the mean; the band is ±1 standard deviation.</p>
+    <div class="plot wide" id="pRv"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="draw">Draw 100 more</button><button class="btn" id="clr">Clear</button><span class="pos" id="nDraw"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A <a class="term" data-t="random-variable">random variable</a> is a number attached to each outcome, like "the sum of the two dice". Its <b>distribution</b> says how probability is spread over its values. Discrete variables have a probability mass function \(p(x)=P(X=x)\). Continuous ones have a density \(p(x)\), where probability is area: \(P(a\le X\le b)=\int_a^bp(x)\,dx\).</p>
+      <p>Two numbers summarise a distribution. The <a class="term" data-t="mean">expectation</a> (mean) is the probability-weighted average, the balance point of the bars. The <a class="term" data-t="variance">variance</a> is the expected squared distance from the mean, a measure of spread:</p>
+      <div class="mathbox c3">$$\mathbb E[X]=\sum_xx\,p(x)\quad\text{or}\quad\int x\,p(x)\,dx,$$ $$\operatorname{Var}(X)=\mathbb E\big[(X-\mathbb E X)^2\big]=\mathbb E[X^2]-(\mathbb EX)^2 .$$</div>
+      <div class="ctl"><span class="lbl">Distribution</span><div class="seg" id="dist"><button data-v="bern" class="on">Bernoulli</button><button data-v="bin">Binomial</button><button data-v="pois">Poisson</button><button data-v="unif">Uniform</button><button data-v="norm">Gaussian</button><button data-v="exp">Exponential</button></div></div>
+      <div class="ctl"><label for="q1"><span id="q1L"></span><output id="q1Out"></output></label><input type="range" id="q1" min="0" max="1" step="0.01" value="0.3"></div>
+      <div class="ctl" id="q2Box"><label for="q2"><span id="q2L"></span><output id="q2Out"></output></label><input type="range" id="q2" min="0" max="1" step="0.01" value="0.5"></div>
+      <div class="texout" id="rvTex"></div>
+      <div class="stats" id="rvStats"></div>
+      <p class="hint">As you draw more samples, the sample mean settles on \(\mathbb E[X]\). That is the <b>law of large numbers</b>, and it is why averaging a loss over a big training set estimates the expected loss on new data.</p>
+    </div>
+  </div>
+</section>
+
+<section id="cov" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Two variables at once: the Gaussian, covariance and the covariance matrix</h2>
+    <p class="sub">Each dot is one draw of two features \((x_1,x_2)\) from a 2-D Gaussian. The ellipses enclose about 39% and 86% of the draws; the arrows are the eigenvectors of \(\Sigma\), scaled by one standard deviation along each.</p>
+    <div class="plot sq" id="pCv"></div>
+    <div class="ctl"><label for="cS1"><span>Spread of \(x_1\): \(\sigma_1\)</span><output id="cS1Out"></output></label><input type="range" id="cS1" min="0.3" max="2.5" step="0.05" value="1.6"></div>
+    <div class="ctl"><label for="cS2"><span>Spread of \(x_2\): \(\sigma_2\)</span><output id="cS2Out"></output></label><input type="range" id="cS2" min="0.3" max="2.5" step="0.05" value="0.9"></div>
+    <div class="ctl"><label for="cR"><span>Correlation \(\rho\)</span><output id="cROut"></output></label><input type="range" id="cR" min="-0.98" max="0.98" step="0.01" value="0.6"></div>
+    <div class="seg" id="cView"><button data-v="raw" class="on">Raw features</button><button data-v="z">Standardised (z-scores)</button></div>
+    <div class="player" style="margin-top:8px"><button class="btn" id="cNew">New sample</button><span class="pos">n = 300</span></div>
+    <div class="texout" id="cTex"></div>
+    <div class="stats" id="cStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <h3 id="gaussian">The Gaussian (normal) distribution</h3>
+      <p>The bell curve \(\mathcal N(\mu,\sigma^2)\) is described by two numbers: the mean \(\mu\) (where the peak sits) and the standard deviation \(\sigma\) (how wide it is). About 68% of draws fall within \(\pm1\sigma\) of the mean, 95% within \(\pm2\sigma\) and 99.7% within \(\pm3\sigma\). It appears everywhere because sums of many small independent effects are approximately Gaussian, whatever the effects look like: that is the <a href="../inference/#sampling">central limit theorem</a>. Measurement noise, averages, and the errors in linear regression are all modelled this way.</p>
+      <p>The <b>standard normal</b> is the one with \(\mu=0,\ \sigma=1\), written \(\mathcal N(0,1)\). Any Gaussian value can be turned into a standard one by its <b>z-score</b>,</p>
+      <div class="mathbox c3">$$z=\frac{x-\mu}{\sigma},$$</div>
+      <p>which answers "how many standard deviations above the mean is this?". Applying it to every feature, using the training mean and standard deviation, is called <b>standardising</b>; it puts features measured in metres and in years on the same footing, which gradient descent, PCA, SVMs and regularisation all need. Press <b>Standardised</b> to see it: each axis is rescaled to spread 1, and only the correlation is left.</p>
+
+      <h3 id="covariance">Covariance: do two features move together?</h3>
+      <p>One number per feature is not enough once we have two. Height and weight are each spread out, but they are also <i>related</i>: tall people tend to be heavier. The <b>covariance</b> measures this:</p>
+      <ol class="derive">
+        <li><div class="eq">\(\operatorname{Cov}(X,Y)=\mathbb E\big[(X-\mu_X)(Y-\mu_Y)\big]\)</div><div class="why">Multiply how far each variable is from its own mean, and average.</div></li>
+        <li><div class="eq">\(&gt;0\): both above or both below together</div><div class="why">Both deviations have the same sign, so the product is positive. The cloud tilts up.</div></li>
+        <li><div class="eq">\(&lt;0\): one up when the other is down</div><div class="why">The cloud tilts down. Near 0: no linear trend.</div></li>
+        <li><div class="eq">\(\operatorname{Cov}(X,X)=\operatorname{Var}(X)\)</div><div class="why">A variable's covariance with itself is its variance.</div></li>
+      </ol>
+      <p>Covariance has awkward units (cm × kg), so its size is hard to read. Dividing by both standard deviations gives the unit-free <b>correlation</b>, \(\rho=\operatorname{Cov}(X,Y)/(\sigma_X\sigma_Y)\), always between \(-1\) and \(1\). \(\pm1\) means the points lie exactly on a line. Correlation is the covariance of the z-scores, which is why the Standardised view keeps the tilt but loses the stretch.</p>
+      <p>Two variables are <b>independent</b> when knowing one tells you nothing about the other: \(p(x,y)=p(x)\,p(y)\). Independent variables have zero covariance, but zero covariance does not imply independence: if \(Y=X^2\) with \(X\) symmetric around 0, \(Y\) is completely determined by \(X\) yet their covariance is 0. Covariance only sees <i>straight-line</i> relationships.</p>
+
+      <h3 id="covariance-matrix">The covariance matrix \(\Sigma\)</h3>
+      <p>With \(d\) features there is a covariance for every pair. Arrange them in a \(d\times d\) table: entry \((j,k)\) is \(\operatorname{Cov}(x_j,x_k)\). That is the <b>covariance matrix</b> \(\Sigma\), and it is the multi-feature version of the variance:</p>
+      <div class="mathbox c1">$$\Sigma=\begin{bmatrix}\sigma_1^2&amp;\rho\sigma_1\sigma_2\\ \rho\sigma_1\sigma_2&amp;\sigma_2^2\end{bmatrix},\qquad \hat\Sigma=\frac{1}{n-1}\sum_{i=1}^n(x^{(i)}-\bar x)(x^{(i)}-\bar x)^\top .$$</div>
+      <p>Read it like this. The <b>diagonal</b> holds each feature's own variance. The <b>off-diagonal</b> entries hold how pairs move together. It is <a href="../matrices/#symmetric">symmetric</a>, because \(\operatorname{Cov}(x_j,x_k)=\operatorname{Cov}(x_k,x_j)\). And it is <a href="../matrices/#pd">positive semi-definite</a>: for any weights \(w\), the combined feature \(w^\top x\) has variance \(w^\top\Sigma w\), and a variance cannot be negative.</p>
+      <p>Geometrically, \(\Sigma\) is the shape of the cloud. Its <a href="../decompositions/#eigen">eigenvectors</a> point along the axes of the ellipse, and each eigenvalue is the variance of the data along its eigenvector. The longest axis is the direction in which the data varies most: that is the first principal component, and finding these axes is exactly what <a href="../../ml/pca/">PCA</a> does. Set \(\rho=0\) and the arrows line up with the feature axes: \(\Sigma\) is diagonal.</p>
+
+      <h3 id="multivariate-gaussian">The multivariate Gaussian</h3>
+      <p>The bell curve in \(d\) dimensions is \(\mathcal N(\mu,\Sigma)\), with density</p>
+      <div class="mathbox c4">$$p(x)=\frac{1}{(2\pi)^{d/2}\det(\Sigma)^{1/2}}\exp\!\Big(-\tfrac12(x-\mu)^\top\Sigma^{-1}(x-\mu)\Big).$$</div>
+      <p>The exponent is the squared <b>Mahalanobis distance</b>: distance from the mean measured in standard deviations, along the ellipse's own axes. Points on one ellipse are equally likely. The \(\det\Sigma\) in front <a href="../matrices/#det">normalises</a> for the volume of the ellipse. <a href="../../ml/lda-gda/">LDA and GDA</a> fit one of these per class; a diagonal \(\Sigma\) means the features are treated as independent, which is the naive Bayes assumption; and drawing samples, as this plot does, uses the <a href="../decompositions/#chol">Cholesky factor</a>: \(x=\mu+Lz\) with \(z\sim\mathcal N(0,I)\).</p>
+
+      <details class="deeper"><summary>Going deeper: why divide by \(n-1\), and what correlation cannot tell you</summary><div>
+        <p>The sample mean \(\bar x\) is fitted to the same data, so the points are on average a little closer to \(\bar x\) than to the true \(\mu\). Dividing by \(n\) underestimates the variance by a factor \((n-1)/n\); dividing by \(n-1\) (Bessel's correction) removes the bias. One "degree of freedom" was spent estimating the mean.</p>
+        <p>Correlation measures straight-line association only, and it is easily moved by a few outliers. Four very different data sets (Anscombe's quartet) share the same means, variances and correlation. And correlation is not causation: ice-cream sales and drownings are correlated because both rise in summer.</p>
+        <p>With more features than examples (\(d&gt;n\)), \(\hat\Sigma\) has rank at most \(n-1\), so it is singular and \(\Sigma^{-1}\) does not exist. Shrinking it towards a diagonal matrix, \((1-\alpha)\hat\Sigma+\alpha\,\mathrm{diag}(\hat\Sigma)\), is the usual fix.</p>
+      </div></details>
+
+      <div class="algo"><h5 class="algo-h">Algorithm: sample covariance and correlation matrices</h5><ol>
+        <li><span class="kw">input</span> data matrix \(X\) (\(n\) rows = examples, \(d\) columns = features)</li>
+        <li>\(\bar x_j\leftarrow\frac1n\sum_i X_{ij}\) for each column \(j\) <span class="cm">feature means</span></li>
+        <li>\(\tilde X\leftarrow X-\mathbf 1\bar x^\top\) <span class="cm">centre: subtract each column's mean</span></li>
+        <li>\(\hat\Sigma\leftarrow\frac{1}{n-1}\tilde X^\top\tilde X\) <span class="cm">entry (j,k) averages products of deviations</span></li>
+        <li>\(R_{jk}\leftarrow\hat\Sigma_{jk}/\sqrt{\hat\Sigma_{jj}\hat\Sigma_{kk}}\) <span class="cm">correlation matrix: ones on the diagonal</span></li>
+        <li><span class="kw">return</span> \(\hat\Sigma\), \(R\)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="bayes" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Bayes' theorem: a medical test</h2>
+    <p class="sub">1,000 people. Filled squares have the disease; outlined squares tested positive. Of everyone who tested positive, how many are actually ill?</p>
+    <div class="people" id="ppl"></div>
+    <div class="legend"><span><i style="background:var(--c4)"></i>ill, test +</span><span><i style="background:color-mix(in srgb,var(--c4) 35%,var(--card))"></i>ill, test −</span><span><i style="background:var(--card);outline:2px solid var(--c1);outline-offset:-2px"></i>healthy, test + (false alarm)</span><span><i style="background:var(--soft)"></i>healthy, test −</span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A disease affects 1% of people. A test catches 90% of real cases (its <b>sensitivity</b>) and correctly clears 95% of healthy people (its <b>specificity</b>). You test positive. Most people guess you are about 90% likely to be ill. Let us compute it.</p>
+      <ol class="derive">
+        <li><div class="eq">\(P(D\cap +)=P(+\mid D)P(D)=P(D\mid +)P(+)\)</div><div class="why">The product rule, written in both orders.</div></li>
+        <li><div class="eq">\(P(D\mid +)=\dfrac{P(+\mid D)\,P(D)}{P(+)}\)</div><div class="why">Divide by \(P(+)\). This is Bayes' theorem: posterior = likelihood × prior / evidence.</div></li>
+        <li><div class="eq">\(P(+)=P(+\mid D)P(D)+P(+\mid \bar D)P(\bar D)\)</div><div class="why">Law of total probability: a positive comes from an ill person or from a false alarm.</div></li>
+      </ol>
+      <div class="mathbox c2" id="bTex"></div>
+      <p>With the starting numbers (1%, 90%, 95%), a positive result means only about a 15% chance of disease. The squares show why: there are so many healthy people that even a 5% false-alarm rate produces more false positives than the disease produces true ones. The <b>prior</b> (the base rate) matters as much as the test. A second, independent positive test would use 15% as its new prior.</p>
+      <div class="ctl"><label for="prev"><span>Prior \(P(D)\): prevalence</span><output id="prevOut"></output></label><input type="range" id="prev" min="0.001" max="0.5" step="0.001" value="0.01"></div>
+      <div class="ctl"><label for="sens"><span>Sensitivity \(P(+\mid D)\)</span><output id="sensOut"></output></label><input type="range" id="sens" min="0.5" max="1" step="0.005" value="0.9"></div>
+      <div class="ctl"><label for="spec"><span>Specificity \(P(-\mid \bar D)\)</span><output id="specOut"></output></label><input type="range" id="spec" min="0.5" max="0.999" step="0.001" value="0.95"></div>
+      <div class="stats" id="bStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="update" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Learning from data: how biased is this coin?</h2>
+    <p class="sub">The curve is your belief about the coin's chance of heads, \(\theta\). Flip and watch it sharpen. The dashed line is the true \(\theta\), which the learner does not know.</p>
+    <div class="plot wide" id="pB"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="f1">Flip once</button><button class="btn" id="f10">Flip 10</button><button class="btn" id="f100">Flip 100</button><button class="btn" id="fR">Reset</button><span class="pos" id="fPos"></span></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Now the unknown is a number, the coin's heads probability \(\theta\). Bayes' theorem works the same way, with densities:</p>
+      <div class="mathbox c1">$$\underbrace{p(\theta\mid\text{data})}_{\text{posterior}}\;\propto\;\underbrace{p(\text{data}\mid\theta)}_{\text{likelihood}}\;\underbrace{p(\theta)}_{\text{prior}} .$$</div>
+      <p>With \(h\) heads and \(t\) tails, the likelihood is \(\theta^h(1-\theta)^t\). Take as the prior a Beta distribution, \(p(\theta)\propto\theta^{a-1}(1-\theta)^{b-1}\). You can think of it as \(a-1\) imaginary heads and \(b-1\) imaginary tails seen beforehand. Multiply:</p>
+      <div class="mathbox c3">$$p(\theta\mid\text{data})\propto\theta^{a+h-1}(1-\theta)^{b+t-1}=\text{Beta}(a+h,\;b+t).$$</div>
+      <p>Learning is just adding counts. Three estimates of \(\theta\) fall out. The maximum-likelihood estimate \(h/(h+t)\) ignores the prior. The <b>MAP</b> estimate is the posterior's peak, \((a+h-1)/(a+b+h+t-2)\). The posterior mean is \((a+h)/(a+b+h+t)\). With \(a=b=2\), MAP is "add one fake head and one fake tail", which is Laplace smoothing in <a href="../../ml/lda-gda/">naive Bayes</a>. With little data the prior keeps you from saying "\(\theta=1\)" after three heads. With lots of data all three agree.</p>
+      <div class="ctl"><label for="tp"><span>True \(\theta\) (hidden from the learner)</span><output id="tpOut"></output></label><input type="range" id="tp" min="0.02" max="0.98" step="0.01" value="0.7"></div>
+      <div class="ctl"><label for="pa"><span>Prior pseudo-heads \(a\)</span><output id="paOut"></output></label><input type="range" id="pa" min="1" max="20" step="1" value="2"></div>
+      <div class="ctl"><label for="pb"><span>Prior pseudo-tails \(b\)</span><output id="pbOut"></output></label><input type="range" id="pb" min="1" max="20" step="1" value="2"></div>
+      <div class="stats" id="uStats"></div>
+      <p class="hint">More on priors, MAP, credible intervals and sampling the posterior when there is no formula: <a href="../bayesian/">Bayesian estimation</a>.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: Bayesian updating of a coin</h5><ol>
+        <li><span class="kw">input</span> prior counts \(a, b\) <span class="cm">Beta(1,1) is "no idea": flat</span></li>
+        <li><span class="kw">for</span> each new flip \(x\in\{\text{H},\text{T}\}\) <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">if</span> \(x=\text{H}\) <span class="kw">then</span> \(a\leftarrow a+1\) <span class="kw">else</span> \(b\leftarrow b+1\) <span class="cm">today's posterior is tomorrow's prior</span></li>
+        <li>mean \(\leftarrow a/(a+b)\); MAP \(\leftarrow (a-1)/(a+b-2)\)</li>
+        <li>uncertainty \(\leftarrow\sqrt{ab/((a+b)^2(a+b+1))}\) <span class="cm">shrinks like 1/√n</span></li>
+        <li><span class="kw">return</span> Beta\((a,b)\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: conjugate priors, and MAP as regularisation</summary><div>
+        <p>A prior is <b>conjugate</b> to a likelihood when the posterior has the same form as the prior, as Beta does for coin flips. Other pairs: Dirichlet for categorical counts (word frequencies), Gaussian for a Gaussian mean, Gamma for a Poisson rate. With a conjugate prior, Bayesian learning is closed-form bookkeeping. Without one, we approximate the posterior by sampling (MCMC) or by fitting a simpler distribution (variational inference, as in VAEs).</p>
+        <p>Take logs of Bayes' theorem for a model with weights \(w\): \(\log p(w\mid D)=\log p(D\mid w)+\log p(w)+\text{const}\). Maximising it means "fit the data, but pay a price for unlikely weights". A Gaussian prior \(p(w)\propto e^{-\|w\|^2/2\tau^2}\) adds \(-\|w\|^2/2\tau^2\), which is exactly the L2 (ridge) penalty. A Laplace prior gives L1 (lasso). See <a href="../../ml/regularisation/#bayes">regularisation</a>.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="ml" class="card">
+  <h2><span class="num">6</span>Where probability shows up in ML</h2>
+  <div class="grid3 prose">
+    <div><h3>Classifiers output probabilities</h3><p><a href="../../ml/logistic-regression/">Logistic regression</a> models \(P(y=1\mid x)\) with a sigmoid; neural networks use softmax over classes. The threshold you choose is a decision on top of a probability.</p></div>
+    <div><h3>Loss = negative log-likelihood</h3><p>Cross-entropy loss is \(-\log P(\text{true label}\mid x)\). Squared error is the negative log-likelihood under Gaussian noise. Minimising a loss is maximising a likelihood (see <a href="../inference/#mle">maximum likelihood</a>).</p></div>
+    <div><h3>Generative classifiers</h3><p><a href="../../ml/lda-gda/">GDA and naive Bayes</a> model \(p(x\mid y)\) and \(P(y)\), then classify with Bayes' theorem. Naive Bayes assumes features are independent given the class.</p></div>
+    <div><h3>Language models</h3><p>A language model is the chain rule: \(P(w_1\dots w_n)=\prod_tP(w_t\mid w_{&lt;t})\). <a href="../../dl/nlp/transformers/">Transformers</a> predict each factor; temperature reshapes it.</p></div>
+    <div><h3>RAG marginalises</h3><p><a href="../../dl/nlp/rag/#rag">RAG</a> treats the retrieved passage \(z\) as a hidden variable and sums it out: \(p(y\mid x)=\sum_zp(z\mid x)\,p(y\mid x,z)\), the law of total probability.</p></div>
+    <div><h3>Uncertainty and calibration</h3><p>A well-calibrated model that says 70% is right about 70% of the time. Ensembles, dropout at test time and Bayesian methods all try to get the uncertainty right, not just the answer.</p></div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">7</span>The same thing in Python (NumPy / SciPy)</h2>
+<pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> scipy <span class="k">import</span> stats
+rng = np.random.default_rng(<span class="s">0</span>)
+d = rng.integers(<span class="s">1</span>, <span class="s">7</span>, size=(<span class="s">100_000</span>, <span class="s">2</span>)); s = d.sum(<span class="s">1</span>)
+(s == <span class="s">7</span>).mean()                              <span class="c"># ≈ 6/36: probability by simulation</span>
+((s == <span class="s">7</span>) &amp; (d[:, <span class="s">0</span>] % <span class="s">2</span> == <span class="s">0</span>)).mean() / (d[:, <span class="s">0</span>] % <span class="s">2</span> == <span class="s">0</span>).mean()   <span class="c"># P(A | B)</span>
+X = stats.binom(n=<span class="s">10</span>, p=<span class="s">0.3</span>); X.mean(), X.var(), X.pmf(<span class="s">3</span>)
+prior, sens, spec = <span class="s">0.01</span>, <span class="s">0.90</span>, <span class="s">0.95</span>
+p_pos = sens * prior + (<span class="s">1</span> - spec) * (<span class="s">1</span> - prior)
+sens * prior / p_pos                          <span class="c"># P(ill | +) ≈ 0.154</span>
+a, b = <span class="s">2</span>, <span class="s">2</span>; flips = rng.random(<span class="s">50</span>) &lt; <span class="s">0.7</span>
+post = stats.beta(a + flips.sum(), b + (~flips).sum())
+post.mean(), post.interval(<span class="s">0.95</span>)              <span class="c"># estimate and 95% credible interval</span></pre>
+</section>
+<p class="foot">Part of the <a href="../">Mathematical concepts</a> series. Everything runs in your browser.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script>
+(function(){
+const {$} = ML;
+/* ---- 1. dice ---- */
+const EV={'sum is 7':(a,b)=>a+b===7,'sum ≥ 10':(a,b)=>a+b>=10,'doubles':(a,b)=>a===b,'first die even':(a,b)=>a%2===0,'second die is 6':(a,b)=>b===6,'sum is even':(a,b)=>(a+b)%2===0,'at least one 1':(a,b)=>a===1||b===1};
+const opts=Object.keys(EV).map(k=>`<option>${k}</option>`).join(''); $('#evA').innerHTML=opts; $('#evB').innerHTML=opts; $('#evA').value='first die even'; $('#evB').value='second die is 6';
+function drawDice(){ const A=EV[$('#evA').value], Bf=EV[$('#evB').value]; let nA=0,nB=0,nAB=0, h='<div></div>'+[1,2,3,4,5,6].map(j=>`<div class="hint" style="text-align:center">${j}</div>`).join('');
+  for(let i=1;i<=6;i++){ h+=`<div class="hint" style="text-align:right;padding-right:4px">${i}</div>`; for(let j=1;j<=6;j++){ const a=A(i,j), b=Bf(i,j); nA+=a; nB+=b; nAB+=a&&b;
+    const bg=a&&b?'color-mix(in srgb,var(--c4) 70%,var(--card))':a?'color-mix(in srgb,var(--c1) 45%,var(--card))':b?'color-mix(in srgb,var(--c3) 45%,var(--card))':'var(--soft)';
+    h+=`<div style="aspect-ratio:1/1;border-radius:4px;background:${bg};display:flex;align-items:center;justify-content:center;font:12px 'JetBrains Mono',monospace;color:var(--ink)" title="(${i}, ${j})">${i+j}</div>`; } }
+  $('#dice').innerHTML=h; const pA=nA/36,pB=nB/36,pAB=nAB/36, pAgB=nB?nAB/nB:NaN, indep=Math.abs(pAB-pA*pB)<1e-9;
+  $('#dStats').innerHTML=`<div class="stat c1"><b>${nA}/36</b><span>P(A) = ${pA.toFixed(3)}</span></div><div class="stat c3"><b>${nB}/36</b><span>P(B) = ${pB.toFixed(3)}</span></div><div class="stat c4"><b>${nAB}/36</b><span>P(A and B)</span></div><div class="stat c2"><b>${nB?nAB+'/'+nB:'–'}</b><span>P(A | B) = ${isNaN(pAgB)?'–':pAgB.toFixed(3)}</span></div>`;
+  $('#dNote').className='note'+(indep?' ok':' warn'); $('#dNote').innerHTML=indep?`<b>Independent.</b> Knowing B does not change the chance of A, which stays ${pA.toFixed(3)}, and P(A and B) = P(A)·P(B) = ${(pA*pB).toFixed(3)}.`:`<b>Dependent.</b> Knowing B moves the chance of A from ${pA.toFixed(3)} to ${isNaN(pAgB)?'–':pAgB.toFixed(3)}. P(A and B) = ${pAB.toFixed(3)} but P(A)·P(B) = ${(pA*pB).toFixed(3)}.`; }
+$('#evA').addEventListener('change',drawDice); $('#evB').addEventListener('change',drawDice);
+
+/* ---- 2. distributions ---- */
+const pRv=new ML.Plot('#pRv',{equal:false}); const rng=ML.rng(11); let dist='bern', q1=0.3, q2=0.5, S=[];
+const D={
+ bern:{L:['Success probability p',null],r1:[0,1,0.01,0.3],disc:true,f:(x,p)=>x===0?1-p:x===1?p:0,sup:()=>[0,1],m:p=>p,v:p=>p*(1-p),tex:p=>`P(X=1)=p,\\ P(X=0)=1-p;\\quad \\mathbb E X=p,\\ \\operatorname{Var}X=p(1-p)`,s:p=>+(rng()<p)},
+ bin:{L:['Success probability p','Number of trials n'],r1:[0,1,0.01,0.3],r2:[1,40,1,10],disc:true,f:(x,p,n)=>MX.binom(x,n,p),sup:(p,n)=>[0,n],m:(p,n)=>n*p,v:(p,n)=>n*p*(1-p),tex:(p,n)=>`P(X=k)=\\binom{n}{k}p^k(1-p)^{n-k};\\quad \\mathbb E X=np,\\ \\operatorname{Var}X=np(1-p)`,s:(p,n)=>{ let c=0; for(let i=0;i<n;i++) c+=rng()<p; return c; }},
+ pois:{L:['Rate λ',null],r1:[0.2,15,0.1,3],disc:true,f:(x,l)=>Math.exp(x*Math.log(l)-l-MX.lgamma(x+1)),sup:l=>[0,Math.ceil(l+5*Math.sqrt(l)+3)],m:l=>l,v:l=>l,tex:l=>`P(X=k)=\\frac{\\lambda^ke^{-\\lambda}}{k!};\\quad \\mathbb E X=\\operatorname{Var}X=\\lambda`,s:l=>{ let k=0,p=1; const L=Math.exp(-l); do{ k++; p*=rng(); }while(p>L); return k-1; }},
+ unif:{L:['Lower end a','Upper end b'],r1:[-3,2,0.1,-1],r2:[-2,5,0.1,2],disc:false,f:(x,a,b)=>b>a&&x>=a&&x<=b?1/(b-a):0,sup:(a,b)=>[Math.min(a,b)-1,Math.max(a,b)+1],m:(a,b)=>(a+b)/2,v:(a,b)=>(b-a)**2/12,tex:()=>`p(x)=\\frac1{b-a}\\ \\text{on }[a,b];\\quad \\mathbb E X=\\tfrac{a+b}2,\\ \\operatorname{Var}X=\\tfrac{(b-a)^2}{12}`,s:(a,b)=>a+(b-a)*rng()},
+ norm:{L:['Mean μ','Standard deviation σ'],r1:[-3,3,0.1,0],r2:[0.2,3,0.05,1],disc:false,f:(x,m,s)=>MX.normPdf(x,m,s),sup:(m,s)=>[m-4*s,m+4*s],m:m=>m,v:(m,s)=>s*s,tex:()=>`p(x)=\\frac{1}{\\sqrt{2\\pi}\\sigma}e^{-(x-\\mu)^2/2\\sigma^2};\\quad \\mathbb E X=\\mu,\\ \\operatorname{Var}X=\\sigma^2`,s:(m,s)=>m+s*rng.gauss()},
+ exp:{L:['Rate λ',null],r1:[0.2,4,0.05,1],disc:false,f:(x,l)=>x<0?0:l*Math.exp(-l*x),sup:l=>[0,6/l],m:l=>1/l,v:l=>1/(l*l),tex:()=>`p(x)=\\lambda e^{-\\lambda x}\\ (x\\ge0);\\quad \\mathbb E X=\\tfrac1\\lambda,\\ \\operatorname{Var}X=\\tfrac1{\\lambda^2}`,s:l=>-Math.log(1-rng())/l}};
+function setDist(k){ dist=k; const d=D[k]; S=[]; const r1=$('#q1'); [r1.min,r1.max,r1.step,r1.value]=d.r1; q1=d.r1[3]; $('#q1L').textContent=d.L[0];
+  if(d.r2){ $('#q2Box').style.display=''; const r2=$('#q2'); [r2.min,r2.max,r2.step,r2.value]=d.r2; q2=d.r2[3]; $('#q2L').textContent=d.L[1]; } else $('#q2Box').style.display='none';
+  $('#q1Out').textContent=q1; $('#q2Out').textContent=q2; drawRv(); }
+function drawRv(){ const P=ML.palette(), d=D[dist], args=d.r2?[q1,q2]:[q1], [lo,hi]=d.sup(...args), mu=d.m(...args), sd=Math.sqrt(d.v(...args)), c=pRv.ctx;
+  let pts=[], ymax=0; if(d.disc){ for(let k=Math.max(0,Math.floor(lo));k<=hi;k++){ const y=d.f(k,...args); pts.push([k,y]); ymax=Math.max(ymax,y); } } else { for(let i=0;i<=300;i++){ const x=lo+(hi-lo)*i/300, y=d.f(x,...args); pts.push([x,y]); ymax=Math.max(ymax,y); } }
+  /* histogram of samples, scaled to probability / density */
+  let hist=[]; if(S.length){ if(d.disc){ const cnt={}; S.forEach(v=>cnt[v]=(cnt[v]||0)+1); hist=Object.keys(cnt).map(k=>[+k,cnt[k]/S.length]); } else { const nb=30, w=(hi-lo)/nb, cnt=new Array(nb).fill(0); S.forEach(v=>{ const b=Math.floor((v-lo)/w); if(b>=0&&b<nb) cnt[b]++; }); hist=cnt.map((c2,b)=>[lo+(b+0.5)*w,c2/S.length/w]); } hist.forEach(h=>ymax=Math.max(ymax,h[1])); }
+  const xs0=d.disc?lo-0.7:lo, xs1=d.disc?hi+0.7:hi; const fr=ML.chart(pRv,[{pts:[[xs0,0],[xs1,ymax*1.12]],color:'transparent',noline:true}],{x0:xs0,x1:xs1,y0:0,y1:ymax*1.12});
+  const {fx,fy}=fr; c.save(); c.fillStyle=P.c1; c.globalAlpha=.1; c.fillRect(fx(mu-sd),fy(ymax*1.12),fx(mu+sd)-fx(mu-sd),fy(0)-fy(ymax*1.12)); c.globalAlpha=1;
+  const bw=d.disc?Math.max(2,(fx(1)-fx(0))*0.6):(fx(hi)-fx(lo))/30*0.95;
+  hist.forEach(([x,y])=>{ c.fillStyle=P.muted; c.globalAlpha=.35; c.fillRect(fx(x)-bw/2,fy(y),bw,fy(0)-fy(y)); }); c.globalAlpha=1;
+  if(d.disc){ pts.forEach(([x,y])=>{ c.fillStyle=P.c1; c.fillRect(fx(x)-bw*0.18,fy(y),bw*0.36,fy(0)-fy(y)); c.beginPath(); c.arc(fx(x),fy(y),3.5,0,7); c.fill(); }); }
+  else { c.strokeStyle=P.c1; c.lineWidth=2.5; c.beginPath(); pts.forEach(([x,y],i)=>i?c.lineTo(fx(x),fy(y)):c.moveTo(fx(x),fy(y))); c.stroke(); }
+  c.strokeStyle=P.c4; c.setLineDash([5,4]); c.lineWidth=2; c.beginPath(); c.moveTo(fx(mu),fy(0)); c.lineTo(fx(mu),fy(ymax*1.12)); c.stroke(); c.restore();
+  MX.set('rvTex',d.tex(...args),true);
+  const sm=S.length?S.reduce((a,b)=>a+b,0)/S.length:NaN, sv=S.length>1?S.reduce((a,b)=>a+(b-sm)**2,0)/(S.length-1):NaN;
+  $('#rvStats').innerHTML=`<div class="stat c4"><b>${mu.toFixed(3)}</b><span>E[X]</span></div><div class="stat c1"><b>${sd.toFixed(3)}</b><span>standard deviation</span></div><div class="stat c2"><b>${isNaN(sm)?'–':sm.toFixed(3)}</b><span>sample mean</span></div><div class="stat c3"><b>${isNaN(sv)?'–':Math.sqrt(sv).toFixed(3)}</b><span>sample std</span></div>`;
+  $('#nDraw').textContent=`n = ${S.length}`; }
+ML.bindSeg('dist',setDist); ML.bindRange('q1',v=>{q1=v;S=[];drawRv();}); ML.bindRange('q2',v=>{q2=v;S=[];drawRv();});
+$('#draw').addEventListener('click',()=>{ const d=D[dist], args=d.r2?[q1,q2]:[q1]; for(let i=0;i<100;i++) S.push(d.s(...args)); drawRv(); }); $('#clr').addEventListener('click',()=>{ S=[]; drawRv(); }); pRv.onResize=drawRv;
+
+/* ---- 3. Bayes medical test ---- */
+let prev=0.01, sens=0.9, spec=0.95; const prng=ML.rng(5), U=Array.from({length:1000},()=>[prng(),prng()]), order=[...Array(1000).keys()];
+function drawB(){ const ill=Math.round(1000*prev); let cells='', tp=0, fp=0;
+  /* place the ill people first so they cluster at the top, then healthy */
+  for(let i=0;i<1000;i++){ const isIll=i<ill, pos=isIll?U[i][1]<sens:U[i][1]>spec; if(isIll&&pos) tp++; if(!isIll&&pos) fp++;
+    const st=isIll?(pos?'background:var(--c4)':'background:color-mix(in srgb,var(--c4) 35%,var(--card))'):(pos?'background:var(--card);outline:2px solid var(--c1);outline-offset:-2px':''); cells+=`<i style="${st}"></i>`; }
+  $('#ppl').innerHTML=cells; const pPos=sens*prev+(1-spec)*(1-prev), post=sens*prev/pPos;
+  $('#bTex').innerHTML=ML.tex(`P(D\\mid +)=\\frac{${sens.toFixed(3)}\\times${prev.toFixed(3)}}{${sens.toFixed(3)}\\times${prev.toFixed(3)}+${(1-spec).toFixed(3)}\\times${(1-prev).toFixed(3)}}=${post.toFixed(3)}`,true);
+  $('#bStats').innerHTML=`<div class="stat c4"><b>${(100*post).toFixed(1)}%</b><span>P(ill | positive)</span></div><div class="stat c1"><b>${tp} : ${fp}</b><span>true : false positives in this crowd</span></div><div class="stat c3"><b>${(100*(1-sens)*prev/((1-sens)*prev+spec*(1-prev))).toFixed(2)}%</b><span>P(ill | negative)</span></div>`; }
+ML.bindRange('prev',v=>{prev=v;drawB();},v=>(100*v).toFixed(1)+'%'); ML.bindRange('sens',v=>{sens=v;drawB();},v=>(100*v).toFixed(1)+'%'); ML.bindRange('spec',v=>{spec=v;drawB();},v=>(100*v).toFixed(1)+'%');
+
+/* ---- 4. coin updating ---- */
+const pB=new ML.Plot('#pB',{equal:false}); let tp=0.7, pa=2, pbb=2, H=0, T=0; const crng=ML.rng(21);
+function flip(n){ for(let i=0;i<n;i++) crng()<tp?H++:T++; drawU(); }
+function drawU(){ const P=ML.palette(), a=pa+H, b=pbb+T, xs=[...Array(301).keys()].map(i=>0.001+0.998*i/300);
+  const prior=xs.map(x=>[x,MX.betaPdf(x,pa,pbb)]), post=xs.map(x=>[x,MX.betaPdf(x,a,b)]), ym=Math.max(...post.map(p=>p[1]),...prior.map(p=>p[1]))*1.1;
+  ML.chart(pB,[{pts:prior,color:P.muted,dash:[5,4]},{pts:post,color:P.c1,width:3}],{x0:0,x1:1,y0:0,y1:ym,vline:tp,xl:'θ'});
+  const n=H+T, mle=n?H/n:NaN, map=a+b>2?(a-1)/(a+b-2):NaN, mean=a/(a+b), sd=Math.sqrt(a*b/((a+b)**2*(a+b+1)));
+  $('#fPos').textContent=`${H} heads, ${T} tails`;
+  $('#uStats').innerHTML=`<div class="stat c2"><b>${isNaN(mle)?'–':mle.toFixed(3)}</b><span>MLE h/n</span></div><div class="stat c1"><b>${isNaN(map)?'–':map.toFixed(3)}</b><span>MAP (posterior peak)</span></div><div class="stat c3"><b>${mean.toFixed(3)}</b><span>posterior mean</span></div><div class="stat c4"><b>±${sd.toFixed(3)}</b><span>posterior std</span></div>`; }
+$('#f1').addEventListener('click',()=>flip(1)); $('#f10').addEventListener('click',()=>flip(10)); $('#f100').addEventListener('click',()=>flip(100)); $('#fR').addEventListener('click',()=>{ H=0; T=0; drawU(); });
+ML.bindRange('tp',v=>{tp=v;drawU();},v=>v.toFixed(2)); ML.bindRange('pa',v=>{pa=v;drawU();}); ML.bindRange('pb',v=>{pbb=v;drawU();}); pB.onResize=drawU;
+ML.onTheme(()=>{ drawRv(); drawU(); });
+drawDice(); setDist('bern'); drawB(); drawU();
+/* ---- 3. covariance ---- */
+const LAc=ML.LA, pCv=new ML.Plot('#pCv',{bounds:{x0:-5,x1:5,y0:-5,y1:5}}); let cs1=1.6, cs2=0.9, cr=0.6, cview='raw', cseed=5, CZ=[];
+const MU=[0.8,0.4];
+function cSample(){ const r=ML.rng(cseed); CZ=[...Array(300)].map(()=>[r.gauss(),r.gauss()]); }
+function drawCv(){ const P=ML.palette(), L=[[cs1,0],[cr*cs2,cs2*Math.sqrt(1-cr*cr)]];
+  let X=CZ.map(z=>[MU[0]+L[0][0]*z[0], MU[1]+L[1][0]*z[0]+L[1][1]*z[1]]);
+  const n=X.length, m=[0,1].map(j=>X.reduce((s,x)=>s+x[j],0)/n);
+  const C=(A,mm)=>{ const S=[[0,0],[0,0]]; A.forEach(x=>{ const d=[x[0]-mm[0],x[1]-mm[1]]; for(let a=0;a<2;a++) for(let b=0;b<2;b++) S[a][b]+=d[a]*d[b]/(n-1); }); return S; };
+  let S=C(X,m), mu=m; const sd=[Math.sqrt(S[0][0]),Math.sqrt(S[1][1])];
+  if(cview==='z'){ X=X.map(x=>[(x[0]-m[0])/sd[0],(x[1]-m[1])/sd[1]]); mu=[0,0]; S=C(X,mu); }
+  pCv.clear(); pCv.grid(1,true);
+  pCv.points(X,X.map(()=>0),{r:2.6,color:()=>P.c3,alpha:()=>.55});
+  pCv.ellipse(mu,S,1,{color:P.c1,width:2,fill:P.c1,fillAlpha:.06}); pCv.ellipse(mu,S,2,{color:P.c1,width:1.5,dash:[5,4]});
+  const E=LAc.eigSym(S); E.vectors.forEach((v,i)=>{ const s=Math.sqrt(Math.max(0,E.values[i])); MX.vec(pCv,[v[0]*s,v[1]*s],i?P.c4:P.c2,i?'PC2':'PC1',{from:mu,width:3}); });
+  pCv.line(mu[0],-6,mu[0],6,{color:P.muted,width:1,dash:[3,4],alpha:.6}); pCv.line(-6,mu[1],6,mu[1],{color:P.muted,width:1,dash:[3,4],alpha:.6});
+  const rho=S[0][1]/Math.sqrt(S[0][0]*S[1][1]);
+  MX.set('cTex',`\\hat\\Sigma=${MX.mtex(S,2)}\\qquad \\Sigma_{\\text{true}}=${MX.mtex(cview==='z'?[[1,cr],[cr,1]]:[[cs1*cs1,cr*cs1*cs2],[cr*cs1*cs2,cs2*cs2]],2)}`,true);
+  $('#cStats').innerHTML=`<div class="stat c3"><b>${S[0][1].toFixed(2)}</b><span>sample covariance</span></div><div class="stat c1"><b>${rho.toFixed(2)}</b><span>sample correlation ρ̂</span></div><div class="stat c2"><b>${E.values[0].toFixed(2)}</b><span>variance along PC1 (λ₁)</span></div><div class="stat c4"><b>${E.values[1].toFixed(2)}</b><span>variance along PC2 (λ₂)</span></div>`; }
+ML.bindRange('cS1',v=>{cs1=v;drawCv();},v=>v.toFixed(2)); ML.bindRange('cS2',v=>{cs2=v;drawCv();},v=>v.toFixed(2)); ML.bindRange('cR',v=>{cr=v;drawCv();},v=>v.toFixed(2));
+ML.bindSeg('cView',v=>{cview=v;drawCv();}); $('#cNew').addEventListener('click',()=>{ cseed++; cSample(); drawCv(); });
+pCv.onResize=drawCv; cSample(); drawCv();
+})();
+</script>
+<script>NLP.nav('math','probability'); ML.renderMath(document.body);</script>
+</body>
+</html>

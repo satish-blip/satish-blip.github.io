@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Support Vector Machine Lab</title>
+<meta name="description" content="Interactive support vector machines in the browser: drag points and see which ones are support vectors, how C and the kernel change the margin, a kernel-by-dataset gallery, the kernel trick in 3D and the full primal/dual maths.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Algorithms"></nav></div></header>
+
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Classification</p>
+  <h1>Support Vector <span class="grad">Machines</span></h1>
+  <p class="lede">When two classes can be separated by a line, there are usually infinitely many lines that do it. Which one should we trust on new data? The support vector machine's answer is: the one that stays as far as possible from both classes. That single idea leads to a boundary that depends on only a handful of points, the support vectors, and to the kernel trick, which lets the same straight-line machinery draw circles and spirals. Move points around and watch which ones matter, then swap kernels to bend the boundary.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#lab">1 · Live SVM</a><a href="#sv">2 · Support vectors</a><a href="#maths">3 · The maths</a><a href="#trick">4 · Kernel trick: 2D then 3D</a><a href="#gallery">5 · Kernel × dataset</a><a href="#cg">6 · C and γ</a><a href="#code">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a support vector machine, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>Picture red and blue points on a page that a ruler can separate. You could place the ruler so it nearly grazes a red point, or nearly grazes a blue one, or somewhere in the middle. All three get the training data 100% right. But a new red point that lands a little off from its friends would be misclassified by the first line. The line in the middle leaves the most room for error on both sides, so it is the safest bet.</p>
+      <h3>The idea</h3><p>A <a class="term" data-t="svm">support vector machine</a> picks the line with the widest empty corridor, the <a class="term" data-t="margin">margin</a>, between the classes. Only the points touching or inside that corridor matter; they are the <a class="term" data-t="support-vector">support vectors</a>, and the rest of the data could be deleted without changing the answer.</p><p>Real data overlaps, so a <a class="term" data-t="soft-margin">soft margin</a> lets some points cross at a price set by \(C\). For curved boundaries a <a class="term" data-t="kernel">kernel</a> measures similarity in a richer hidden space (the <a class="term" data-t="kernel-trick">kernel trick</a>), so the SVM can draw circles and spirals while still solving a straight-line problem behind the scenes.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Find \(w,b\) that maximise the margin width \(2/\lVert w\rVert\) while keeping points on the right side.</li><li>Allow violations with <a class="term" data-t="slack">slack</a>, each costing \(C\).</li><li>Solve the <a class="term" data-t="dual">dual</a> problem, which only needs similarities between pairs of points (<a class="term" data-t="smo">SMO</a> solver).</li><li>Swap in a kernel (linear, polynomial, <a class="term" data-t="rbf">RBF</a>) to bend the boundary.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Building a road between two villages: you want the widest possible road that does not knock down any houses. Only the houses right at the edge of the road decide where it goes. Houses further back could be moved or demolished and the road would stay exactly where it is.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Strong on small and medium datasets</li><li>Kernels give flexible boundaries with few hyperparameters</li><li>Convex: one best answer</li><li>Prediction needs only the support vectors</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Needs feature scaling</li><li>C and γ must be tuned</li><li>Slow for very large datasets; no probabilities by default</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="svm">SVM</a><a class="term" data-t="margin">Margin</a><a class="term" data-t="support-vector">Support vectors</a><a class="term" data-t="hyperplane">Hyperplane</a><a class="term" data-t="soft-margin">Soft margin</a><a class="term" data-t="slack">Slack</a><a class="term" data-t="hinge">Hinge loss</a><a class="term" data-t="dual">Dual problem</a><a class="term" data-t="lagrange">Lagrange multiplier</a><a class="term" data-t="kkt">KKT conditions</a><a class="term" data-t="kernel">Kernel</a><a class="term" data-t="kernel-trick">Kernel trick</a><a class="term" data-t="rbf">RBF kernel</a><a class="term" data-t="smo">SMO</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. Background maths: <a href="../../math/vectors/">dot products and distances</a>, <a href="../../math/projections/">projections</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="lab" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Live SVM</h2>
+    <p class="sub">The solid line is the boundary, the dashed lines are the edges of the margin, and ringed points are the support vectors. Drag any point. Click empty space to add a point of the selected class. Right-click a point to delete it.</p>
+    <div class="plot sq" id="mainPlot"></div>
+    <div class="legend">
+      <span><i class="sw k0"></i>class −1</span><span><i class="sw k1"></i>class +1</span>
+      <span><i class="sw" style="background:transparent;box-shadow:0 0 0 2px var(--ink)"></i>support vector on the margin (0 &lt; α &lt; C)</span>
+      <span><i class="sw" style="background:transparent;box-shadow:0 0 0 2px var(--c4)"></i>margin violator (α = C)</span>
+      <span>solid line \(f(x)=0\), dashed \(f(x)=\pm1\)</span><span><i class="sw" style="background:#eab308"></i>gold: hard-margin line, when ticked</span>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="controls">
+        <div class="ctl"><span class="lbl">Dataset</span><div class="dsrow" id="dsPick"></div></div>
+        <div class="ctl"><span class="lbl">Kernel</span><div class="seg" id="kSeg" role="radiogroup"><button data-v="linear">Linear</button><button data-v="poly">Polynomial</button><button data-v="rbf" class="on">RBF (Gaussian)</button><button data-v="sigmoid">Sigmoid</button></div></div>
+        <div class="ctl"><label for="C"><span>C (penalty on margin violations)</span><output id="COut"></output></label><input type="range" id="C" min="-2" max="3" step="0.05" value="0"></div>
+        <div class="ctl" id="gWrap"><label for="gam"><span>γ (kernel width: bigger = more local)</span><output id="gamOut"></output></label><input type="range" id="gam" min="-2" max="1.7" step="0.05" value="0"></div>
+        <div class="ctl" id="dWrap" hidden><label for="deg"><span>Polynomial degree d</span><output id="degOut"></output></label><input type="range" id="deg" min="1" max="6" value="3"></div>
+        <div class="grid2" style="gap:12px">
+          <div class="ctl"><label for="nPts">Points <output id="nPtsOut"></output></label><input type="range" id="nPts" min="10" max="300" step="10" value="120"></div>
+          <div class="ctl"><label for="noise">Noise <output id="noiseOut"></output></label><input type="range" id="noise" min="0" max="1" step="0.05" value="0.3"></div>
+        </div>
+        <div class="ctl"><span class="lbl">Clicking adds</span><div class="seg" id="addSeg"><button data-v="0" class="on">● class −1</button><button data-v="1">● class +1</button></div></div>
+        <div class="row"><label class="toggle"><input type="checkbox" id="sizeA">Size points by α</label><label class="toggle"><input type="checkbox" id="showM" checked>Margins</label><label class="toggle"><input type="checkbox" id="showH">Compare: hard margin (C → ∞)</label></div>
+        <div class="row"><button class="btn" id="resample">New sample</button></div>
+      </div>
+    </div>
+    <div class="card"><div class="stats" id="stats"></div><div class="note" id="sepNote" style="margin-top:10px"></div><p class="hint" id="kHint"></p></div>
+  </div>
+</section>
+
+<section id="sv" class="card">
+  <h2><span class="num">2</span>Support vectors: only a few points decide the boundary</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>After training, every point gets a weight \(\alpha_i\in[0,C]\) that says how much it pushes on the boundary (section 3 explains where these come from). The prediction for a new point \(x\) is a weighted vote of the training points, each one voting with its label \(y_i\) and its similarity \(K(x_i,x)\) to \(x\):</p>
+      <div class="mathbox c1">$$f(x)=\sum_{i=1}^{n}\alpha_i\,y_i\,K(x_i,x)+b=\sum_{i\,\in\,\mathrm{SV}}\alpha_i\,y_i\,K(x_i,x)+b$$</div>
+      <p>Points with \(\alpha_i=0\) drop out of the sum, so they have <b>no influence at all</b>. The KKT conditions sort every point into one of three groups:</p>
+      <div class="tblwrap"><table class="tbl" id="kktTbl"></table></div>
+      <h3>Try these experiments</h3>
+      <ol>
+        <li>Drag a plain point (no ring) around inside its own region. The boundary does not move, because its \(\alpha=0\).</li>
+        <li>Drag a ringed point. The boundary follows it.</li>
+        <li>Press the button below: every non-support vector is deleted and the SVM is retrained. The boundary is identical.</li>
+      </ol>
+      <div class="row"><button class="btn primary" id="dropNon">Delete all non-support vectors and refit</button><button class="btn" id="dropSV">Delete one support vector</button></div>
+      <div class="note" id="dropNote" hidden></div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Dual weights \(\alpha_i\) (sorted)</h3>
+      <div class="plot short" id="alphaPlot"></div>
+      <p class="hint">The dashed line is \(C\). Bars that hit it are margin violators. As you lower \(C\), more points become support vectors and the margin widens; as you raise it, the SVM tolerates fewer violations (closer to a hard margin).</p>
+      <h3>Functional margins \(y_i f(x_i)\)</h3>
+      <div class="plot short" id="marginPlot"></div>
+      <p class="hint">Every point, sorted. Multiplying by the label makes "correct and confident" positive for both classes. Values above 1 are safely outside the margin; between 0 and 1 inside the margin; below 0 misclassified. Hinge loss is \(\max(0,1-y_if(x_i))\), the shaded area.</p>
+    </div>
+  </div>
+</section>
+
+<section id="maths" class="card">
+  <h2><span class="num">3</span>The maths</h2>
+  <p class="sub">We turn "widest corridor" into an optimisation problem in three steps: measure the corridor, allow some mistakes, then rewrite the problem in a form where only similarities between points appear.</p>
+  <div class="grid2 prose">
+    <div>
+      <h3>Step 1: how wide is the corridor? (hard margin)</h3>
+      <p>A line (in general a <a class="term" data-t="hyperplane">hyperplane</a>) is the set of points with \(w^\top x+b=0\); the vector \(w\) is perpendicular to it. The signed distance from a point \(x_i\) to the line is \((w^\top x_i+b)/\lVert w\rVert\), the length of its <a href="../../math/projections/#line">projection</a> onto the unit normal. There is a free choice of scale: \(w,b\) and \(2w,2b\) describe the same line. Use it to fix the closest points on each side at \(y_i(w^\top x_i+b)=1\). Then the margin edges are the lines \(w^\top x+b=\pm1\), and the width between them is \(2/\lVert w\rVert\). Making the corridor wide means making \(\lVert w\rVert\) small:</p>
+      <div class="mathbox c1">$$\min_{w,b}\ \tfrac12\lVert w\rVert^2\quad\text{s.t.}\quad y_i(w^\top x_i+b)\ge1\ \ \forall i$$</div>
+      <p>(Squaring and halving does not change the minimiser, and makes the problem a smooth quadratic.) This is a convex problem with a unique answer.</p>
+      <h3>Step 2: allow some mistakes (soft margin)</h3>
+      <p>If the classes overlap, no line satisfies every constraint, and the problem has no solution. So give each point some slack \(\xi_i\ge0\): how far it is allowed to fall short of the margin. Each unit of slack costs \(C\):</p>
+      <div class="mathbox c4">$$\min_{w,b,\xi}\ \tfrac12\lVert w\rVert^2+C\sum_i\xi_i\ \ \text{s.t.}\ \ y_i(w^\top x_i+b)\ge1-\xi_i,\ \xi_i\ge0$$</div>
+      <p>At the optimum each \(\xi_i\) is as small as allowed, \(\xi_i=\max(0,1-y_if(x_i))\), which is the <a class="term" data-t="hinge">hinge loss</a>. So the soft-margin SVM is just <b>hinge loss plus an L2 penalty</b>: \(\tfrac12\lVert w\rVert^2+C\sum_i\max(0,1-y_if(x_i))\). Compare logistic regression, which is log-loss plus an L2 penalty. The hinge is exactly zero for points safely outside the margin, and that is where the sparsity comes from. Small \(C\) = wide, forgiving margin (more bias). Large \(C\) = narrow margin that tries to classify every training point (more variance).</p>
+      <h3>Step 3: the KKT conditions sort the points</h3>
+      <p>Attach a <a class="term" data-t="lagrange">Lagrange multiplier</a> \(\alpha_i\ge0\) to each margin constraint. At the optimum the <a class="term" data-t="kkt">KKT conditions</a> hold:</p>
+      <div class="mathbox c5">$$w=\sum_i\alpha_iy_ix_i,\qquad \sum_i\alpha_iy_i=0,\qquad \alpha_i\big[y_if(x_i)-1+\xi_i\big]=0,\qquad (C-\alpha_i)\,\xi_i=0$$</div>
+      <p>Read them one at a time. The first says the weight vector is a combination of the training points. The third, <b>complementary slackness</b>, says: either a point's constraint is tight (it sits on the margin) or its \(\alpha_i\) is zero. So a point strictly outside the margin contributes nothing to \(w\). The fourth says a point with slack (inside the margin or misclassified) has \(\alpha_i=C\), the maximum. That is exactly the three groups in the table of section 2.</p>
+      <details class="deeper"><summary>Going deeper: deriving the dual from the Lagrangian</summary><div>
+        <p>The Lagrangian of the soft-margin problem, with multipliers \(\alpha_i\ge0\) for the margin constraints and \(\mu_i\ge0\) for \(\xi_i\ge0\), is</p>
+        $$\mathcal L=\tfrac12\lVert w\rVert^2+C\sum_i\xi_i-\sum_i\alpha_i\big[y_i(w^\top x_i+b)-1+\xi_i\big]-\sum_i\mu_i\xi_i .$$
+        <p>Minimise over the primal variables by setting derivatives to zero: \(\partial_w\mathcal L=0\Rightarrow w=\sum_i\alpha_iy_ix_i\); \(\partial_b\mathcal L=0\Rightarrow\sum_i\alpha_iy_i=0\); \(\partial_{\xi_i}\mathcal L=0\Rightarrow\alpha_i=C-\mu_i\), so \(0\le\alpha_i\le C\). Substitute back: the \(\xi\) terms cancel, \(\tfrac12\lVert w\rVert^2-\sum_i\alpha_iy_iw^\top x_i=-\tfrac12\sum_{i,j}\alpha_i\alpha_jy_iy_jx_i^\top x_j\), and the \(b\) term vanishes. What remains is the dual on the right. The problem is convex and strictly feasible (Slater's condition), so strong duality holds: the dual optimum equals the primal optimum, and the KKT conditions are both necessary and sufficient.</p>
+      </div></details>
+    </div>
+    <div>
+      <h3>The dual problem</h3>
+      <p>Plugging \(w=\sum_i\alpha_iy_ix_i\) back in removes \(w\) entirely and leaves a problem in the \(\alpha\)'s alone:</p>
+      <div class="mathbox c3">$$\max_{\alpha}\ \sum_i\alpha_i-\tfrac12\sum_{i,j}\alpha_i\alpha_jy_iy_j\,\langle x_i,x_j\rangle\quad\text{s.t.}\quad 0\le\alpha_i\le C,\ \ \sum_i\alpha_iy_i=0$$</div>
+      <p>Look at what the data appear as: <b>only inner products</b> \(\langle x_i,x_j\rangle\), the <a href="../../math/vectors/#dot">dot products</a> between pairs of points. That is the key observation. Replace them with a kernel \(K(x_i,x_j)=\langle\phi(x_i),\phi(x_j)\rangle\) and the SVM works in the feature space of \(\phi\) without ever computing \(\phi\). That is the <b>kernel trick</b>.</p>
+      <h3>Kernels on this page</h3>
+      <div class="mathbox c2">$$\begin{aligned}\text{Linear: }&amp;K(x,z)=x^\top z\\ \text{Polynomial: }&amp;K(x,z)=(\gamma\,x^\top z+r)^d\\ \text{RBF: }&amp;K(x,z)=\exp(-\gamma\lVert x-z\rVert^2)\\ \text{Sigmoid: }&amp;K(x,z)=\tanh(\gamma\,x^\top z+r)\end{aligned}$$</div>
+      <p>Think of a kernel as a similarity score. The RBF kernel is 1 for identical points and decays to 0 with distance; \(1/\sqrt{\gamma}\) is roughly its radius of influence. Each support vector puts a Gaussian bump of height \(\alpha_iy_i\) on the plane, and \(f\) is their sum: positive bumps from one class, negative from the other, and the boundary is where they cancel.</p>
+      <details class="deeper"><summary>Going deeper: what makes a valid kernel (Mercer)</summary><div>
+        <p>Not every similarity function is an inner product in some feature space. \(K\) is a valid kernel exactly when, for every finite set of points, the Gram matrix \(G_{ij}=K(x_i,x_j)\) is symmetric positive semi-definite (Mercer's condition). That is also what keeps the dual concave, so the optimum is unique. Valid kernels can be combined: sums, positive multiples, products, and \(\exp\) of a valid kernel are valid. The RBF kernel's feature map is infinite-dimensional: expanding \(e^{2\gamma x^\top z}\) as a power series gives every polynomial degree at once. The sigmoid kernel is <i>not</i> PSD for all \(\gamma,r\), which is why it can behave badly in the gallery below.</p>
+      </div></details>
+      <h3>How this page solves it</h3>
+      <p>The dual is a quadratic problem with box constraints and one equality. The equality \(\sum\alpha_iy_i=0\) means you cannot change a single \(\alpha\) on its own, but you can change two at once, keeping their weighted sum fixed. That is the idea behind <b>SMO</b> (sequential minimal optimisation): repeatedly pick the two \(\alpha\)'s that most violate the KKT conditions (using LIBSVM's second-order working-set selection) and solve that two-variable problem in closed form.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: SMO for the SVM dual</h5><ol>
+        <li><span class="kw">input</span> kernel matrix \(K_{ij}=K(x_i,x_j)\), labels \(y_i\in\{-1,+1\}\), \(C\), tolerance \(\varepsilon\)</li>
+        <li>\(\alpha\leftarrow0\); gradient \(G_i\leftarrow-1\) for all \(i\) <span class="cm">G = ∂(−dual)/∂α</span></li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1">pick \(i\) with the largest \(-y_iG_i\) among those that can move up</li>
+        <li class="i1">pick \(j\) giving the largest decrease among those that can move down <span class="cm">second-order choice</span></li>
+        <li class="i1"><span class="kw">if</span> the KKT gap \(&lt;\varepsilon\) <span class="kw">then</span> stop</li>
+        <li class="i1">\(\eta\leftarrow K_{ii}+K_{jj}-2K_{ij}\) <span class="cm">curvature along the pair</span></li>
+        <li class="i1">move \(\alpha_i,\alpha_j\) along the line \(y_i\alpha_i+y_j\alpha_j=\)const by the Newton step, clipped to \([0,C]\)</li>
+        <li class="i1">update \(G\) using columns \(i\) and \(j\) of \(K\)</li>
+        <li>\(b\leftarrow\) average over free SVs (\(0&lt;\alpha_i&lt;C\)) of \(y_i-\sum_j\alpha_jy_jK_{ji}\)</li>
+        <li><span class="kw">return</span> \(\alpha\), \(b\) <span class="cm">predict with f(x) = Σ αᵢyᵢK(xᵢ,x) + b</span></li>
+      </ol></div>
+      <div id="liveDual"></div>
+    </div>
+  </div>
+</section>
+
+<section id="trick" class="card">
+  <h2><span class="num">4</span>The kernel trick: from 2D to 3D</h2>
+  <p class="sub">Why would working in a bigger space help? First look at the problem flat, in 2D, where no straight line can work. Then look at the same points after adding a third coordinate, first side-on and then in full 3D.</p>
+  <div class="grid2">
+    <div><h3 style="margin-top:0">Step 1 · The data in 2D: try a straight line</h3><div class="plot sq" id="flatPlot"></div>
+      <div class="ctl"><label for="lineA"><span>Line angle</span><output id="lineAOut"></output></label><input type="range" id="lineA" min="0" max="180" step="1" value="30"></div>
+      <div class="ctl"><label for="lineB"><span>Line offset</span><output id="lineBOut"></output></label><input type="range" id="lineB" min="-3" max="3" step="0.05" value="0"></div>
+      <div class="stats" id="flatStats"></div>
+      <p class="hint">Dashed: the straight line you control. Solid purple: the circle that the 3D plane below cuts out (set by the plane height slider). The middle number is the best any angle and offset can reach (found by trying them all): a line can only cut the ring off on one side, so many points stay wrong.</p></div>
+    <div><h3 style="margin-top:0">Step 2 · Add \(z=x_1^2+x_2^2\) and look from the side</h3><div class="plot sq" id="sidePlot"></div>
+      <p class="hint">Horizontal axis: distance from the centre \(r=\sqrt{x_1^2+x_2^2}\). Vertical axis: the new coordinate \(z=r^2\), so every point sits on the curve \(z=r^2\). The inner class is low, the ring is high, and a flat cut at one height (purple) now separates them. In 2D that cut is the circle on the left.</p></div>
+  </div>
+  <h3>Step 3 · The same lift in full 3D</h3>
+  <div class="grid2">
+    <div><div class="plot sq" id="liftPlot"></div><p class="hint">Drag to rotate. Lifting with \(\phi(x_1,x_2)=(x_1,\,x_2,\,x_1^2+x_2^2)\) pushes the outer ring up. A flat plane (a <i>linear</i> separator in 3D) now splits the classes, and that plane cuts back down to a circle in 2D.</p></div>
+    <div class="prose">
+      <p>The circles dataset cannot be split by a line in the plane. But add a third coordinate \(z=x_1^2+x_2^2\) (squared distance from the origin) and the inner class sits low while the outer ring sits high. A curve in the original space has become a flat plane in the lifted one.</p>
+      <p>The trick is that the SVM never needs the lifted points themselves, only their dot products, and those can be computed straight from the original coordinates:</p>
+      <div class="mathbox c3">$$\phi(x)^\top\phi(z)=x_1z_1+x_2z_2+(x_1^2+x_2^2)(z_1^2+z_2^2)$$</div>
+      <p>A kernel lets the SVM use a feature map like this one, or even an infinite-dimensional one (RBF), at the cost of evaluating \(K\) on pairs of points. The polynomial kernel of degree 2 contains exactly these squared terms, which is why it handles circles well in the gallery below.</p>
+      <div class="ctl"><label for="planeZ"><span>Height of the separating plane</span><output id="planeZOut"></output></label><input type="range" id="planeZ" min="0.2" max="4" step="0.05" value="1.9"></div>
+      <div class="row"><button class="btn" id="spin">Auto-rotate</button></div>
+      <div class="stats" id="liftStats" style="margin-top:10px"></div>
+      <details class="deeper"><summary>Going deeper: why the kernel trick saves work</summary><div>
+        <p>The polynomial kernel \((x^\top z+1)^d\) in \(p\) dimensions corresponds to a feature map with every monomial up to degree \(d\): \(\binom{p+d}{d}\) features. For \(p=100\), \(d=3\) that is 176,851 features, but the kernel costs one dot product and a cube. The representer theorem guarantees this is enough: for any loss plus an L2 penalty on \(w\), the optimal \(w\) lies in the span of the \(\phi(x_i)\), so \(f(x)=\sum_i\beta_iK(x_i,x)\). The flip side is that the work now scales with \(n\): the kernel matrix has \(n^2\) entries, which is why kernel SVMs struggle beyond about \(10^5\) examples.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="gallery" class="card">
+  <h2><span class="num">5</span>Which kernel for which data?</h2>
+  <p class="sub">Every cell is a separate SVM trained live on 200 points (C = <span id="gC"></span>) and scored on 100 held-out points. The number is test accuracy; the small number is the count of support vectors. Click a cell to load it into the lab above.</p>
+  <div class="tblwrap"><div id="gal" style="display:grid;gap:6px;min-width:820px"></div></div>
+  <div class="grid3" style="margin-top:14px">
+    <div class="note"><b>Linear</b>: best when the classes really are separated by a line (linear blobs, noisy labels). Fewest knobs, hardest to overfit, and gives an interpretable \(w\).</div>
+    <div class="note"><b>Polynomial</b>: captures interactions such as \(x_1x_2\) (XOR) and \(x_1^2+x_2^2\) (circles). High degrees get numerically wild far from the data.</div>
+    <div class="note ok"><b>RBF</b>: the default for unknown shapes (moons, spirals). Tune \(\gamma\) and \(C\) together with cross-validation; large \(\gamma\) memorises noise.</div>
+  </div>
+  <p class="hint">A useful habit: count the support vectors. If nearly every point is one, the model is either very forgiving (small \(C\)) or memorising (large \(\gamma\)), and test accuracy will usually tell you which.</p>
+</section>
+
+<section id="cg" class="card">
+  <h2><span class="num">6</span>C and γ together (RBF kernel)</h2>
+  <p class="sub">The two knobs work together. \(C\) says how much a training mistake costs; \(\gamma\) says how far each point's influence reaches. A 3 × 3 grid of values, fitted on the dataset currently in the lab. Rows raise \(C\), columns raise \(\gamma\).</p>
+  <div id="cgGrid" style="max-width:860px;margin:0 auto;display:grid;grid-template-columns:70px repeat(3,minmax(0,1fr));gap:8px;align-items:center"></div>
+  <p class="hint">Small \(\gamma\) + small \(C\): nearly linear and smooth (underfits). Large \(\gamma\) + large \(C\): little islands around individual points (overfits). The sweet spot is usually in between, chosen by cross-validation.</p>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">7</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.svm <span class="k">import</span> SVC
+<span class="k">from</span> sklearn.model_selection <span class="k">import</span> GridSearchCV
+
+svm = SVC(kernel=<span class="s">"rbf"</span>, C=<span class="s">1.0</span>, gamma=<span class="s">1.0</span>).<span class="f">fit</span>(X, y)        <span class="c"># kernel: "linear" | "poly" (degree, coef0) | "rbf" | "sigmoid"</span>
+svm.support_            <span class="c"># indices of the support vectors</span>
+svm.dual_coef_          <span class="c"># alpha_i * y_i for each support vector</span>
+svm.intercept_          <span class="c"># b</span>
+svm.<span class="f">decision_function</span>(X_new)   <span class="c"># f(x) = sum alpha_i y_i K(x_i, x) + b</span>
+
+<span class="c"># choose C and gamma by cross-validation</span>
+grid = GridSearchCV(SVC(kernel=<span class="s">"rbf"</span>), {<span class="s">"C"</span>: [<span class="s">0.1</span>, <span class="s">1</span>, <span class="s">10</span>, <span class="s">100</span>], <span class="s">"gamma"</span>: [<span class="s">0.1</span>, <span class="s">1</span>, <span class="s">10</span>]}, cv=<span class="s">5</span>).<span class="f">fit</span>(X, y)</pre>
+  <p class="hint">You can also solve the same dual with <code>scipy.optimize.minimize</code>; SMO (used here and inside LIBSVM, which scikit-learn wraps) is the specialised algorithm that scales to large \(n\).</p>
+</section>
+
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything is computed in your browser in plain JavaScript.</p>
+</main>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/gloss.js"></script>
+<script src="../assets/models.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML, Mo=ML.models;
+ML.nav('svm'); ML.renderMath(document.body);
+const S={ds:'moons', n:120, noise:0.3, seed:7, kernel:'rbf', C:1, gamma:1, degree:3, add:0, X:[], y:[], m:null};
+function load(){ const d=ML.dataset(S.ds,S.n,S.noise,S.seed); S.X=d.X.map(p=>p.slice()); S.y=d.y.slice(); $('#dropNote').hidden=true; }
+const opts=()=>({kernel:S.kernel, C:S.C, gamma:S.gamma, degree:S.degree, coef0:1});
+const main=new ML.Plot('#mainPlot'); let dragI=-1, hoverI=-1;
+
+function refit(){ S.m = Mo.SVM(S.X, S.y, opts()); clearTimeout(S.hT); S.hT=setTimeout(hardCheck, S.mh?40:160); }
+/* is the data separable with this kernel? fit with C = 10^6: if every point ends up with y f(x) >= 1, the hard margin exists and C* = max alpha */
+function hardCheck(){ const mh=Mo.SVM(S.X, S.y, Object.assign(opts(),{C:1e6,maxIter:60000}));
+  const sep = mh.converged && mh.margins.every(v=>v>=1-1e-3), Cstar = Math.max(...mh.alpha);
+  S.mh = mh; S.hard = {sep, Cstar, conv:mh.converged}; drawMain(); }
+function drawMain(){ const P=ML.palette(), m=S.m; main.clear();
+  main.regions((x,y)=>ML.sigmoid(1.6*m.score([x,y])), 5); main.grid(1);
+  const f=(x,y)=>m.score([x,y]);
+  if($('#showM').checked){ main.contour(f,1,{color:P.k1,width:1.6,dash:[6,5]}); main.contour(f,-1,{color:P.k0,width:1.6,dash:[6,5]}); }
+  main.contour(f,0,{color:P.ink,width:2.6});
+  if($('#showH').checked && S.mh && S.mh.kernel===S.kernel){ const fh=(x,y)=>S.mh.score([x,y]); main.contour(fh,1,{color:P.star||'#eab308',width:1.4,dash:[3,4]}); main.contour(fh,-1,{color:P.star||'#eab308',width:1.4,dash:[3,4]}); main.contour(fh,0,{color:P.star||'#eab308',width:3}); }
+  if(S.kernel==='linear' && m.w){ const mid=[0,0]; const wn=Math.hypot(m.w[0],m.w[1]); if(wn>1e-9){ const p0=[-m.b*m.w[0]/(wn*wn), -m.b*m.w[1]/(wn*wn)]; main.arrow(p0[0],p0[1],p0[0]+m.w[0]/wn*0.9,p0[1]+m.w[1]/wn*0.9,{color:P.c1,width:2.5}); main.text('w',p0[0]+m.w[0]/wn*0.95,p0[1]+m.w[1]/wn*0.95,{color:P.c1,dx:4,halo:true}); } }
+  const sizeA=$('#sizeA').checked, amax=Math.max(1e-9,...m.alpha);
+  main.points(S.X,S.y,{r:4.6, size: sizeA ? i=>3+9*Math.sqrt(m.alpha[i]/amax) : null,
+    ring:i=>{ const a=m.alpha[i]; if(a<=1e-8) return i===hoverI||i===dragI?P.muted:false; return a>=S.C-1e-6 ? P.c4 : P.ink; }});
+  stats(); }
+function stats(){ const m=S.m, n=S.X.length; const sv=m.sv.length, bound=m.sv.filter(i=>m.alpha[i]>=S.C-1e-6).length; let ok=0; S.X.forEach((x,i)=>{ if((m.score(x)>=0?1:0)===S.y[i]) ok++; });
+  const cells=[['c1',sv,'support vectors'],['c3',sv-bound,'on the margin'],['c4',bound,'violators (α = C)'],['c5',ML.pct(ok/n),'training accuracy'],['c2',m.converged?m.iters.toLocaleString():m.iters.toLocaleString()+' (cap)','SMO iterations'+(m.converged?'':': stopped early')]];
+  if(S.kernel==='linear') cells.push(['c1',fmt(2/m.wnorm,3),'margin width 2/‖w‖']);
+  $('#stats').innerHTML=cells.map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  const H={linear:'Linear kernel: the boundary is a straight line and \\(w=\\sum\\alpha_iy_ix_i\\) is drawn as the arrow.', poly:'Polynomial kernel \\((\\gamma x^\\top z+1)^d\\): degree 2 gives conics (circles, ellipses, hyperbolas); higher degrees give wigglier curves.', rbf:'RBF kernel: each support vector adds a Gaussian bump of radius about \\(1/\\sqrt\\gamma\\)\\(\\,=\\,\\)'+fmt(1/Math.sqrt(S.gamma),2)+'.', sigmoid:'Sigmoid kernel \\(\\tanh(\\gamma x^\\top z+1)\\): inspired by neural nets, but not positive semi-definite for all settings, so it can behave oddly. Usually a poor choice.'};
+  let extra='';
+  if(sv>0 && bound===sv) extra+=' <b>Every support vector has \\(\\alpha_i=C\\)</b>: C is so small that the SVM prefers a very wide margin over getting points right, and every point sits inside it.'+(S.kernel==='linear'?' Then \\(w=C\\sum_i y_ix_i\\) is just C times (sum of class +1 points minus sum of class −1 points), so the line is set by the class averages, not by the closest points. Raise C (try 100 or more) to get the maximum-margin line, or tick "Compare: hard margin".':'');
+  if(S.mh && $('#showH').checked){ let okh=0; S.X.forEach((x,i)=>{ if((S.mh.score(x)>=0?1:0)===S.y[i]) okh++; }); extra+=` Gold: the same kernel with C = 1,000,000 (hard margin): training accuracy ${ML.pct(okh/n)}${S.kernel==='linear'?', margin width '+fmt(2/S.mh.wnorm,3):''}${okh<n?'. Not every point is separated, so a true hard margin does not exist for this data and kernel; this is the closest soft version.':'.'}`; }
+  if(!m.converged) extra+=' <b>The solver hit its 200,000-step cap</b>, so this boundary is approximate. Very large C with a large γ or high degree makes the problem badly conditioned (LIBSVM needs millions of steps too); lower C or γ.';
+  const hd=S.hard, kn={linear:'a straight line',poly:'this polynomial kernel',rbf:'this RBF kernel',sigmoid:'this sigmoid kernel'}[S.kernel];
+  $('#sepNote').className='note'+(hd?(hd.sep?' ok':' warn'):'');
+  $('#sepNote').innerHTML = !hd ? 'Checking whether these points can be separated perfectly…' : hd.sep
+    ? `<b>Separable with ${kn}.</b> A hard margin exists. Any C ≥ <b>C* = ${fmt(hd.Cstar,3)}</b> gives exactly the hard-margin (maximum-margin) boundary; you have C = ${fmt(S.C,3)}${S.C>=hd.Cstar-1e-9?', so this <b>is</b> the hard-margin solution.':', so the SVM is trading some violations for a wider margin. Move C above C* to get it.'}`
+    : hd.conv ? `<b>Not separable with ${kn}.</b> No line or surface of this kind puts every point on the right side with room to spare, so a hard margin does not exist; every C gives a compromise, and C sets how much it tolerates.`
+    : `Could not decide within 60,000 solver steps whether the points are separable with ${kn} (badly conditioned settings); lower γ or the degree.`;
+  $('#kHint').innerHTML=H[S.kernel]+extra; ML.renderMath($('#kHint')); drawSide(); }
+
+function drawSide(){ const m=S.m, P=ML.palette();
+  // KKT table
+  const g={zero:0,free:0,bound:0}, chk={zero:true,free:true,bound:true}; const tol=1e-2;
+  m.alpha.forEach((a,i)=>{ const mg=m.margins[i]; if(a<=1e-8){g.zero++; if(mg<1-tol*3) chk.zero=false;} else if(a>=S.C-1e-6){g.bound++; if(mg>1+tol*3) chk.bound=false;} else {g.free++; if(Math.abs(mg-1)>0.05) chk.free=false;} });
+  $('#kktTbl').innerHTML=`<tr><th>Group</th><th>\\(\\alpha_i\\)</th><th>\\(y_if(x_i)\\)</th><th>Count now</th><th>Check</th></tr>`+
+   [['Outside the margin','\\(\\alpha_i=0\\)','\\(\\ge1\\)',g.zero,chk.zero],['On the margin (free SV)','\\(0\\lt\\alpha_i\\lt C\\)','\\(=1\\)',g.free,chk.free],['Inside / wrong side (bound SV)','\\(\\alpha_i=C\\)','\\(\\le1\\)',g.bound,chk.bound]]
+   .map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]?'✓':'≈'}</td></tr>`).join('');
+  ML.renderMath($('#kktTbl'));
+  const sa=m.alpha.map((a,i)=>[a,i]).filter(p=>p[0]>1e-8).sort((a,b)=>b[0]-a[0]);
+  const ap=alphaPlot; ap.clear(); const c=ap.ctx, L=40,R=10,T=12,B=22, W=ap.w-L-R, Hh=ap.h-T-B, top=Math.max(S.C*1.1, ...sa.map(p=>p[0]));
+  c.save(); c.font='11px Inter,system-ui,sans-serif'; c.fillStyle=P.muted; c.textAlign='right'; c.fillText(fmt(top,2),L-4,T+8); c.fillText('0',L-4,T+Hh);
+  const bw=Math.max(1,Math.min(14,W/Math.max(sa.length,1)-1)); sa.forEach((p,k)=>{ const h=p[0]/top*Hh; c.fillStyle=S.y[p[1]]?P.k1:P.k0; c.fillRect(L+k*(bw+1),T+Hh-h,bw,h); });
+  c.strokeStyle=P.c4; c.setLineDash([5,4]); c.lineWidth=1.5; const yc=T+Hh-S.C/top*Hh; c.beginPath(); c.moveTo(L,yc); c.lineTo(L+W,yc); c.stroke(); c.setLineDash([]); c.fillStyle=P.c4; c.textAlign='left'; c.fillText('C = '+fmt(S.C,2),L+W-60,yc-4);
+  c.fillStyle=P.muted; c.fillText(sa.length+' non-zero α out of '+m.alpha.length+'   (Σ αᵢyᵢ = '+fmt(m.alpha.reduce((s,a,i)=>s+a*(S.y[i]?1:-1),0),5)+')',L,ap.h-6); c.restore();
+  // margins plot
+  const mp=marginPlot, ms=m.margins.map((v,i)=>[v,i]).sort((a,b)=>a[0]-b[0]); mp.clear(); const c2=mp.ctx; const lo=Math.max(-3,Math.min(-0.5,ms[0][0])), hi=Math.min(4,Math.max(2,ms[ms.length-1][0]));
+  const fy=v=>T+Hh-(Math.max(lo,Math.min(hi,v))-lo)/(hi-lo)*(mp.h-T-B), fx=k=>L+k/(ms.length-1||1)*(mp.w-L-R);
+  c2.save(); c2.fillStyle=P.c2; c2.globalAlpha=.15; c2.beginPath(); c2.moveTo(fx(0),fy(1)); ms.forEach((p,k)=>c2.lineTo(fx(k),fy(Math.min(1,p[0])))); c2.lineTo(fx(ms.length-1),fy(1)); c2.closePath(); c2.fill(); c2.globalAlpha=1;
+  [[1,P.ink,'1'],[0,P.c2,'0']].forEach(([v,col,l])=>{ c2.strokeStyle=col; c2.setLineDash([4,4]); c2.beginPath(); c2.moveTo(L,fy(v)); c2.lineTo(mp.w-R,fy(v)); c2.stroke(); c2.setLineDash([]); c2.fillStyle=col; c2.font='11px Inter,system-ui,sans-serif'; c2.textAlign='right'; c2.fillText(l,L-4,fy(v)+4); });
+  ms.forEach((p,k)=>{ c2.fillStyle=S.y[p[1]]?P.k1:P.k0; c2.beginPath(); c2.arc(fx(k),fy(p[0]),2.6,0,7); c2.fill(); }); c2.restore();
+  $('#liveDual').innerHTML='<div class="mathbox c5">'+ML.tex(`\\text{Now: } \\sum_i\\alpha_i-\\tfrac12\\sum_{i,j}\\alpha_i\\alpha_jy_iy_jK_{ij}=${fmt(m.dual,4)},\\quad b=${fmt(m.b,4)},\\quad \\#\\mathrm{SV}=${m.sv.length}`,true)+'</div>';
+}
+const alphaPlot=new ML.Plot('#alphaPlot',{equal:false}), marginPlot=new ML.Plot('#marginPlot',{equal:false});
+
+let raf=0; function update(){ if(raf) return; raf=requestAnimationFrame(()=>{ raf=0; refit(); drawMain(); }); }
+main.pointer({
+  down(x,y,px,py,e){ if(e.button===2) return; const i=main.nearest(S.X,px,py,12); if(i>=0) dragI=i; else { S.X.push([x,y]); S.y.push(S.add); dragI=S.X.length-1; update(); } },
+  move(x,y){ if(dragI>=0){ S.X[dragI]=[x,y]; update(); } },
+  up(){ dragI=-1; },
+  hover(x,y,px,py){ const i=main.nearest(S.X,px,py,12); if(i!==hoverI){ hoverI=i; main.cv.style.cursor=i>=0?'grab':'crosshair'; drawMain(); } },
+  context(x,y,px,py){ const i=main.nearest(S.X,px,py,12); if(i>=0 && S.X.length>3){ S.X.splice(i,1); S.y.splice(i,1); update(); } }
+});
+$('#dropNon').onclick=()=>{ const m=S.m, before=S.X.length, keep=m.sv; const old=S.m; const grid=[]; for(let i=0;i<25;i++) for(let j=0;j<25;j++) grid.push([-3+6*i/24,-3+6*j/24]);
+  S.X=keep.map(i=>S.X[i]); S.y=keep.map(i=>S.y[i]); refit(); let agree=0; grid.forEach(g=>{ if((old.score(g)>=0)===(S.m.score(g)>=0)) agree++; });
+  const maxd=Math.max(...grid.map(g=>Math.abs(old.score(g)-S.m.score(g))));
+  $('#dropNote').hidden=false; $('#dropNote').className='note ok'; $('#dropNote').innerHTML=`Deleted <b>${before-keep.length}</b> of ${before} points and retrained on the ${keep.length} support vectors alone. The new boundary agrees with the old one on <b>${(100*agree/grid.length).toFixed(1)}%</b> of a 25 × 25 grid (largest change in \\(f\\): ${fmt(maxd,4)}).`; ML.renderMath($('#dropNote')); drawMain(); };
+$('#dropSV').onclick=()=>{ const m=S.m; const free=m.sv.filter(i=>m.alpha[i]<S.C-1e-6); const pick=(free.length?free:m.sv)[0]; if(pick===undefined) return; const old=S.m;
+  S.X.splice(pick,1); S.y.splice(pick,1); refit(); let diff=0; for(let i=0;i<25;i++) for(let j=0;j<25;j++){ const g=[-3+6*i/24,-3+6*j/24]; diff=Math.max(diff,Math.abs(old.score(g)-S.m.score(g))); }
+  $('#dropNote').hidden=false; $('#dropNote').className='note warn'; $('#dropNote').innerHTML=`Deleted one support vector. The boundary moved (largest change in \\(f\\) on the grid: <b>${fmt(diff,3)}</b>) and the SVM now has ${S.m.sv.length} support vectors.`; ML.renderMath($('#dropNote')); drawMain(); };
+
+/* controls */
+ML.datasetPicker('dsPick', S.ds, id=>{ S.ds=id; load(); update(); drawCG(); drawLiftIfNeeded(); });
+ML.bindSeg('kSeg', v=>{ S.kernel=v; $('#gWrap').hidden=(v==='linear'); $('#dWrap').hidden=(v!=='poly'); update(); });
+ML.bindRange('C', v=>{ S.C=Math.pow(10,v); update(); }, v=>Math.pow(10,v).toPrecision(2));
+ML.bindRange('gam', v=>{ S.gamma=Math.pow(10,v); update(); }, v=>Math.pow(10,v).toPrecision(2));
+ML.bindRange('deg', v=>{ S.degree=v; update(); });
+ML.bindRange('nPts', v=>{ S.n=v; load(); update(); });
+ML.bindRange('noise', v=>{ S.noise=v; load(); update(); }, v=>v.toFixed(2));
+ML.bindSeg('addSeg', v=>{ S.add=+v; });
+$('#sizeA').onchange=$('#showM').onchange=drawMain; $('#showH').onchange=drawMain;
+$('#resample').onclick=()=>{ S.seed++; load(); update(); };
+
+/* ---------- 3D lift ---------- */
+const lift=new ML.Plot('#liftPlot',{bounds:{x0:-1,x1:1,y0:-1,y1:1}}); const LI={yaw:0.6,pitch:0.45,spin:null,data:ML.dataset('circles',220,0.2,4)};
+function drawLift(){ const P=ML.palette(), c=lift.ctx, d=LI.data, zc=+$('#planeZ').value; lift.clear();
+  const pr=(x,y,z)=>{ const cy=Math.cos(LI.yaw), sy=Math.sin(LI.yaw), cp=Math.cos(LI.pitch), sp=Math.sin(LI.pitch); const zz=z-2;
+    let X=cy*x-sy*y, Y=sy*x+cy*y; let Y2=cp*zz - sp*Y, D=sp*zz+cp*Y; const s=lift.w/8.5; return [lift.w/2+X*s, lift.h/2 - Y2*s, D]; };
+  // plane
+  const corners=[[-3,-3],[3,-3],[3,3],[-3,3]].map(p=>pr(p[0],p[1],zc)); c.save(); c.fillStyle=P.c1; c.globalAlpha=.14; c.beginPath(); corners.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath(); c.fill(); c.globalAlpha=.6; c.strokeStyle=P.c1; c.lineWidth=1.5; c.stroke(); c.restore();
+  // floor circle where plane meets paraboloid
+  c.save(); c.strokeStyle=P.c1; c.lineWidth=2.5; c.beginPath(); for(let k=0;k<=80;k++){ const t=k/80*2*Math.PI, r=Math.sqrt(zc), p=pr(r*Math.cos(t),r*Math.sin(t),zc); k?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]); } c.stroke();
+  c.setLineDash([4,4]); c.globalAlpha=.6; c.beginPath(); for(let k=0;k<=80;k++){ const t=k/80*2*Math.PI, r=Math.sqrt(zc), p=pr(r*Math.cos(t),r*Math.sin(t),0); k?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]); } c.stroke(); c.restore();
+  // axes
+  [[[0,0,0],[3,0,0],'x₁'],[[0,0,0],[0,3,0],'x₂'],[[0,0,0],[0,0,5],'z = x₁²+x₂²']].forEach(([a,b,l])=>{ const A=pr(...a), Bp=pr(...b); c.save(); c.strokeStyle=P.muted; c.lineWidth=1.2; c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(Bp[0],Bp[1]); c.stroke(); c.fillStyle=P.muted; c.font='600 12px Inter,system-ui,sans-serif'; c.fillText(l,Bp[0]+4,Bp[1]); c.restore(); });
+  const pts=d.X.map((x,i)=>{ const z=x[0]*x[0]+x[1]*x[1]; return {p:pr(x[0],x[1],z), q:pr(x[0],x[1],0), y:d.y[i], z}; }).sort((a,b)=>b.p[2]-a.p[2]);
+  pts.forEach(o=>{ c.save(); c.globalAlpha=.18; c.fillStyle=o.y?P.k1:P.k0; c.beginPath(); c.arc(o.q[0],o.q[1],2,0,7); c.fill(); c.restore(); });
+  pts.forEach(o=>{ c.beginPath(); c.arc(o.p[0],o.p[1],4,0,7); c.fillStyle=o.y?P.k1:P.k0; c.fill(); c.strokeStyle=P.bg; c.lineWidth=1; c.stroke(); });
+  let ok=0; d.X.forEach((x,i)=>{ const z=x[0]*x[0]+x[1]*x[1]; if((z<zc?1:0)===d.y[i]) ok++; });
+  $('#liftStats').innerHTML=[['c1',ML.pct(ok/d.X.length),'accuracy of the plane'],['c3','r = '+fmt(Math.sqrt(zc),2),'circle radius in 2D']].map(([c2,v,l])=>`<div class="stat ${c2}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+let ld=null; lift.host.style.touchAction='none'; lift.cv.addEventListener('pointerdown',e=>{ ld=[e.clientX,e.clientY,LI.yaw,LI.pitch]; lift.cv.setPointerCapture(e.pointerId); });
+lift.cv.addEventListener('pointermove',e=>{ if(!ld) return; LI.yaw=ld[2]+(e.clientX-ld[0])*0.01; LI.pitch=Math.max(-0.2,Math.min(1.5,ld[3]+(e.clientY-ld[1])*0.01)); drawLift(); });
+lift.cv.addEventListener('pointerup',()=>ld=null); lift.cv.style.cursor='grab';
+$('#spin').onclick=()=>{ if(LI.spin){ clearInterval(LI.spin); LI.spin=null; $('#spin').textContent='Auto-rotate'; } else { LI.spin=setInterval(()=>{ LI.yaw+=0.02; drawLift(); },30); $('#spin').textContent='Stop'; } };
+ML.bindRange('planeZ', ()=>{ drawLift(); drawFlat(); }, v=>v.toFixed(2)); lift.onResize=drawLift;
+/* ---------- 2D views before the 3D lift ---------- */
+const flat=new ML.Plot('#flatPlot',{bounds:{x0:-3,x1:3,y0:-3,y1:3}}), side=new ML.Plot('#sidePlot',{bounds:{x0:0,x1:3,y0:0,y1:7},equal:false});
+function lineAcc(th,off){ const d=LI.data, n=[Math.cos(th),Math.sin(th)]; let a=0; d.X.forEach((x,i)=>{ if(((n[0]*x[0]+n[1]*x[1]-off)<0?1:0)===d.y[i]) a++; }); a/=d.X.length; return Math.max(a,1-a); }
+let bestLine=0; for(let t=0;t<180;t+=2) for(let o=-3;o<=3;o+=0.05) bestLine=Math.max(bestLine,lineAcc(t*Math.PI/180,o));
+function drawFlat(){ const P=ML.palette(), d=LI.data, th=+$('#lineA').value*Math.PI/180, off=+$('#lineB').value, zc=+$('#planeZ').value, r=Math.sqrt(zc);
+  flat.clear(); flat.grid(1,true); const c=flat.ctx;
+  c.save(); c.strokeStyle=P.c1; c.lineWidth=2.5; c.beginPath(); c.arc(flat.X(0),flat.Y(0),flat.X(r)-flat.X(0),0,7); c.stroke(); c.restore();
+  flat.hline(Math.cos(th),Math.sin(th),-off,{color:P.ink,width:2,dash:[6,5]});
+  flat.points(d.X,d.y);
+  let ok=0; d.X.forEach((x,i)=>{ if(((x[0]*x[0]+x[1]*x[1])<zc?1:0)===d.y[i]) ok++; });
+  $('#flatStats').innerHTML=[['c4',ML.pct(lineAcc(th,off)),'your straight line'],['c2',ML.pct(bestLine),'best any straight line can do'],['c1',ML.pct(ok/d.X.length),'the circle from the 3D plane']].map(([k,v,l])=>`<div class="stat ${k}"><b>${v}</b><span>${l}</span></div>`).join('');
+  side.clear(); side.grid(1,true); const sc=side.ctx;
+  sc.save(); sc.strokeStyle=P.muted; sc.lineWidth=1.5; sc.setLineDash([4,4]); sc.beginPath(); for(let k=0;k<=60;k++){ const rr=k/60*2.65; k?sc.lineTo(side.X(rr),side.Y(rr*rr)):sc.moveTo(side.X(rr),side.Y(rr*rr)); } sc.stroke(); sc.restore();
+  side.line(0,zc,3,zc,{color:P.c1,width:2.5}); side.text('plane z = '+zc.toFixed(2),0.05,zc,{dy:-6,color:P.c1,halo:true});
+  side.line(r,0,r,zc,{color:P.c1,width:1.2,dash:[3,4]}); side.text('r = '+r.toFixed(2),r,0,{dx:4,dy:-6,color:P.c1,halo:true});
+  side.points(d.X.map(x=>{ const q=Math.hypot(x[0],x[1]); return [q,q*q]; }),d.y); }
+ML.bindRange('lineA', drawFlat, v=>v+'\u00b0'); ML.bindRange('lineB', drawFlat, v=>v.toFixed(2)); flat.onResize=drawFlat; side.onResize=drawFlat;
+function drawLiftIfNeeded(){}
+
+/* ---------- gallery ---------- */
+const KS=[['Linear',{kernel:'linear'}],['Poly d=2',{kernel:'poly',degree:2,gamma:0.5}],['Poly d=3',{kernel:'poly',degree:3,gamma:0.5}],['RBF γ=0.3',{kernel:'rbf',gamma:0.3}],['RBF γ=3',{kernel:'rbf',gamma:3}],['RBF γ=30',{kernel:'rbf',gamma:30}],['Sigmoid',{kernel:'sigmoid',gamma:0.3,coef0:-0.5}]];
+let galToken=0;
+function buildGallery(){ const gal=$('#gal'); const tok=++galToken; $('#gC').textContent='1'; gal.style.gridTemplateColumns=`110px repeat(${KS.length},minmax(0,1fr))`;
+  gal.innerHTML='<div></div>'+KS.map(k=>`<div style="font-size:12px;font-weight:700;text-align:center">${k[0]}</div>`).join('');
+  const jobs=[]; ML.DATASETS.forEach(d=>{ const lab=document.createElement('div'); lab.style.cssText='font-size:12px;font-weight:700'; lab.innerHTML=`${d.name}<br><span class="pill">${d.level}</span>`; gal.appendChild(lab);
+    KS.forEach(k=>{ const cell=document.createElement('div'); cell.className='thumb'; cell.innerHTML='<div class="plot sq" style="border:0;border-radius:0"></div><div>…</div>'; gal.appendChild(cell); jobs.push({d,k,cell}); }); });
+  const run=()=>{ if(tok!==galToken) return; const j=jobs.shift(); if(!j) return; const data=ML.dataset(j.d.id,300,0.3,21), s=ML.split(data,1/3,2), o=Object.assign({C:1,coef0:1},j.k[1]);
+    const m=Mo.SVM(s.Xtr,s.ytr,o), acc=ML.accuracy(m,s.Xte,s.yte); const pl=new ML.Plot(j.cell.firstChild); const dr=()=>{ pl.clear(); pl.regions((x,y)=>ML.sigmoid(1.6*m.score([x,y])),4); pl.contour((x,y)=>m.score([x,y]),0,{width:1.5,res:4}); pl.points(s.Xtr,s.ytr,{r:1.8}); }; dr(); pl.onResize=dr;
+    j.cell.lastChild.innerHTML=`<b style="color:${acc>0.9?'var(--c5)':acc>0.75?'var(--c4)':'var(--c2)'}">${ML.pct(acc)}</b> · ${m.sv.length} SV`; j.cell.title=`${j.d.name}, ${j.k[0]}: test accuracy ${ML.pct(acc)}, ${m.sv.length} support vectors`;
+    j.cell.onclick=()=>{ S.ds=j.d.id; ML.datasetPicker('dsPick', S.ds, id=>{ S.ds=id; load(); update(); drawCG(); }); const k=j.k[1]; S.kernel=k.kernel; ML.setSeg('kSeg',k.kernel); $('#gWrap').hidden=k.kernel==='linear'; $('#dWrap').hidden=k.kernel!=='poly';
+      if(k.gamma){ S.gamma=k.gamma; $('#gam').value=Math.log10(k.gamma); $('#gamOut').textContent=k.gamma; } if(k.degree){ S.degree=k.degree; $('#deg').value=k.degree; $('#degOut').textContent=k.degree; } S.C=1; $('#C').value=0; $('#COut').textContent='1';
+      load(); update(); drawCG(); document.getElementById('lab').scrollIntoView({behavior:'smooth'}); };
+    setTimeout(run,0); }; run(); }
+
+/* ---------- C x gamma grid ---------- */
+let cgToken=0;
+function drawCG(){ const g=$('#cgGrid'), tok=++cgToken, Cs=[0.1,1,100], Gs=[0.1,1,10]; g.innerHTML='<div></div>'+Gs.map(v=>`<div style="text-align:center;font-weight:700;font-size:13px">γ = ${v}</div>`).join('');
+  const data=ML.dataset(S.ds,200,S.noise,S.seed), s=ML.split(data,0.3,3); const jobs=[];
+  Cs.forEach(C=>{ const l=document.createElement('div'); l.style.cssText='font-weight:700;font-size:13px'; l.textContent='C = '+C; g.appendChild(l);
+    Gs.forEach(G=>{ const cell=document.createElement('div'); cell.className='thumb'; cell.style.cursor='default'; cell.innerHTML='<div class="plot sq" style="border:0;border-radius:0"></div><div>…</div>'; g.appendChild(cell); jobs.push({C,G,cell}); }); });
+  const run=()=>{ if(tok!==cgToken) return; const j=jobs.shift(); if(!j) return; const m=Mo.SVM(s.Xtr,s.ytr,{kernel:'rbf',C:j.C,gamma:j.G}); const pl=new ML.Plot(j.cell.firstChild);
+    const dr=()=>{ pl.clear(); pl.regions((x,y)=>ML.sigmoid(1.6*m.score([x,y])),4); pl.contour((x,y)=>m.score([x,y]),0,{width:1.8,res:4}); pl.points(s.Xtr,s.ytr,{r:2.6,ring:i=>m.alpha[i]>1e-8?ML.palette().ink:false}); }; dr(); pl.onResize=dr;
+    j.cell.lastChild.innerHTML=`train ${ML.pct(ML.accuracy(m,s.Xtr,s.ytr))} · <b>test ${ML.pct(ML.accuracy(m,s.Xte,s.yte))}</b> · ${m.sv.length} SV`; setTimeout(run,0); }; run(); }
+
+main.onResize=()=>S.m&&drawMain(); alphaPlot.onResize=marginPlot.onResize=()=>S.m&&drawSide();
+ML.onTheme(()=>{ drawMain(); drawLift(); drawFlat(); buildGallery(); drawCG(); });
+load(); refit(); drawMain(); drawLift(); drawFlat(); setTimeout(()=>{ buildGallery(); drawCG(); }, 50);
+})();
+</script>
+</body>
+</html>

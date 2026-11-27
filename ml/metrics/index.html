@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Model evaluation metrics, explained interactively</title>
+<meta name="description" content="How to measure a model: confusion matrix, accuracy, precision, recall, F1 and MCC with a live threshold, ROC and precision–recall curves, calibration and log loss, regression metrics, ranking metrics (precision@k, MRR, nDCG), text metrics (BLEU, ROUGE, perplexity, pass@k) and IoU for vision.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Evaluating models</p>
+  <h1>Evaluation metrics: <span class="grad">what “good” means</span></h1>
+  <p class="lede">A model is only as good as the number you judge it by. Pick the wrong metric and a useless model can look excellent: a cancer test that always says “healthy” is 99% accurate. This page builds every common metric from one idea, counting what the model got right and wrong, and shows when each one misleads.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#confusion">1 · Confusion matrix</a><a href="#curves">2 · ROC &amp; PR curves</a><a href="#prob">3 · Probabilities</a><a href="#reg">4 · Regression</a><a href="#rank">5 · Ranking</a><a href="#gen">6 · Text</a><a href="#vision">7 · Vision</a><a href="#choose">8 · Which one?</a><a href="#py">9 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is an evaluation metric, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>A <a class="term" data-t="metric">metric</a> is a number that summarises how well predictions match the truth on data the model has never seen (the <a class="term" data-t="test-set">test set</a>). The <a class="term" data-t="loss">loss</a> is what the model is trained to minimise; a metric is what <i>you</i> care about. They are often different: a network is trained on cross-entropy, but you report accuracy, recall or revenue.</p>
+      <h3>How it works</h3>
+      <ol class="steps2"><li>Hold out data the model never trained on.</li><li>Compare each prediction with the truth.</li><li>Count or average the agreements and mistakes in a way that reflects their real cost.</li><li>Report the number with its uncertainty, and compare with a simple baseline.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Airport security can stop every bag (no bomb ever gets through, endless queues) or no bag (no queues, every bomb gets through). Both extremes are “perfect” by one measure and absurd by another. Every metric on this page is a different way of saying how to trade those two kinds of mistake.</p>
+      <div class="pc"><div class="pro"><b>Good habits</b><ul><li>Choose the metric before looking at results</li><li>Always show a baseline (majority class, mean prediction)</li><li>Report uncertainty: a <a href="../../math/inference/#ci">confidence interval</a></li></ul></div><div class="con"><b>Classic traps</b><ul><li>Accuracy on imbalanced data</li><li>Tuning on the test set</li><li>Comparing scores computed on different data</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="confusion-matrix">Confusion matrix</a><a class="term" data-t="precision">Precision</a><a class="term" data-t="recall">Recall</a><a class="term" data-t="f1">F1</a><a class="term" data-t="roc">ROC / AUC</a><a class="term" data-t="calibration">Calibration</a><a class="term" data-t="ndcg">nDCG</a><a class="term" data-t="bleu">BLEU</a><a class="term" data-t="iou">IoU</a></div>
+      <p class="hint">Where the data come from, and how to split them so these numbers are honest, is on the <a href="../datasets/">datasets page</a>.</p>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="confusion" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>The confusion matrix: four ways to be right or wrong</h2>
+    <p class="sub">A classifier gives each example a score. Orange: true positives' scores; teal: true negatives'. Everything right of the threshold is predicted positive. Counts are per 1,000 test examples.</p>
+    <div class="plot short" id="pC"></div>
+    <div class="cm" id="cmGrid"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Every binary prediction lands in one of four cells. A <b>true positive</b> (TP) is a sick patient flagged as sick; a <b>false positive</b> (FP) is a healthy one flagged; a <b>false negative</b> (FN) is a sick one missed; a <b>true negative</b> (TN) a healthy one cleared. Every classification metric is a ratio of these four counts:</p>
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Metric</th><th>Formula</th><th>Question it answers</th></tr>
+        <tr><td><b>Accuracy</b></td><td>\(\frac{TP+TN}{\text{all}}\)</td><td>How often is it right?</td></tr>
+        <tr><td><b>Precision</b></td><td>\(\frac{TP}{TP+FP}\)</td><td>When it says positive, how often is it?</td></tr>
+        <tr><td><b>Recall</b> (sensitivity, TPR)</td><td>\(\frac{TP}{TP+FN}\)</td><td>Of the real positives, how many did it find?</td></tr>
+        <tr><td><b>Specificity</b> (TNR)</td><td>\(\frac{TN}{TN+FP}\)</td><td>Of the real negatives, how many did it clear?</td></tr>
+        <tr><td><b>F1</b></td><td>\(\frac{2PR}{P+R}\)</td><td>Harmonic mean of precision and recall: low if either is low</td></tr>
+        <tr><td><b>Balanced accuracy</b></td><td>\(\frac{\text{TPR}+\text{TNR}}2\)</td><td>Accuracy as if the classes were equally common</td></tr>
+        <tr><td><b>MCC</b></td><td>\(\frac{TP\cdot TN-FP\cdot FN}{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}}\)</td><td>A correlation between prediction and truth, −1 to 1; fair under imbalance</td></tr>
+      </table></div>
+      <div class="ctl"><label for="cT"><span>Threshold</span><output id="cTOut"></output></label><input type="range" id="cT" min="-3" max="5" step="0.05" value="1"></div>
+      <div class="ctl"><label for="cD"><span>How well the model separates the classes (d′)</span><output id="cDOut"></output></label><input type="range" id="cD" min="0" max="4" step="0.05" value="2"></div>
+      <div class="ctl"><label for="cP"><span>Share of positives (prevalence)</span><output id="cPOut"></output></label><input type="range" id="cP" min="0.005" max="0.5" step="0.005" value="0.1"></div>
+      <div class="stats" id="cStats"></div>
+      <div class="note" id="cNote"></div>
+      <details class="deeper"><summary>Going deeper: more than two classes, and F-beta</summary><div>
+        <p>With \(K\) classes the confusion matrix is \(K\times K\). Precision and recall are computed per class (that class against the rest), then averaged. <b>Macro</b> averaging gives every class equal weight, so rare classes count. <b>Micro</b> averaging pools all the counts first; for single-label problems micro-F1 equals accuracy. <b>Weighted</b> averaging weights each class by its frequency.</p>
+        <p>\(F_\beta=(1+\beta^2)\frac{PR}{\beta^2P+R}\) treats recall as \(\beta\) times as important as precision. \(F_2\) suits screening, where a miss is worse than a false alarm; \(F_{0.5}\) suits spam filtering, where a false alarm (a lost real email) is worse.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="curves" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Every threshold at once: ROC and precision–recall curves</h2>
+    <p class="sub">Sweep the threshold from high to low and plot each confusion matrix as one point. Left: ROC (recall against false-positive rate). Right: precision against recall. The dot is the threshold from section 1.</p>
+    <div class="grid2" style="gap:10px"><div class="plot short" id="pRoc"></div><div class="plot short" id="pPr"></div></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A single threshold is a business decision. To judge the <i>model</i>, look at all thresholds. The <a class="term" data-t="roc">ROC curve</a> plots recall (TPR) against the false-positive rate \(\text{FPR}=FP/(FP+TN)\). Its area, the <b>AUC</b>, has a clean meaning: the probability that a random positive gets a higher score than a random negative. 0.5 is coin-flipping; 1 is perfect ranking.</p>
+      <p>Now drag the prevalence in section 1 down to 1%. The ROC curve does not move at all, because TPR and FPR are each computed within one class. The precision–recall curve collapses: with 99 negatives per positive, even a small FPR means many false alarms per true find. For rare events (fraud, disease, defects), the PR curve and its area, <b>average precision</b> (AP), tell the truth that ROC hides.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: precision–recall curve and average precision</h5><ol>
+        <li><span class="kw">input</span> scores \(s_i\) and labels \(y_i\in\{0,1\}\) for the test set, with \(P\) positives</li>
+        <li>sort examples by score, highest first</li>
+        <li>\(TP\leftarrow0,\ FP\leftarrow0,\ AP\leftarrow0\)</li>
+        <li><span class="kw">for</span> each example in that order <span class="kw">do</span> <span class="cm">lower the threshold past it</span></li>
+        <li class="i1"><span class="kw">if</span> \(y=1\) <span class="kw">then</span> \(TP\leftarrow TP+1\); \(AP\leftarrow AP+\frac{1}{P}\cdot\frac{TP}{TP+FP}\) <span class="kw">else</span> \(FP\leftarrow FP+1\)</li>
+        <li class="i1">record the point (recall \(TP/P\), precision \(TP/(TP+FP)\))</li>
+        <li><span class="kw">return</span> the curve and \(AP\) <span class="cm">precision averaged over the positions of the positives</span></li>
+      </ol></div>
+      <div class="stats" id="rStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="prob" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Are the probabilities honest? Calibration and log loss</h2>
+    <p class="sub">A reliability diagram. Predictions are grouped by the probability the model gave; each bar shows how often the event actually happened in that group. A calibrated model lies on the diagonal.</p>
+    <div class="plot wide" id="pCal"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>When a weather model says “70% rain”, it should rain on about 70% of those days. That property is <a class="term" data-t="calibration">calibration</a>, and it matters whenever the probability itself drives a decision: pricing, triage, or deciding when to ask a human. Accuracy and AUC ignore it completely: squash every probability towards 0.5 and the ranking, so the AUC, is unchanged.</p>
+      <p>Two metrics score probabilities directly. <b>Log loss</b> (cross-entropy) \(-\frac1n\sum[y\log p+(1-y)\log(1-p)]\) punishes confident mistakes without limit. The <b>Brier score</b> \(\frac1n\sum(p-y)^2\) is the mean squared error of the probabilities. <b>ECE</b> (expected calibration error) is the average gap between the bars and the diagonal, weighted by how many predictions fall in each bin.</p>
+      <div class="ctl"><label for="kT"><span>Model confidence (1 = calibrated)</span><output id="kTOut"></output></label><input type="range" id="kT" min="0.3" max="3" step="0.05" value="2"></div>
+      <div class="stats" id="kStats"></div>
+      <p class="hint">Above 1 the model is over-confident (bars flatter than the diagonal), as modern deep networks typically are; below 1 it is under-confident. The fix, temperature scaling, divides the logits by one number fitted on validation data, which is exactly this slider.</p>
+    </div>
+  </div>
+</section>
+
+<section id="reg" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Regression: how far off, on average?</h2>
+    <p class="sub">Predictions (line) against actual values (dots) for 30 houses. One prediction can be made badly wrong with the slider. Watch which metrics react.</p>
+    <div class="plot wide" id="pReg"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Metric</th><th>Formula</th><th>Read it as</th></tr>
+        <tr><td><b>MAE</b></td><td>\(\frac1n\sum|y-\hat y|\)</td><td>Typical error, in the target's units; robust to outliers</td></tr>
+        <tr><td><b>MSE</b> / <b>RMSE</b></td><td>\(\frac1n\sum(y-\hat y)^2\), its square root</td><td>Punishes big misses much more; RMSE is in the target's units</td></tr>
+        <tr><td><b>R²</b></td><td>\(1-\frac{\sum(y-\hat y)^2}{\sum(y-\bar y)^2}\)</td><td>Share of variance explained; 0 = no better than predicting the mean</td></tr>
+        <tr><td><b>MAPE</b></td><td>\(\frac1n\sum\big|\frac{y-\hat y}{y}\big|\)</td><td>Percentage error; explodes when \(y\) is near 0</td></tr>
+        <tr><td><b>Median AE</b></td><td>median of \(|y-\hat y|\)</td><td>The typical miss, ignoring the worst half entirely</td></tr>
+      </table></div>
+      <div class="ctl"><label for="gO"><span>Size of one bad miss (₹ lakh)</span><output id="gOOut"></output></label><input type="range" id="gO" min="0" max="150" step="1" value="0"></div>
+      <div class="stats" id="gStats"></div>
+      <p>RMSE and R² follow the squared error, which is what <a href="../linear-regression/">least squares</a> minimises, so one bad miss dominates them. MAE moves linearly and the median barely moves. Report the one whose notion of “cost” matches yours: an insurer pricing a portfolio cares about totals (MSE-like); a customer cares about their own quote (MAE-like).</p>
+    </div>
+  </div>
+</section>
+
+<section id="rank" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Ranking and retrieval: is the best stuff at the top?</h2>
+    <p class="sub">A search engine returned these 8 documents in this order. The number is how relevant each really is (3 = perfect, 0 = useless). Use the arrows to reorder them and watch the metrics.</p>
+    <div class="ranklist" id="rankList"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Search, recommendation and <a href="../../dl/nlp/rag/">retrieval for RAG</a> return a ranked list, and users mostly look at the top. So these metrics only look at the first \(k\) results and reward putting good items early.</p>
+      <ul>
+        <li><b>Precision@k</b>: share of the top \(k\) that are relevant. <b>Recall@k</b>: share of all relevant items that made the top \(k\).</li>
+        <li><b>MRR</b>: \(1/\text{rank}\) of the first relevant result, averaged over queries. Good when one right answer is enough.</li>
+        <li><a class="term" data-t="ndcg">nDCG@k</a>: uses graded relevance, discounts each position by \(\log_2(\text{rank}+1)\), and divides by the best possible score so a perfect order gets 1.</li>
+      </ul>
+      <div class="mathbox c1">$$\text{DCG@}k=\sum_{i=1}^{k}\frac{2^{\text{rel}_i}-1}{\log_2(i+1)},\qquad \text{nDCG@}k=\frac{\text{DCG@}k}{\text{DCG@}k\text{ of the ideal order}}.$$</div>
+      <div class="algo"><h5 class="algo-h">Algorithm: nDCG@k</h5><ol>
+        <li><span class="kw">input</span> relevance grades \(\text{rel}_1..\text{rel}_n\) in the order the system ranked them, cut-off \(k\)</li>
+        <li>\(\text{DCG}\leftarrow\sum_{i=1}^{k}(2^{\text{rel}_i}-1)/\log_2(i+1)\) <span class="cm">gain, discounted by position</span></li>
+        <li>sort the grades from best to worst: the ideal ranking</li>
+        <li>\(\text{IDCG}\leftarrow\) the same sum over the ideal ranking</li>
+        <li><span class="kw">return</span> \(\text{DCG}/\text{IDCG}\) <span class="cm">1 means no better order exists</span></li>
+      </ol></div>
+      <div class="ctl"><label for="rk"><span>Cut-off \(k\)</span><output id="rkOut"></output></label><input type="range" id="rk" min="1" max="8" step="1" value="5"></div>
+      <div class="stats" id="kRank"></div>
+      <div class="player"><button class="btn" id="rkBest">Ideal order</button><button class="btn" id="rkShuf">Shuffle</button></div>
+    </div>
+  </div>
+</section>
+
+<section id="gen" class="lab">
+  <div class="card hl">
+    <h2><span class="num">6</span>Generated text: BLEU, ROUGE, perplexity and beyond</h2>
+    <p class="sub">Type a candidate translation and a reference. Matching n-grams are highlighted; the bars are the clipped n-gram precisions that make up BLEU.</p>
+    <div class="ctl"><span class="lbl">Reference</span><input type="text" id="bRef" class="txtin" value="the cat is sitting on the mat"></div>
+    <div class="ctl"><span class="lbl">Candidate</span><input type="text" id="bCand" class="txtin" value="the cat sat on the mat"></div>
+    <div id="bView" class="bview"></div>
+    <div class="stats" id="bStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Text has no single right answer, so early metrics compared word overlap with human references. <a class="term" data-t="bleu">BLEU</a> (for translation) asks what fraction of the candidate's 1-, 2-, 3- and 4-word sequences appear in the reference, with counts clipped so repeating “the the the” earns nothing. It takes the geometric mean and multiplies by a <b>brevity penalty</b>, since a two-word candidate could otherwise score perfectly. <b>ROUGE</b> (for summaries) flips the question to recall: how much of the reference does the candidate cover?</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: BLEU score</h5><ol>
+        <li><span class="kw">input</span> candidate \(c\) and reference \(r\), as word lists</li>
+        <li><span class="kw">for</span> \(n=1\) <span class="kw">to</span> \(4\) <span class="kw">do</span></li>
+        <li class="i1">\(p_n\leftarrow\dfrac{\sum_{g}\min(\text{count}_c(g),\text{count}_r(g))}{\#\text{n-grams in }c}\) <span class="cm">clipped n-gram precision</span></li>
+        <li>\(BP\leftarrow1\) if \(|c|&gt;|r|\), else \(e^{1-|r|/|c|}\) <span class="cm">brevity penalty</span></li>
+        <li><span class="kw">return</span> \(BP\cdot\exp\big(\tfrac14\sum_n\log p_n\big)\) <span class="cm">geometric mean</span></li>
+      </ol></div>
+      <p>Overlap metrics miss meaning: “the cat sat on the mat” and “a feline rested on the rug” share almost nothing. Modern evaluation of language models uses:</p>
+      <ul>
+        <li><b><a class="term" data-t="perplexity">Perplexity</a></b> \(=\exp(\text{average negative log-likelihood per token})\): how surprised the model is by real text. Only comparable between models with the same tokeniser.</li>
+        <li><b>Exact match / accuracy</b> on questions with one answer (multiple-choice exams such as MMLU).</li>
+        <li><b>pass@k</b> for code: generate \(k\) programs, count a success if any passes the unit tests. With \(n\ge k\) samples of which \(c\) pass, the unbiased estimate is \(1-\binom{n-c}{k}/\binom{n}{k}\).</li>
+        <li><b>Embedding similarity</b> (BERTScore) and <b>LLM-as-a-judge</b>, where a strong model grades answers against a rubric; and <b>human preference</b> arenas that compare two answers side by side and fit Elo-style ratings.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="vision" class="lab">
+  <div class="card hl">
+    <h2><span class="num">7</span>Vision: intersection over union</h2>
+    <p class="sub">The green box is the true object; the orange box is the model's detection. Move and resize the detection.</p>
+    <div class="plot wide" id="pIoU"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A detector must say <i>where</i>, not just <i>what</i>. <a class="term" data-t="iou">IoU</a> measures box overlap: the area they share divided by the area they cover together. A detection usually counts as correct if IoU ≥ 0.5.</p>
+      <div class="mathbox c1">$$\text{IoU}=\frac{|A\cap B|}{|A\cup B|},\qquad \text{Dice}=\frac{2|A\cap B|}{|A|+|B|}.$$</div>
+      <p>Object detection is then scored like retrieval: rank all detections by confidence, mark each as TP or FP using the IoU rule, compute average precision per class (section 2), and average over classes: <b>mAP</b>. COCO reports mAP averaged over IoU thresholds 0.5, 0.55, …, 0.95, which rewards tight boxes. For segmentation, IoU and Dice are computed per pixel.</p>
+      <div class="ctl"><label for="iX"><span>Shift right</span><output id="iXOut"></output></label><input type="range" id="iX" min="-60" max="60" step="1" value="18"></div>
+      <div class="ctl"><label for="iY"><span>Shift down</span><output id="iYOut"></output></label><input type="range" id="iY" min="-40" max="40" step="1" value="8"></div>
+      <div class="ctl"><label for="iS"><span>Size</span><output id="iSOut"></output></label><input type="range" id="iS" min="0.4" max="1.8" step="0.01" value="1.1"></div>
+      <div class="stats" id="iStats"></div>
+    </div>
+  </div>
+</section>
+
+<section id="choose" class="card">
+  <h2><span class="num">8</span>Which metric for which job?</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Problem</th><th>Report</th><th>Avoid relying on</th></tr>
+    <tr><td>Balanced classification</td><td>Accuracy, F1, AUC</td><td>—</td></tr>
+    <tr><td>Rare positives (fraud, disease)</td><td>Precision and recall at the operating threshold, PR-AUC, MCC</td><td>Accuracy, ROC-AUC alone</td></tr>
+    <tr><td>Probabilities drive decisions</td><td>Log loss, Brier score, reliability diagram</td><td>Accuracy, AUC</td></tr>
+    <tr><td>Regression</td><td>MAE and RMSE together, R² for context</td><td>MAPE when targets can be near 0</td></tr>
+    <tr><td>Search, recommendation, RAG retrieval</td><td>nDCG@k, recall@k, MRR</td><td>Plain accuracy</td></tr>
+    <tr><td>Translation, summarisation</td><td>BLEU / ROUGE plus human or LLM-judge review</td><td>Overlap metrics alone</td></tr>
+    <tr><td>Language models</td><td>Perplexity (same tokeniser), task benchmarks, pass@k for code</td><td>Benchmarks that may have leaked into training</td></tr>
+    <tr><td>Detection, segmentation</td><td>mAP over IoU thresholds, IoU / Dice</td><td>Classification accuracy</td></tr>
+  </table></div>
+  <p class="note" style="margin-top:12px">Whichever you choose, compute it on a test set that was never used for any decision, report a confidence interval, and test whether a difference between two models is real with a <a href="../../math/inference/#ml">paired test</a>.</p>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">9</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn <span class="k">import</span> metrics <span class="k">as</span> M
+M.confusion_matrix(y, y_pred); M.classification_report(y, y_pred)   <span class="c"># precision, recall, F1 per class</span>
+M.matthews_corrcoef(y, y_pred); M.balanced_accuracy_score(y, y_pred)
+M.roc_auc_score(y, scores); M.average_precision_score(y, scores)    <span class="c"># ROC-AUC and PR-AUC (AP)</span>
+M.log_loss(y, probs); M.brier_score_loss(y, probs)
+<span class="k">from</span> sklearn.calibration <span class="k">import</span> calibration_curve
+frac_pos, mean_pred = calibration_curve(y, probs, n_bins=<span class="s">10</span>)        <span class="c"># reliability diagram</span>
+M.mean_absolute_error(t, t_hat); M.root_mean_squared_error(t, t_hat); M.r2_score(t, t_hat)
+M.ndcg_score([relevance], [scores], k=<span class="s">5</span>)
+
+<span class="k">import</span> evaluate                                   <span class="c"># Hugging Face</span>
+evaluate.load(<span class="s">"bleu"</span>).compute(predictions=[<span class="s">"the cat sat on the mat"</span>],
+                               references=[[<span class="s">"the cat is sitting on the mat"</span>]])
+evaluate.load(<span class="s">"rouge"</span>).compute(predictions=preds, references=refs)
+<span class="k">from</span> torchvision.ops <span class="k">import</span> box_iou                  <span class="c"># IoU between sets of boxes</span></pre>
+</section>
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything runs in your browser.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../dl/assets/evo.js"></script>
+<script>
+(function(){
+const {$} = ML;
+function frame(plot,x0,x1,y0,y1,xl){ return ML.chart(plot,[{pts:[[x0,y0],[x1,y1]],color:'transparent',noline:true}],{x0,x1,y0,y1,xl}); }
+function curve(plot,fr,f,x0,x1,color,width=2.5,dash){ const c=plot.ctx,{fx,fy}=fr; c.save(); c.strokeStyle=color; c.lineWidth=width; if(dash) c.setLineDash(dash); c.beginPath(); for(let i=0;i<=300;i++){ const x=x0+(x1-x0)*i/300; i?c.lineTo(fx(x),fy(f(x))):c.moveTo(fx(x),fy(f(x))); } c.stroke(); c.restore(); }
+function shade(plot,fr,f,a,b,color,alpha=.3){ const c=plot.ctx,{fx,fy}=fr; if(b<=a) return; c.save(); c.fillStyle=color; c.globalAlpha=alpha; c.beginPath(); c.moveTo(fx(a),fy(0)); for(let i=0;i<=120;i++){ const x=a+(b-a)*i/120; c.lineTo(fx(x),fy(f(x))); } c.lineTo(fx(b),fy(0)); c.closePath(); c.fill(); c.restore(); }
+function vline(plot,fr,x,color,dash,w=2){ const c=plot.ctx,{fx}=fr; c.save(); c.strokeStyle=color; c.lineWidth=w; if(dash) c.setLineDash(dash); c.beginPath(); c.moveTo(fx(x),12); c.lineTo(fx(x),plot.h-28); c.stroke(); c.restore(); }
+function dot(plot,fr,x,y,r,color){ const c=plot.ctx; c.save(); c.fillStyle=color; c.beginPath(); c.arc(fr.fx(x),fr.fy(y),r,0,7); c.fill(); c.restore(); }
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`, f3=v=>isFinite(v)?v.toFixed(3):'–';
+if(window.EVO) EVO.render('#evoSlot','eval');
+
+/* ---- 1 + 2: confusion matrix and curves ---- */
+const pC=new ML.Plot('#pC',{equal:false}), pRoc=new ML.Plot('#pRoc',{equal:false}), pPr=new ML.Plot('#pPr',{equal:false}); let cT=1, cD=2, cP=0.1;
+const cm=(t)=>{ const N=1000, P=cP*N, Ng=N-P, tpr=1-MX.Phi(t-cD), fpr=1-MX.Phi(t); return {TP:P*tpr,FN:P*(1-tpr),FP:Ng*fpr,TN:Ng*(1-fpr),tpr,fpr}; };
+function drawC(){ const P=ML.palette(), fp=x=>cP*MX.normPdf(x,cD,1), fn=x=>(1-cP)*MX.normPdf(x,0,1), ym=Math.max(fp(cD),fn(0))*1.15;
+  const fr=frame(pC,-3.5,7,0,ym,'model score'); shade(pC,fr,fn,cT,7,P.c4,.3); shade(pC,fr,fp,-3.5,cT,P.c2,.3); curve(pC,fr,fn,-3.5,7,P.c3); curve(pC,fr,fp,-3.5,7,P.c4); vline(pC,fr,cT,P.ink);
+  const c=pC.ctx; c.save(); c.font='11px Inter,system-ui'; c.fillStyle=P.ink; c.fillText('← predicted negative',Math.max(50,fr.fx(cT)-150),24); c.fillText('predicted positive →',fr.fx(cT)+6,24); c.restore();
+  const m=cm(cT), r=v=>Math.round(v); const prec=m.TP/(m.TP+m.FP), rec=m.tpr, acc=(m.TP+m.TN)/1000, f1=2*prec*rec/(prec+rec), bal=(m.tpr+1-m.fpr)/2, mcc=(m.TP*m.TN-m.FP*m.FN)/Math.sqrt((m.TP+m.FP)*(m.TP+m.FN)*(m.TN+m.FP)*(m.TN+m.FN));
+  $('#cmGrid').innerHTML=`<div></div><div class="cmh">truly positive</div><div class="cmh">truly negative</div><div class="cmh r">predicted positive</div><div class="cmc tp"><b>${r(m.TP)}</b><span>TP</span></div><div class="cmc fp"><b>${r(m.FP)}</b><span>FP</span></div><div class="cmh r">predicted negative</div><div class="cmc fn"><b>${r(m.FN)}</b><span>FN</span></div><div class="cmc tn"><b>${r(m.TN)}</b><span>TN</span></div>`;
+  $('#cStats').innerHTML=stat('c3',f3(acc),'accuracy')+stat('c1',f3(prec),'precision')+stat('c4',f3(rec),'recall')+stat('c5',f3(f1),'F1')+stat('c2',f3(bal),'balanced accuracy')+stat('c6',f3(mcc),'MCC');
+  const base=Math.max(cP,1-cP); $('#cNote').className='note'+(acc<=base+0.005?' warn':''); $('#cNote').innerHTML=`A model that always predicts the majority class scores accuracy <b>${base.toFixed(3)}</b> here. `+(acc<=base+0.005?'This model is <b>no better than that baseline</b> on accuracy, even though it finds real positives.':`This model beats it by ${(100*(acc-base)).toFixed(1)} points.`);
+  drawCurves(); }
+function drawCurves(){ const P=ML.palette(), ts=[...Array(201).keys()].map(i=>8-i*12/200), pts=ts.map(t=>cm(t));
+  let fr=ML.chart(pRoc,[{pts:[[0,0],[1,1]],color:P.line,dash:[4,4],width:1},{pts:pts.map(m=>[m.fpr,m.tpr]),color:P.c1,width:2.5}],{x0:0,x1:1,y0:0,y1:1,xl:'false-positive rate'}); const m=cm(cT); dot(pRoc,fr,m.fpr,m.tpr,6,P.c4);
+  const prs=pts.filter(m=>m.TP+m.FP>1e-9).map(m=>[m.tpr,m.TP/(m.TP+m.FP)]); fr=ML.chart(pPr,[{pts:[[0,cP],[1,cP]],color:P.line,dash:[4,4],width:1},{pts:prs,color:P.c5,width:2.5}],{x0:0,x1:1,y0:0,y1:1,xl:'recall'}); if(m.TP+m.FP>0) dot(pPr,fr,m.tpr,m.TP/(m.TP+m.FP),6,P.c4);
+  let auc=0, ap=0; for(let i=1;i<pts.length;i++){ auc+=(pts[i].fpr-pts[i-1].fpr)*(pts[i].tpr+pts[i-1].tpr)/2; if(pts[i].TP+pts[i].FP>0) ap+=(pts[i].tpr-pts[i-1].tpr)*pts[i].TP/(pts[i].TP+pts[i].FP); }
+  $('#rStats').innerHTML=stat('c1',auc.toFixed(3),'ROC-AUC')+stat('c5',ap.toFixed(3),'average precision (PR-AUC)')+stat('c3',cP.toFixed(3),'PR baseline = prevalence'); }
+ML.bindRange('cT',v=>{cT=v;drawC();},v=>v.toFixed(2)); ML.bindRange('cD',v=>{cD=v;drawC();},v=>v.toFixed(2)); ML.bindRange('cP',v=>{cP=v;drawC();},v=>(100*v).toFixed(1)+'%'); pC.onResize=drawC; pRoc.onResize=drawCurves; pPr.onResize=drawCurves;
+
+/* ---- 3: calibration ---- */
+const pCal=new ML.Plot('#pCal',{equal:false}); let kT=2; const kr=ML.rng(5), KZ=[], KY=[]; for(let i=0;i<4000;i++){ const z=2.2*kr.gauss(); KZ.push(z); KY.push(kr()<ML.sigmoid(z)?1:0); }
+function drawK(){ const P=ML.palette(), nb=10, cnt=new Array(nb).fill(0), pos=new Array(nb).fill(0), sp=new Array(nb).fill(0); let ll=0, br=0;
+  KZ.forEach((z,i)=>{ const p=Math.min(1-1e-9,Math.max(1e-9,ML.sigmoid(kT*z))), b=Math.min(nb-1,Math.floor(p*nb)); cnt[b]++; pos[b]+=KY[i]; sp[b]+=p; ll-=KY[i]?Math.log(p):Math.log(1-p); br+=(p-KY[i])**2; });
+  const fr=frame(pCal,0,1,0,1,'predicted probability'), c=pCal.ctx; let ece=0;
+  for(let b=0;b<nb;b++){ if(!cnt[b]) continue; const fr_=pos[b]/cnt[b], mp=sp[b]/cnt[b]; ece+=cnt[b]/KZ.length*Math.abs(fr_-mp); c.save(); c.fillStyle=P.c1; c.globalAlpha=.55; c.fillRect(fr.fx(b/nb)+2,fr.fy(fr_),fr.fx((b+1)/nb)-fr.fx(b/nb)-4,fr.fy(0)-fr.fy(fr_)); c.restore(); dot(pCal,fr,mp,mp,3,P.c4); }
+  c.save(); c.strokeStyle=P.ink; c.setLineDash([5,4]); c.beginPath(); c.moveTo(fr.fx(0),fr.fy(0)); c.lineTo(fr.fx(1),fr.fy(1)); c.stroke(); c.restore();
+  const acc=KZ.reduce((a,z,i)=>a+((z>0)===(KY[i]===1)?1:0),0)/KZ.length;
+  $('#kStats').innerHTML=stat('c4',(ll/KZ.length).toFixed(4),'log loss')+stat('c2',(br/KZ.length).toFixed(4),'Brier score')+stat('c1',(100*ece).toFixed(2)+'%','ECE')+stat('c3',(100*acc).toFixed(1)+'%','accuracy (never changes)'); }
+ML.bindRange('kT',v=>{kT=v;drawK();},v=>v.toFixed(2)); pCal.onResize=drawK;
+
+/* ---- 4: regression ---- */
+const pReg=new ML.Plot('#pReg',{equal:false}); const gr=ML.rng(11), GX=[], GY=[], GP=[]; for(let i=0;i<30;i++){ const x=500+2500*gr(); GX.push(x); const y=20+0.04*x+8*gr.gauss(); GY.push(y); GP.push(20+0.04*x+3*gr.gauss()); } let gO=0;
+function drawG(){ const P=ML.palette(), Y=GY.slice(); Y[7]=GY[7]+gO; const n=30, e=Y.map((y,i)=>y-GP[i]), mae=e.reduce((a,v)=>a+Math.abs(v),0)/n, mse=e.reduce((a,v)=>a+v*v,0)/n, ym=Y.reduce((a,b)=>a+b,0)/n, sst=Y.reduce((a,y)=>a+(y-ym)**2,0), mape=Y.reduce((a,y,i)=>a+Math.abs(e[i]/y),0)/n, med=e.map(Math.abs).sort((a,b)=>a-b); const mdae=(med[14]+med[15])/2;
+  const fr=frame(pReg,400,3100,0,Math.max(180,Math.max(...Y)+10),'floor area (sq ft)'), c=pReg.ctx; GX.forEach((x,i)=>{ c.save(); c.strokeStyle=i===7&&gO>0?P.c4:P.line; c.lineWidth=i===7&&gO>0?2.5:1.2; c.beginPath(); c.moveTo(fr.fx(x),fr.fy(GP[i])); c.lineTo(fr.fx(x),fr.fy(Y[i])); c.stroke(); c.restore(); dot(pReg,fr,x,Y[i],i===7&&gO>0?6:4,i===7&&gO>0?P.c4:P.ink); dot(pReg,fr,x,GP[i],3,P.c1); });
+  c.save(); c.font='12px Inter,system-ui'; c.fillStyle=P.c1; c.fillText('purple = prediction, black = actual price (₹ lakh)',54,22); c.restore();
+  $('#gStats').innerHTML=stat('c3',mae.toFixed(2),'MAE')+stat('c4',Math.sqrt(mse).toFixed(2),'RMSE')+stat('c1',(1-n*mse/sst).toFixed(3),'R²')+stat('c2',(100*mape).toFixed(1)+'%','MAPE')+stat('c5',mdae.toFixed(2),'median AE'); }
+ML.bindRange('gO',v=>{gO=v;drawG();}); pReg.onResize=drawG;
+
+/* ---- 5: ranking ---- */
+let RK=[2,0,3,1,0,2,0,1], rk=5; const DOCS=['Intro to RAG','Unrelated FAQ','RAG paper, section 3','Blog on embeddings','Old changelog','Tutorial: retrievers','Cookie policy','Forum answer'], ID=RK.map((_,i)=>i); let ORD=ID.slice();
+const dcg=(a,k)=>a.slice(0,k).reduce((s,r,i)=>s+(2**r-1)/Math.log2(i+2),0);
+function drawRank(){ const rel=ORD.map(i=>RK[i]), tot=rel.filter(r=>r>0).length, top=rel.slice(0,rk), ideal=rel.slice().sort((a,b)=>b-a), nd=dcg(ideal,rk)?dcg(rel,rk)/dcg(ideal,rk):0, fi=rel.findIndex(r=>r>0);
+  $('#rankList').innerHTML=ORD.map((d,i)=>`<div class="rk${i<rk?' in':''}"><span class="rkn">${i+1}</span><span class="rkt">${DOCS[d]}</span><span class="rkr r${RK[d]}">${RK[d]}</span><button class="btn" data-up="${i}" ${i?'':'disabled'} aria-label="move up">↑</button><button class="btn" data-dn="${i}" ${i<ORD.length-1?'':'disabled'} aria-label="move down">↓</button></div>`).join('');
+  $('#kRank').innerHTML=stat('c1',(top.filter(r=>r>0).length/rk).toFixed(3),'precision@'+rk)+stat('c2',(top.filter(r=>r>0).length/tot).toFixed(3),'recall@'+rk)+stat('c4',fi<0?'0':(1/(fi+1)).toFixed(3),'reciprocal rank')+stat('c5',nd.toFixed(3),'nDCG@'+rk); }
+$('#rankList').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const u=b.dataset.up, d=b.dataset.dn; if(u!=null){ const i=+u; [ORD[i-1],ORD[i]]=[ORD[i],ORD[i-1]]; } if(d!=null){ const i=+d; [ORD[i+1],ORD[i]]=[ORD[i],ORD[i+1]]; } drawRank(); });
+$('#rkBest').addEventListener('click',()=>{ ORD.sort((a,b)=>RK[b]-RK[a]); drawRank(); }); $('#rkShuf').addEventListener('click',()=>{ for(let i=ORD.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [ORD[i],ORD[j]]=[ORD[j],ORD[i]]; } drawRank(); });
+ML.bindRange('rk',v=>{rk=v;drawRank();});
+
+/* ---- 6: BLEU ---- */
+const toks=s=>s.toLowerCase().replace(/[^\p{L}\p{N}\s']/gu,' ').split(/\s+/).filter(Boolean), grams=(w,n)=>{ const m=new Map(); for(let i=0;i+n<=w.length;i++){ const g=w.slice(i,i+n).join(' '); m.set(g,(m.get(g)||0)+1); } return m; };
+function drawBleu(){ const c=toks($('#bRef')?$('#bCand').value:''), r=toks($('#bRef').value); const ps=[]; for(let n=1;n<=4;n++){ const gc=grams(c,n), gr=grams(r,n); let m=0,t=0; gc.forEach((k,g)=>{ t+=k; m+=Math.min(k,gr.get(g)||0); }); ps.push({m,t,p:t?m/t:0}); }
+  const bp=c.length>r.length?1:(c.length?Math.exp(1-r.length/c.length):0), bleu=ps.every(p=>p.p>0)?bp*Math.exp(ps.reduce((a,p)=>a+Math.log(p.p),0)/4):0;
+  const r1=grams(r,1), hit=new Map(); const words=c.map(w=>{ const left=(r1.get(w)||0)-(hit.get(w)||0); if(left>0){ hit.set(w,(hit.get(w)||0)+1); return `<span class="bw hit">${ML.esc?ML.esc(w):w.replace(/[<>&]/g,'')}</span>`; } return `<span class="bw">${w.replace(/[<>&]/g,'')}</span>`; });
+  const rg=(n)=>{ const gc=grams(c,n), gr=grams(r,n); let m=0,t=0; gr.forEach((k,g)=>{ t+=k; m+=Math.min(k,gc.get(g)||0); }); return t?m/t:0; };
+  const lcs=(()=>{ const D=Array.from({length:c.length+1},()=>new Array(r.length+1).fill(0)); for(let i=1;i<=c.length;i++) for(let j=1;j<=r.length;j++) D[i][j]=c[i-1]===r[j-1]?D[i-1][j-1]+1:Math.max(D[i-1][j],D[i][j-1]); return r.length?D[c.length][r.length]/r.length:0; })();
+  $('#bView').innerHTML='<div class="bwords">'+words.join(' ')+'</div>'+ps.map((p,i)=>`<div class="bbar"><span>${i+1}-gram</span><i style="width:${(100*p.p).toFixed(1)}%"></i><em>${p.m}/${p.t}</em></div>`).join('');
+  $('#bStats').innerHTML=stat('c1',bleu.toFixed(3),'BLEU (no smoothing)')+stat('c2',bp.toFixed(3),'brevity penalty')+stat('c4',rg(1).toFixed(3),'ROUGE-1 recall')+stat('c5',rg(2).toFixed(3),'ROUGE-2 recall')+stat('c3',lcs.toFixed(3),'ROUGE-L recall'); }
+$('#bRef').addEventListener('input',drawBleu); $('#bCand').addEventListener('input',drawBleu);
+
+/* ---- 7: IoU ---- */
+const pI=new ML.Plot('#pIoU',{equal:false}); let iX=18, iY=8, iS=1.1;
+function drawI(){ const P=ML.palette(), c=pI.ctx; pI.clear(); const W=pI.w, H=pI.h, s=Math.min(W/320,H/200), ox=(W-320*s)/2, oy=(H-200*s)/2;
+  const A=[100,50,120,90], bw=120*iS, bh=90*iS, B=[160+iX-bw/2,95+iY-bh/2,bw,bh];
+  const ix=Math.max(0,Math.min(A[0]+A[2],B[0]+B[2])-Math.max(A[0],B[0])), iy=Math.max(0,Math.min(A[1]+A[3],B[1]+B[3])-Math.max(A[1],B[1])), inter=ix*iy, uni=A[2]*A[3]+B[2]*B[3]-inter;
+  const R=(b,col,fill)=>{ c.save(); if(fill){ c.fillStyle=col; c.globalAlpha=.18; c.fillRect(ox+b[0]*s,oy+b[1]*s,b[2]*s,b[3]*s); c.globalAlpha=1; } c.strokeStyle=col; c.lineWidth=3; c.strokeRect(ox+b[0]*s,oy+b[1]*s,b[2]*s,b[3]*s); c.restore(); };
+  R(A,P.c5,true); R(B,P.c4,true); if(inter>0){ c.save(); c.fillStyle=P.c1; c.globalAlpha=.45; c.fillRect(ox+Math.max(A[0],B[0])*s,oy+Math.max(A[1],B[1])*s,ix*s,iy*s); c.restore(); }
+  const iou=inter/uni, dice=2*inter/(A[2]*A[3]+B[2]*B[3]);
+  $('#iStats').innerHTML=stat('c1',iou.toFixed(3),'IoU')+stat('c2',dice.toFixed(3),'Dice')+stat(iou>=.5?'c5':'c4',iou>=.5?'yes':'no','counts as a hit at IoU ≥ 0.5')+stat(iou>=.75?'c5':'c4',iou>=.75?'yes':'no','… at the stricter 0.75'); }
+ML.bindRange('iX',v=>{iX=v;drawI();}); ML.bindRange('iY',v=>{iY=v;drawI();}); ML.bindRange('iS',v=>{iS=v;drawI();},v=>v.toFixed(2)+'×'); pI.onResize=drawI;
+
+ML.onTheme(()=>{ drawC(); drawK(); drawG(); drawI(); });
+drawC(); drawK(); drawG(); drawRank(); drawBleu(); drawI();
+})();
+</script>
+<script>ML.nav('metrics'); ML.renderMath(document.body);</script>
+</body>
+</html>

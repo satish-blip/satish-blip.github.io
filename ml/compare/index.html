@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compare All Algorithms</title>
+<meta name="description" content="Run eleven classic machine learning classifiers side by side on eight datasets, from linear blobs to spirals, live in the browser: decision boundaries, train and test accuracy, timing and a leaderboard.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../assets/ml.css">
+<style>
+.cmp{display:grid;gap:6px;--rl:150px;--cw:100px}
+.cmp .rl{position:sticky;left:0;z-index:2;background:var(--card);padding-right:4px}
+@media (max-width:560px){.cmp{--rl:78px;--cw:112px;gap:5px}.cmp .rl{font-size:11px}}
+.cmp .hd{font-size:12px;font-weight:700;text-align:center;align-self:end;padding-bottom:2px}
+.cmp .rl{font-size:12px;font-weight:700;align-self:center;line-height:1.3}
+.cmp .rl a{color:var(--ink);text-decoration:none}.cmp .rl a:hover{color:var(--c1)}
+.cell{position:relative}
+.cell>:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell .acc{position:absolute;left:4px;bottom:22px;font:600 11px "JetBrains Mono",monospace;background:color-mix(in srgb,var(--card) 82%,transparent);padding:0 4px;border-radius:5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:4px 11px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted)}
+.chip.on{background:var(--c1);border-color:var(--c1);color:#fff}
+.heat td{font-family:"JetBrains Mono",monospace;font-size:12px}
+.progress{height:4px;border-radius:99px;background:var(--soft);overflow:hidden;margin-top:10px}.progress span{display:block;height:100%;width:0;background:var(--grad);transition:width .15s}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Algorithms"></nav></div></header>
+
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Side by side</p>
+  <h1>Every algorithm, <span class="grad">every dataset</span></h1>
+  <p class="lede">Eleven classifiers trained live in your browser on eight datasets that run from easy (linear blobs) to hard (spirals, noisy labels). Each cell is a real model fitted on the training points and scored on held-out test points. Change the hyperparameters and the whole grid retrains. Click any cell to inspect it.</p>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>How to read this page</h2>
+  <div class="grid2 prose">
+    <div><h3>The question</h3><p>After reading about each method on its own, the natural question is: which one should I use? The honest answer is "it depends on the shape of your data", and this page lets you see exactly how. Think of each dataset as a different kind of problem and each algorithm as a different set of assumptions about what boundaries look like. A method wins when its assumptions match the problem.</p>
+    <p>Every <a class="term" data-t="classification">classifier</a> on this site is trained here on every <a class="term" data-t="dataset">dataset</a>, using the same <a class="term" data-t="training-set">training points</a>, and scored on the same <a class="term" data-t="test-set">held-out test points</a>. Each small plot shows one model’s <a class="term" data-t="decision-boundary">decision boundary</a>: colour is the predicted class, dots are the data.</p>
+    <p>No model wins everywhere. Linear models are perfect on blobs and hopeless on circles; trees and forests handle almost anything but draw staircases; <a class="term" data-t="kernel">kernel</a> SVMs and boosted ensembles adapt to curves. That is the "no free lunch" idea in one picture.</p></div>
+    <div><ol class="steps2"><li>Pick datasets and algorithms with the chips.</li><li>Tune the shared <a class="term" data-t="hyperparameter">hyperparameters</a> on the left (polynomial degree, \(\lambda\), \(C\), \(\gamma\), depth, trees, rounds).</li><li>Read the <a class="term" data-t="accuracy">accuracy</a> under each plot and the leaderboard heat map; a big gap between train and test accuracy means <a class="term" data-t="overfitting">overfitting</a>.</li></ol>
+    <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="overfitting">Overfitting</a><a class="term" data-t="underfitting">Underfitting</a><a class="term" data-t="generalisation">Generalisation</a><a class="term" data-t="bias-variance">Bias–variance</a><a class="term" data-t="hyperparameter">Hyperparameter</a><a class="term" data-t="regularisation">Regularisation</a><a class="term" data-t="linearly-separable">Linearly separable</a><a class="term" data-t="noise">Label noise</a></div>
+    <p class="hint">Dotted-underlined words are clickable definitions.</p></div>
+  </div>
+</section>
+
+<section class="lab">
+  <div class="card hl">
+    <h2 id="fTitle">Focus</h2>
+    <p class="sub" id="fSub"></p>
+    <div class="plot wide" id="focus"></div>
+    <div class="legend"><span><i class="sw k0"></i><i class="sw k1"></i> training points</span><span><i class="sw" style="background:var(--card);box-shadow:0 0 0 2px var(--ink)"></i> test points (white centre)</span><span>✕ = test point misclassified</span></div>
+  </div>
+  <div>
+    <div class="card">
+      <h3 style="margin-top:0">Data</h3>
+      <div class="controls">
+        <div class="grid2" style="gap:12px">
+          <div class="ctl"><label for="n">Points <output id="nOut"></output></label><input type="range" id="n" min="60" max="500" step="20" value="240"></div>
+          <div class="ctl"><label for="noise">Noise <output id="noiseOut"></output></label><input type="range" id="noise" min="0" max="1" step="0.05" value="0.3"></div>
+        </div>
+        <div class="ctl"><label for="tf">Test share <output id="tfOut"></output></label><input type="range" id="tf" min="0.1" max="0.6" step="0.05" value="0.3"></div>
+        <div class="row"><button class="btn" id="resample">New random sample</button><span class="hint" id="seedLbl" style="margin:0"></span></div>
+      </div>
+      <h3>Hyperparameters</h3>
+      <div class="controls">
+        <div class="grid2" style="gap:12px">
+          <div class="ctl"><label for="polyDeg">Logistic poly degree <output id="polyDegOut"></output></label><input type="range" id="polyDeg" min="2" max="6" value="3"></div>
+          <div class="ctl"><label for="logLam">Logistic λ <output id="logLamOut"></output></label><input type="range" id="logLam" min="-5" max="0" step="0.5" value="-3"></div>
+          <div class="ctl"><label for="C">SVM C <output id="COut"></output></label><input type="range" id="C" min="-2" max="3" step="0.25" value="0"></div>
+          <div class="ctl"><label for="gamma">SVM RBF γ <output id="gammaOut"></output></label><input type="range" id="gamma" min="-1.5" max="1.5" step="0.25" value="0"></div>
+          <div class="ctl"><label for="depth">Tree max depth <output id="depthOut"></output></label><input type="range" id="depth" min="1" max="12" value="5"></div>
+          <div class="ctl"><label for="trees">Forest trees <output id="treesOut"></output></label><input type="range" id="trees" min="5" max="100" step="5" value="30"></div>
+          <div class="ctl"><label for="rounds">AdaBoost rounds <output id="roundsOut"></output></label><input type="range" id="rounds" min="5" max="200" step="5" value="60"></div>
+        </div>
+        <div class="progress"><span id="prog"></span></div><p class="hint" id="progLbl"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="row" style="justify-content:space-between;gap:14px;align-items:flex-start">
+    <div><h3 style="margin:0 0 6px">Algorithms</h3><div class="chips" id="algoChips"></div></div>
+    <div><h3 style="margin:0 0 6px">Datasets</h3><div class="chips" id="dsChips"></div></div>
+  </div>
+  <div class="tblwrap" style="margin-top:14px"><div class="cmp" id="grid"></div></div>
+  <p class="hint">Number in each cell = test accuracy (green ≥ 90%, orange ≥ 75%, red below). Hover (or tap and hold) for train accuracy and fit time. Row names link to each algorithm's own page.</p>
+</section>
+
+<section class="card">
+  <h2>Leaderboard</h2>
+  <p class="sub">Test accuracy for every pair. The best model on each dataset is highlighted. The last column is the average across the datasets shown.</p>
+  <div class="tblwrap"><table class="tbl heat" id="heat"></table></div>
+</section>
+
+<section class="card prose">
+  <h2>What the grid teaches</h2>
+  <div class="grid3">
+    <div class="note"><b>Linear models</b> (least squares, logistic, LDA, linear SVM) agree with each other almost everywhere. They are excellent on linear blobs and noisy labels and collapse to coin-flipping on XOR and circles, because no straight line can help there.</div>
+    <div class="note"><b>Features or kernels fix linearity.</b> Logistic with polynomial features, QDA (quadratic by construction) and the polynomial/RBF SVMs bend the boundary. QDA nails circles (a Gaussian inside a ring), but not moons or spirals, which are not Gaussian at all.</div>
+    <div class="note"><b>Trees and ensembles</b> carve axis-aligned boxes. A single tree is jagged and overfits noisy labels; a random forest smooths it; AdaBoost with stumps cannot do XOR because no single-feature stump beats chance there (see the <a href="../ensembles/#adamaths">boosting page</a>).</div>
+  </div>
+  <div class="grid2" style="margin-top:8px">
+    <div class="note ok"><b>No free lunch.</b> No algorithm wins every column. Check the average column: the most flexible models (RBF SVM, forests) are usually near the top on average, but lose to simple linear models when the true boundary is a line and the data is noisy.</div>
+    <div class="note warn"><b>Where is PCA?</b> PCA is unsupervised: it never sees labels, so it is not a classifier. It is often used <i>before</i> one of these to reduce dimensions. See the <a href="../pca/">PCA page</a> and its PCA-vs-LDA section.</div>
+  </div>
+  <div class="grid2" style="margin-top:8px">
+    <div>
+      <h3>How this grid is built (and how to compare models fairly yourself)</h3>
+      <p>Every cell follows the same recipe, and the important rule is that the test points are never used for anything except the final score. If you tune hyperparameters by looking at test accuracy, the test score stops being an honest estimate of performance on new data.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: a fair model comparison</h5><ol>
+        <li><span class="kw">input</span> dataset \(D\), list of models, test share \(q\)</li>
+        <li>shuffle \(D\); hold out a fraction \(q\) as the test set <span class="cm">same split for every model</span></li>
+        <li><span class="kw">for</span> each model \(m\) <span class="kw">do</span></li>
+        <li class="i1">choose \(m\)'s hyperparameters by cross-validation on the training part only</li>
+        <li class="i1">fit \(m\) on the whole training part</li>
+        <li class="i1">record train accuracy and test accuracy</li>
+        <li>repeat with several random splits; report mean ± spread <span class="cm">one split can mislead</span></li>
+        <li>call a difference real only if it beats the split-to-split noise</li>
+      </ol></div>
+      <p class="hint">Press <b>New random sample</b> a few times and watch the numbers move by a few points: that is the noise any single comparison carries. The <a href="../../math/inference/#ml">hypothesis testing page</a> shows how to test whether one model really beats another.</p>
+    </div>
+    <div>
+      <h3>Why no model wins everywhere</h3>
+      <p>Every learner has an <b>inductive bias</b>: the kind of boundary it finds easy to draw. Linear models assume a hyperplane; QDA assumes Gaussian blobs; trees assume axis-aligned boxes; an RBF SVM assumes the answer changes smoothly over a length scale \(1/\sqrt\gamma\). When the true boundary matches the assumption, a little data goes a long way. When it does not, the model either cannot fit (bias) or needs a lot of data and tuning to compensate (variance).</p>
+      <details class="deeper"><summary>Going deeper: the bias–variance decomposition and "no free lunch"</summary><div>
+        <p>For squared error at a point \(x\), averaging over random training sets: \(\mathbb E[(y-\hat f(x))^2]=\underbrace{(f(x)-\mathbb E\hat f(x))^2}_{\text{bias}^2}+\underbrace{\operatorname{Var}\hat f(x)}_{\text{variance}}+\sigma^2\). Linear models on circles have huge bias; a depth-12 tree on noisy labels has huge variance; the irreducible \(\sigma^2\) is the label noise, which no model can remove. (The <a href="../linear-regression/#bv">linear regression page</a> derives this.)</p>
+        <p>The no-free-lunch theorem (Wolpert, 1996) makes "no universal winner" precise: averaged uniformly over <i>all</i> possible labelling functions, every learning algorithm has the same expected accuracy on points it has not seen. Any algorithm that does better on some problems must do worse on others. Learning works in practice only because real problems are not uniform: they have smoothness and structure, and a good choice of model is a good guess about that structure.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything is computed in your browser in plain JavaScript; every model on this page is implemented from scratch in <a href="../assets/models.js">models.js</a>.</p>
+</main>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/gloss.js"></script>
+<script src="../assets/models.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML;
+ML.nav('compare'); ML.renderMath(document.querySelector('main'));
+const H={polyDeg:3, logLam:1e-3, C:1, gamma:1, depth:5, trees:30, rounds:60};
+const S={n:240, noise:0.3, tf:0.3, seed:7, algos:new Set(ML.ALGOS.map(a=>a.id)), ds:new Set(ML.DATASETS.map(d=>d.id)), res:{}, focus:{a:'svmrbf',d:'spirals'}, token:0};
+const focus=new ML.Plot('#focus');
+
+function chips(){ const ac=$('#algoChips'), dc=$('#dsChips');
+  ac.innerHTML=ML.ALGOS.map(a=>`<button class="chip${S.algos.has(a.id)?' on':''}" data-id="${a.id}">${a.short}</button>`).join('');
+  dc.innerHTML=ML.DATASETS.map(d=>`<button class="chip${S.ds.has(d.id)?' on':''}" data-id="${d.id}">${d.name}</button>`).join('');
+  ML.tileRow(ac); ML.tileRow(dc);
+  ac.onclick=e=>{ const b=e.target.closest('.chip'); if(!b) return; const id=b.dataset.id; if(S.algos.has(id)){ if(S.algos.size>1) S.algos.delete(id); } else S.algos.add(id); chips(); layout(); fill(); };
+  dc.onclick=e=>{ const b=e.target.closest('.chip'); if(!b) return; const id=b.dataset.id; if(S.ds.has(id)){ if(S.ds.size>1) S.ds.delete(id); } else S.ds.add(id); chips(); layout(); fill(); }; }
+const algos=()=>ML.ALGOS.filter(a=>S.algos.has(a.id)), dss=()=>ML.DATASETS.filter(d=>S.ds.has(d.id));
+const key=(a,d)=>a+'|'+d;
+const dataCache={}; function data(d){ const k=d+'|'+S.n+'|'+S.noise+'|'+S.seed+'|'+S.tf; if(!dataCache[k]){ const full=ML.dataset(d,S.n,S.noise,S.seed); dataCache[k]=Object.assign(ML.split(full,S.tf,S.seed+5),{full}); } return dataCache[k]; }
+
+const cells={};
+function layout(){ Object.keys(cells).forEach(k=>delete cells[k]); const g=$("#grid"), A=algos(), D=dss(); g.style.gridTemplateColumns=`var(--rl) repeat(${D.length},minmax(var(--cw),1fr))`; g.style.minWidth=`calc(var(--rl) + ${D.length} * (var(--cw) + 6px))`;
+  g.innerHTML='<div></div>'+D.map(d=>`<div class="hd">${d.name}<br><span class="pill">${d.level}</span></div>`).join('');
+  A.forEach(a=>{ const l=document.createElement('div'); l.className='rl'; l.innerHTML=`<a href="../${a.page}/">${a.short}</a>`; l.title=a.name; g.appendChild(l);
+    D.forEach(d=>{ const c=document.createElement('div'); c.className='thumb cell'; c.innerHTML='<div class="plot sq" style="border:0;border-radius:0"></div><span class="acc"></span><div>…</div>'; c.onclick=()=>{ S.focus={a:a.id,d:d.id}; drawFocus(); markFocus(); window.scrollTo({top:0,behavior:'smooth'}); };
+      g.appendChild(c); const pl=new ML.Plot(c.firstChild); cells[key(a.id,d.id)]={el:c,pl}; pl.onResize=()=>drawCell(a.id,d.id); }); });
+  markFocus(); }
+function markFocus(){ Object.entries(cells).forEach(([k,c])=>c.el.classList.toggle('on',k===key(S.focus.a,S.focus.d))); }
+
+function run(a,d){ const k=key(a,d); if(S.res[k]) return S.res[k]; const A=ML.ALGOS.find(x=>x.id===a), D=data(d); const t0=performance.now(); const m=A.fit(D.Xtr,D.ytr,H); const t=performance.now()-t0;
+  return S.res[k]={m, t, tr:ML.accuracy(m,D.Xtr,D.ytr), te:ML.accuracy(m,D.Xte,D.yte)}; }
+const col=v=>v>=0.9?'var(--c5)':v>=0.75?'var(--c4)':'var(--c2)';
+function drawCell(a,d){ const c=cells[key(a,d)], r=S.res[key(a,d)]; if(!c||!r) return; const D=data(d), pl=c.pl; pl.clear(); pl.regions((x,y)=>r.m.proba([x,y]),4); pl.contour((x,y)=>r.m.proba([x,y])-0.5,0,{width:1.5,res:4}); pl.points(D.Xtr,D.ytr,{r:1.7});
+  c.el.querySelector('.acc').innerHTML=`<span style="color:${col(r.te)}">${ML.pct(r.te)}</span>`; c.el.lastChild.textContent=`train ${ML.pct(r.tr)} · ${r.t<1?'<1':r.t.toFixed(0)} ms`;
+  c.el.title=`${ML.ALGOS.find(x=>x.id===a).name} on ${ML.DATASETS.find(x=>x.id===d).name}: test ${ML.pct(r.te)}, train ${ML.pct(r.tr)}, fit ${r.t.toFixed(1)} ms`; }
+function fill(){ const tok=++S.token, jobs=[]; algos().forEach(a=>dss().forEach(d=>jobs.push([a.id,d.id]))); const total=jobs.length; let done=0;
+  // focus first
+  jobs.sort((p,q)=>(key(...q)===key(S.focus.a,S.focus.d))-(key(...p)===key(S.focus.a,S.focus.d)));
+  const step=()=>{ if(tok!==S.token) return; const t0=performance.now(); while(jobs.length && performance.now()-t0<30){ const [a,d]=jobs.shift(); run(a,d); drawCell(a,d); done++; if(key(a,d)===key(S.focus.a,S.focus.d)) drawFocus(); }
+    $('#prog').style.width=(100*done/total)+'%'; $('#progLbl').textContent= jobs.length?`Training ${done} / ${total} models…`:`Trained ${total} models.`;
+    if(jobs.length) setTimeout(step,0); else heat(); }; step(); }
+function drawFocus(){ const {a,d}=S.focus; if(!S.algos.has(a)||!S.ds.has(d)) return; const r=run(a,d), D=data(d), A=ML.ALGOS.find(x=>x.id===a), DS=ML.DATASETS.find(x=>x.id===d), P=ML.palette();
+  focus.clear(); focus.regions((x,y)=>r.m.proba([x,y]),4); focus.grid(1); focus.contour((x,y)=>r.m.proba([x,y])-0.5,0,{width:2.6});
+  focus.points(D.Xtr,D.ytr,{r:4}); focus.points(D.Xte,D.yte,{r:5,test:()=>true,cross:i=>(r.m.proba(D.Xte[i])>=0.5?1:0)!==D.yte[i]});
+  $('#fTitle').innerHTML=`${A.name} <span class="pill">${DS.name}</span>`;
+  let extra=''; if(r.m.sv) extra=` · ${r.m.sv.length} support vectors`; else if(r.m.leaves) extra=` · ${r.m.leaves} leaves, depth ${r.m.depth}`; else if(r.m.rounds) extra=` · ${r.m.rounds.length} rounds`; else if(r.m.trees) extra=` · ${r.m.trees.length} trees`;
+  $('#fSub').innerHTML=`Test accuracy <b style="color:${col(r.te)}">${ML.pct(r.te)}</b> · train ${ML.pct(r.tr)} · fitted in ${r.t.toFixed(1)} ms${extra}. ${DS.desc} <a href="../${A.page}/">Open the ${A.short} page →</a>`; }
+function heat(){ const A=algos(), D=dss(); const best={}; D.forEach(d=>{ best[d.id]=Math.max(...A.map(a=>S.res[key(a.id,d.id)]?.te??0)); });
+  const rows=A.map(a=>{ const v=D.map(d=>S.res[key(a.id,d.id)]?.te); return {a, v, avg:v.reduce((s,x)=>s+x,0)/v.length}; }).sort((p,q)=>q.avg-p.avg);
+  const bg=v=>`background:color-mix(in srgb,${v>=0.9?'var(--c5)':v>=0.75?'var(--c4)':'var(--c2)'} ${Math.round(10+25*Math.abs(v-0.75)/0.25)}%,transparent)`;
+  $('#heat').innerHTML=`<tr><th>#</th><th style="text-align:left">Algorithm</th>${D.map(d=>`<th>${d.name}</th>`).join('')}<th>Average</th></tr>`+
+    rows.map((r,i)=>`<tr><td>${i+1}</td><td style="text-align:left;font-family:Inter,system-ui"><a href="../${r.a.page}/">${r.a.short}</a></td>${r.v.map((v,j)=>`<td style="${bg(v)};${v>=best[D[j].id]-1e-9?'font-weight:700;outline:2px solid var(--c5);outline-offset:-2px':''}">${ML.pct(v)}</td>`).join('')}<td style="font-weight:700">${ML.pct(r.avg)}</td></tr>`).join(''); }
+
+function reset(){ S.res={}; fill(); drawFocus(); $('#seedLbl').textContent='sample #'+S.seed; }
+const hp=(id,fn,f)=>ML.bindRange(id,v=>{ fn(v); clearTimeout(hp.t); hp.t=setTimeout(reset,150); },f);
+hp('polyDeg',v=>H.polyDeg=v); hp('logLam',v=>H.logLam=Math.pow(10,v),v=>Math.pow(10,v).toPrecision(2)); hp('C',v=>H.C=Math.pow(10,v),v=>Math.pow(10,v).toPrecision(2)); hp('gamma',v=>H.gamma=Math.pow(10,v),v=>Math.pow(10,v).toPrecision(2));
+hp('depth',v=>H.depth=v); hp('trees',v=>H.trees=v); hp('rounds',v=>H.rounds=v);
+hp('n',v=>S.n=v); hp('noise',v=>S.noise=v,v=>v.toFixed(2)); hp('tf',v=>S.tf=v,v=>Math.round(v*100)+'%');
+$('#resample').onclick=()=>{ S.seed++; reset(); };
+focus.onResize=drawFocus; ML.onTheme(()=>{ Object.keys(cells).forEach(k=>{ const [a,d]=k.split('|'); drawCell(a,d); }); drawFocus(); });
+chips(); layout(); reset();
+})();
+</script>
+</body>
+</html>

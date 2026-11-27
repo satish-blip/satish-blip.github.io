@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reinforcement learning</title>
+<meta name="description" content="Step 8 of the learning path. Learning to act from rewards: Markov decision processes, the Bellman equations, exploration, and the deep RL methods behind game-playing agents and RLHF.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<style>
+.hubgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:18px}
+.hubcard{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;text-decoration:none;color:var(--ink);transition:transform .2s,border-color .2s}
+a.hubcard:hover{transform:translateY(-3px);border-color:var(--c1)}
+.hubcard.soon{border-style:dashed;box-shadow:none;background:transparent}
+.ml-art{background:linear-gradient(135deg,#1e1b4b,#4c1d95 55%,#831843);padding:12px 16px}
+.ml-art svg{display:block;width:100%;height:auto}
+.ml-art text{font:600 13px Inter,system-ui,sans-serif}
+.ml-body{padding:16px 18px 18px}.ml-body h3{margin:6px 0;font-size:19px}.ml-body p{margin:0;color:var(--muted);font-size:14px}
+.ml-body .tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--c5)}
+.ml-go{display:inline-block;margin-top:10px;font-weight:700;color:var(--c1);font-size:14px}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-rl">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; Step 8</p>
+  <h1>Reinforcement learning, <span class="grad">interactively</span></h1>
+  <p class="lede">Step 8 of the learning path. Learning to act from rewards: Markov decision processes, the Bellman equations, exploration, and the deep RL methods behind game-playing agents and RLHF.</p>
+</section>
+<div class="evo-slot" data-evo="rl"></div>
+<div class="hubgrid">
+<a class="hubcard" href="rl-foundations/"><div class="ml-art" aria-hidden="true"><svg viewBox="0 0 320 150"><rect x="30" y="14" width="32" height="32" rx="4" fill="#a78bfa" fill-opacity="0.12"/><rect x="66" y="14" width="32" height="32" rx="4" fill="#a78bfa" fill-opacity="0.22"/><rect x="102" y="14" width="32" height="32" rx="4" fill="#a78bfa" fill-opacity="0.32"/><rect x="138" y="14" width="32" height="32" rx="4" fill="#a78bfa" fill-opacity="0.42000000000000004"/><rect x="174" y="14" width="32" height="32" rx="4" fill="#22d3ee" fill-opacity="0.9"/><rect x="30" y="50" width="32" height="32" rx="4" fill="#a78bfa" fill-opacity="0.12"/><rect x="66" y="50" width="32" height="32" rx="4" fill="#e2e8f0" fill-opacity="0.55"/><rect x="102" y="50" width="32" height="32" rx="4" fill="#e2e8f0" fill-opacity="0.55"/><rect x="138" y="50" width="32" height="32" rx="4" fill="#a78bfa" fill-opacity="0.42000000000000004"/><rect x="174" y="50" width="32" height="32" rx="4" fill="#fb7185" fill-opacity="0.9"/><rect x="30" y="86" width="32" height="32" rx="4" fill="#a78bfa" fill-opacity="0.12"/><rect x="66" y="86" width="32" height="32" rx="4" fill="#a78bfa" fill-opacity="0.22"/><rect x="102" y="86" width="32" height="32" rx="4" fill="#a78bfa" fill-opacity="0.32"/><rect x="138" y="86" width="32" height="32" rx="4" fill="#a78bfa" fill-opacity="0.42000000000000004"/><rect x="174" y="86" width="32" height="32" rx="4" fill="#a78bfa" fill-opacity="0.52"/><path d="M46,30 l10,0" stroke="#fff" stroke-width="2.5"/><path d="M82,30 l10,0" stroke="#fff" stroke-width="2.5"/><path d="M118,30 l10,0" stroke="#fff" stroke-width="2.5"/><path d="M154,30 l10,0" stroke="#fff" stroke-width="2.5"/><rect x="222" y="92" width="11" height="40" rx="2" fill="#22d3ee" fill-opacity=".85"/><rect x="238" y="70" width="11" height="62" rx="2" fill="#22d3ee" fill-opacity=".85"/><rect x="254" y="36" width="11" height="96" rx="2" fill="#fbbf24" fill-opacity=".85"/><rect x="270" y="78" width="11" height="54" rx="2" fill="#22d3ee" fill-opacity=".85"/><rect x="286" y="102" width="11" height="30" rx="2" fill="#22d3ee" fill-opacity=".85"/><text x="200" y="146" fill="#fbbf24">V(s) = max Σ P[R + γV]</text></svg></div><div class="ml-body"><span class="tag">Reinforcement learning</span><h3>RL foundations: MDPs, Bellman &amp; bandits</h3><p>An editable gridworld MDP, value iteration you can sweep by hand, policy iteration, the discount factor, and ε-greedy, UCB and Thompson sampling raced on a thousand bandits.</p><span class="ml-go">Open &rarr;</span></div></a>
+<a class="hubcard" href="deep-rl/"><div class="ml-art" aria-hidden="true"><svg viewBox="0 0 320 150"><rect x="24" y="112" width="20" height="20" rx="3" fill="#e2e8f0" fill-opacity="0.3"/><rect x="48" y="112" width="20" height="20" rx="3" fill="#fb7185" fill-opacity="0.75"/><rect x="72" y="112" width="20" height="20" rx="3" fill="#fb7185" fill-opacity="0.75"/><rect x="96" y="112" width="20" height="20" rx="3" fill="#fb7185" fill-opacity="0.75"/><rect x="120" y="112" width="20" height="20" rx="3" fill="#fb7185" fill-opacity="0.75"/><rect x="144" y="112" width="20" height="20" rx="3" fill="#fb7185" fill-opacity="0.75"/><rect x="168" y="112" width="20" height="20" rx="3" fill="#fb7185" fill-opacity="0.75"/><rect x="192" y="112" width="20" height="20" rx="3" fill="#fb7185" fill-opacity="0.75"/><rect x="216" y="112" width="20" height="20" rx="3" fill="#fb7185" fill-opacity="0.75"/><rect x="240" y="112" width="20" height="20" rx="3" fill="#fb7185" fill-opacity="0.75"/><rect x="264" y="112" width="20" height="20" rx="3" fill="#fb7185" fill-opacity="0.75"/><rect x="288" y="112" width="20" height="20" rx="3" fill="#e2e8f0" fill-opacity="0.75"/><path d="M24,40 C70,20 110,120 160,90 S250,30 300,40" fill="none" stroke="#a78bfa" stroke-width="4"/><path d="M24,70 L120,70 L130,58 L300,58" fill="none" stroke="#22d3ee" stroke-width="3" stroke-dasharray="6 4"/><line x1="200" y1="14" x2="200" y2="100" stroke="#fbbf24" stroke-width="2"/><line x1="240" y1="14" x2="240" y2="100" stroke="#fbbf24" stroke-width="2"/><text x="186" y="12" fill="#fbbf24">1−ε … 1+ε</text></svg></div><div class="ml-body"><span class="tag">Reinforcement learning</span><h3>Deep RL: Q-learning, DQN, policy gradients &amp; PPO</h3><p>Q-learning versus SARSA trained live on the cliff, why DQN needs replay, target networks and Double DQN, REINFORCE with and without a baseline, GAE, PPO’s clip, and RLHF.</p><span class="ml-go">Open &rarr;</span></div></a>
+</div>
+<p class="foot">Everything on these pages is written from scratch in plain JavaScript and runs in your browser; the networks marked "trained live" learn while you watch. Underlined words are clickable definitions.</p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../dl/assets/evo.js"></script>
+<script>NLP.nav('rl','hub');</script>
+</body>
+</html>

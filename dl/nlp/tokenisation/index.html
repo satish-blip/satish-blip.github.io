@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tokenisation</title>
+<meta name="description" content="How text becomes numbers: word, character and byte tokenisers, byte-pair encoding trained step by step in your browser, WordPiece's longest-match, and the vocabulary-size versus sequence-length trade-off.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP</p>
+  <h1>Tokenisation: <span class="grad">text to numbers</span></h1>
+  <p class="lede">A neural network only understands numbers. Before a model can read a sentence, the sentence is cut into pieces called tokens, and each piece is replaced by its id in a fixed vocabulary. How you cut matters: it decides what the model can see, how long its inputs are, and which words it can never spell.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#five">1 · Your text, five ways</a><a href="#bpe">2 · BPE, step by step</a><a href="#trade">3 · Vocabulary vs length</a><a href="#wordpiece">4 · WordPiece</a><a href="#quirks">5 · Quirks</a><a href="#code">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is tokenisation, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A model needs a fixed list of symbols it knows. Use whole words and the list is huge, yet a new word like "unfriendable" or a typo is still unknown. Use single characters and nothing is ever unknown, but every sentence becomes very long and each symbol carries almost no meaning. We want a middle ground, learned from data: common words stay whole, rare words are spelled out from reusable pieces.</p>
+      <h3>The idea</h3><p>A neural network can only do arithmetic, so text must first become numbers. <a class="term" data-t="tokenisation">Tokenisation</a> cuts text into pieces called <a class="term" data-t="token">tokens</a> and gives each piece an id from a fixed <a class="term" data-t="vocabulary">vocabulary</a>. Whole words make the vocabulary huge and leave unknown words (<a class="term" data-t="oov">out of vocabulary</a>); single characters make sequences very long. Modern models use <a class="term" data-t="subword">subwords</a>: common words stay whole, rare words split into reusable parts.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Pick a unit: word, character, byte or subword.</li><li>For subwords, learn merges from a corpus: <a class="term" data-t="bpe">BPE</a> repeatedly glues the most frequent neighbouring pair; <a class="term" data-t="wordpiece">WordPiece</a> picks the pair that most raises likelihood.</li><li>Apply the learned rules to new text to get a list of ids.</li><li>The model only ever sees those ids.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Like Lego: a small box of standard bricks can build any model. "unbelievable" becomes "un" + "believ" + "able", pieces that also appear in hundreds of other words.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Any text can be encoded, nothing is unknown</li><li>Common words cost one token</li><li>Vocabulary size is a dial you control</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Rare words and other languages cost more tokens</li><li>Numbers and spelling get split oddly</li><li>Tokeniser choices are fixed once the model is trained</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="token">Token</a><a class="term" data-t="tokenisation">Tokenisation</a><a class="term" data-t="vocabulary">Vocabulary</a><a class="term" data-t="subword">Subword</a><a class="term" data-t="bpe">BPE</a><a class="term" data-t="wordpiece">WordPiece</a><a class="term" data-t="oov">Out of vocabulary</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="five" class="card hl">
+  <h2><span class="num">1</span>Your text, five ways</h2>
+  <p class="sub">Type anything. Each tokeniser below has learned its vocabulary from the same small training corpus (shown in section 2). Little numbers under each token are its id. Words the word-level tokeniser never saw become <code>[UNK]</code>.</p>
+  <input class="txt" id="txt" value="Tokenisers learned the unbelievably newest words, lol 🙂">
+  <div class="row" style="margin-top:8px"><span class="hint" style="margin:0">Try:</span><button class="wordbtn" data-s="the lowest learner learned faster">lowest learner</button><button class="wordbtn" data-s="Transformers tokenise unseeable wordsmithery">rare words</button><button class="wordbtn" data-s="नमस्ते दुनिया, café ☕">non-English</button><button class="wordbtn" data-s="In 2024, 12345 + 678 = 13023">numbers</button></div>
+  <div id="five-out" style="margin-top:10px"></div>
+</section>
+
+<section id="bpe" class="card">
+  <h2><span class="num">2</span>Byte-pair encoding, step by step</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p><a class="term" data-t="bpe">BPE</a> (Sennrich et al. 2016, used by GPT models) builds a <a class="term" data-t="subword">subword</a> vocabulary bottom-up:</p>
+      <ol class="steps2"><li>Start with every word split into characters. Mark the start of a word with <code>▁</code> so "learn" at the start of a word differs from "learn" inside one.</li><li>Count every pair of neighbouring symbols, weighted by how often each word occurs.</li><li>Merge the most frequent pair into one new symbol, add it to the vocabulary, and rewrite every word.</li><li>Repeat until the vocabulary is as big as you want.</li></ol>
+      <p>To tokenise new text, apply the learned merges in the same order. Frequent words end up as a single token; rare words fall apart into familiar pieces, so nothing is ever truly unknown.</p>
+      <div class="player"><button class="btn primary" id="bStep">Merge once</button><button class="btn" id="bTen">Merge ×10</button><button class="btn" id="bReset">Reset</button><span class="pos" id="bPos"></span></div>
+      <div class="stats" id="bStats" style="margin-top:10px"></div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Most frequent pairs right now</h3>
+      <div id="bPairs"></div>
+      <h3>Training words, as BPE currently sees them</h3>
+      <div id="bWords" style="max-height:260px;overflow:auto"></div>
+    </div>
+  </div>
+  <h3>Merges learned so far (in order)</h3>
+  <div id="bMerges"></div>
+  <details style="margin-top:10px"><summary class="hint" style="cursor:pointer">Show the training corpus</summary><p class="mono" id="corpus" style="font-size:13px;white-space:pre-wrap"></p></details>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: byte-pair encoding (training)</h5><ol>
+        <li><span class="kw">input</span> a corpus of words with their counts, a target vocabulary size \(V\)</li>
+        <li>split every word into characters (plus an end-of-word mark); vocabulary \(\leftarrow\) all characters</li>
+        <li><span class="kw">while</span> vocabulary size \(&lt;V\) <span class="kw">do</span></li>
+        <li class="i1">count every adjacent pair of symbols, weighted by word count <span class="cm">e.g. (l, o) appears 12 times</span></li>
+        <li class="i1">pick the most frequent pair \((a,b)\)</li>
+        <li class="i1">replace every \(a\;b\) by the new symbol \(ab\) in all words <span class="cm">merge</span></li>
+        <li class="i1">add \(ab\) to the vocabulary; append the rule \(a+b\to ab\) to the merge list</li>
+        <li><span class="kw">return</span> the vocabulary and the ordered merge list <span class="cm">to tokenise new text, replay the merges in order</span></li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: why BPE is a compression algorithm, and byte-level BPE</summary><div>
+        <p>BPE began life in 1994 as a data compression method: repeatedly replace the most common pair of bytes with a new unused byte. Each merge shortens the corpus by exactly the number of times the pair occurs, so BPE is a greedy algorithm that, at every step, makes the biggest possible cut in total length. It is not guaranteed to find the best vocabulary of size \(V\) (that problem is hard), but greedy works well in practice.</p>
+        <p><b>Byte-level BPE</b> (GPT-2 onwards) starts from the 256 possible bytes instead of characters. Since every piece of text in any language, including emoji, is a sequence of bytes, nothing can ever be unknown. <b>WordPiece</b> (BERT) picks the pair that most increases the likelihood of the corpus, \(\text{count}(ab)/(\text{count}(a)\,\text{count}(b))\), instead of the raw count, which favours pairs that stick together more than chance predicts. <b>Unigram</b> (SentencePiece) runs the other way: start large and prune the pieces whose removal hurts the likelihood least.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="trade" class="card">
+  <h2><span class="num">3</span>The trade-off: vocabulary size versus sequence length</h2>
+  <div class="grid2">
+    <div><div class="plot wide" id="tPlot"></div><p class="hint">As BPE merges more pairs, the vocabulary grows (x-axis) and the average number of tokens per word on the corpus falls (y-axis). The dot is the current merge count from section 2.</p></div>
+    <div class="prose">
+      <p>Characters give a tiny vocabulary but very long sequences: the model must learn spelling and needs many steps per sentence (and attention cost grows with the <i>square</i> of the length). Whole words give short sequences but a huge vocabulary, a giant embedding table, and no way to handle new words.</p>
+      <p>Subwords sit in between. Real models use roughly:</p>
+      <table class="tbl txt"><tr><th>Model</th><th>Tokeniser</th><th>Vocabulary</th></tr>
+        <tr><td>BERT</td><td>WordPiece</td><td>30,522</td></tr>
+        <tr><td>GPT-2</td><td>byte-level BPE</td><td>50,257</td></tr>
+        <tr><td>LLaMA 2</td><td>SentencePiece BPE</td><td>32,000</td></tr>
+        <tr><td>GPT-4o, LLaMA 3</td><td>byte-level BPE</td><td>~128k to 200k</td></tr></table>
+      <p class="hint">English averages about 0.75 words per token for these models, so 1,000 tokens is roughly 750 words.</p>
+    </div>
+  </div>
+</section>
+
+<section id="wordpiece" class="card">
+  <h2><span class="num">4</span>WordPiece: greedy longest match</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p><a class="term" data-t="wordpiece">WordPiece</a> (used by BERT) builds a vocabulary much like BPE, but chooses the merge that most increases the likelihood of the training data, scoring a pair by \(\dfrac{\text{count}(ab)}{\text{count}(a)\,\text{count}(b)}\) rather than by raw frequency. Pieces that continue a word are written with <code>##</code>.</p>
+      <p>To tokenise, it scans each word left to right and always takes the <b>longest</b> vocabulary piece that matches, then continues from where it stopped. If at some point nothing matches, the whole word becomes <code>[UNK]</code>.</p>
+      <input class="txt" id="wpIn" value="unbelievably">
+      <div class="player" style="margin-top:8px"><button class="btn primary" id="wpGo">Animate</button><span class="pos" id="wpPos"></span></div>
+    </div>
+    <div><div id="wpSteps"></div></div>
+  </div>
+</section>
+
+<section id="quirks" class="card">
+  <h2><span class="num">5</span>Quirks that come from tokenisation</h2>
+  <div class="grid3 prose">
+    <div><h3>Spelling and counting</h3><p>A model that sees "strawberry" as two or three tokens never directly sees its letters, which is why language models are bad at counting the r's or reversing words.</p></div>
+    <div><h3>Numbers</h3><p>"12345" may be split as "123" + "45" while "12346" splits differently, so arithmetic is harder than it should be. Some tokenisers split every digit separately for this reason.</p></div>
+    <div><h3>Other languages</h3><p>Tokenisers trained mostly on English need many more tokens for Hindi, Tamil or Thai text: the same sentence costs more, fits less in the context window, and the model sees it in smaller pieces. Byte-level BPE at least guarantees no <code>[UNK]</code>.</p></div>
+    <div><h3>Leading spaces</h3><p>" the" and "the" are different tokens (GPT shows the space as <code>Ġ</code>, SentencePiece as <code>▁</code>). A prompt ending in a space can change what comes next.</p></div>
+    <div><h3>Special tokens</h3><p>Tokens like <code>[CLS]</code>, <code>[SEP]</code>, <code>[MASK]</code>, <code>&lt;|endoftext|&gt;</code> mark structure: the start of an input, a boundary between sentences, a hidden word, the end of a document.</p></div>
+    <div><h3>Same text, different ids</h3><p>Every model has its own vocabulary, so token ids (and token counts, and prices per token) are not comparable across models.</p></div>
+  </div>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> transformers <span class="k">import</span> AutoTokenizer
+bert = AutoTokenizer.from_pretrained(<span class="s">"bert-base-uncased"</span>)      <span class="c"># WordPiece</span>
+gpt2 = AutoTokenizer.from_pretrained(<span class="s">"gpt2"</span>)                   <span class="c"># byte-level BPE</span>
+bert.tokenize(<span class="s">"Tokenisers learned unbelievably"</span>)   <span class="c"># ['token', '##isers', 'learned', 'un', '##bel', '##ie', '##va', '##bly']</span>
+gpt2(<span class="s">"Hello world"</span>).input_ids                       <span class="c"># [15496, 995]</span>
+
+<span class="c"># train your own BPE</span>
+<span class="k">from</span> tokenizers <span class="k">import</span> Tokenizer, models, trainers, pre_tokenizers
+tok = Tokenizer(models.BPE(unk_token=<span class="s">"[UNK]"</span>)); tok.pre_tokenizer = pre_tokenizers.Whitespace()
+tok.train([<span class="s">"corpus.txt"</span>], trainers.BpeTrainer(vocab_size=<span class="s">8000</span>, special_tokens=[<span class="s">"[UNK]"</span>]))</pre>
+</section>
+
+<p class="foot">Part of the <a href="../">NLP series</a>. Everything runs in your browser.</p>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML; const esc=NLP.esc;
+const CORPUS=`the learner learned to learn and the learners kept learning
+the newest model is newer than the new model and the newest is the best
+low lower lowest slow slower slowest wide wider widest
+tokenisers split words into tokens and tokenising text is the first step
+a model reads tokens not words so every word becomes tokens
+unhappy unkind unfair unusual undo unbelievable believable believe
+playing played player plays replay replayed display
+the cat sat on the mat and the cats sat on the mats
+learning machine learning deep learning representation learning
+transformers attend to tokens and attention weighs every token`;
+const WORDS=CORPUS.toLowerCase().match(/[a-z]+/g); const FREQ={}; WORDS.forEach(w=>FREQ[w]=(FREQ[w]||0)+1);
+$('#corpus').textContent=CORPUS;
+
+/* ---------- BPE ---------- */
+const B={merges:[], words:null};
+function bReset(){ B.merges=[]; B.words=Object.keys(FREQ).map(w=>({w, f:FREQ[w], s:['▁'+w[0], ...w.slice(1)]})); }
+function pairCounts(){ const C=new Map(); B.words.forEach(({s,f})=>{ for(let i=0;i<s.length-1;i++){ const k=s[i]+'\u0001'+s[i+1]; C.set(k,(C.get(k)||0)+f); } }); return [...C.entries()].sort((a,b)=>b[1]-a[1]||(a[0]<b[0]?-1:1)); }
+function mergeOnce(){ const P=pairCounts(); if(!P.length) return false; const [a,b]=P[0][0].split('\u0001'); B.merges.push([a,b,P[0][1]]);
+  B.words.forEach(o=>{ const s=o.s, out=[]; for(let i=0;i<s.length;i++){ if(i<s.length-1&&s[i]===a&&s[i+1]===b){ out.push(a+b); i++; } else out.push(s[i]); } o.s=out; }); return true; }
+const baseChars=()=>{ const S=new Set(); Object.keys(FREQ).forEach(w=>{ S.add('▁'+w[0]); [...w.slice(1)].forEach(c=>S.add(c)); }); return [...S].sort(); };
+function vocab(){ return [...baseChars(), ...B.merges.map(m=>m[0]+m[1])]; }
+function bpeWord(w,merges){ let s=['▁'+w[0],...w.slice(1)]; const rank=new Map(merges.map((m,i)=>[m[0]+'\u0001'+m[1],i]));
+  while(s.length>1){ let best=-1, bi=-1; for(let i=0;i<s.length-1;i++){ const r=rank.get(s[i]+'\u0001'+s[i+1]); if(r!==undefined&&(best<0||r<best)){ best=r; bi=i; } } if(bi<0) break; s=[...s.slice(0,bi), s[bi]+s[bi+1], ...s.slice(bi+2)]; } return s; }
+function drawBpe(){ const P=pairCounts().slice(0,8); const V=vocab();
+  $('#bPairs').innerHTML=P.length?NLP.bars(P.map(([k,c])=>({label:k.split('\u0001').join(' + '),value:c,color:'var(--c1)'})),{lw:'130px',fmt:v=>v}):'<p class="hint">No pairs left: every word is a single token.</p>';
+  $('#bWords').innerHTML=B.words.slice().sort((a,b)=>b.f-a.f).map(o=>`<div style="display:flex;gap:8px;align-items:center;margin:3px 0"><span class="mono" style="width:30px;color:var(--muted);font-size:12px">×${o.f}</span>${NLP.chips(o.s,{colorBy:t=>V.indexOf(t)})}</div>`).join('');
+  $('#bMerges').innerHTML=B.merges.length?NLP.chips(B.merges.map((m,i)=>`${i+1}. ${m[0]}+${m[1]}`),{colorBy:(t,i)=>i}):'<p class="hint">None yet. Press "Merge once".</p>';
+  const toks=B.words.reduce((s,o)=>s+o.s.length*o.f,0);
+  $('#bPos').textContent=B.merges.length+' merges';
+  $('#bStats').innerHTML=[['c1',V.length,'vocabulary size'],['c2',toks,'tokens to encode the corpus'],['c5',(toks/WORDS.length).toFixed(2),'tokens per word']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  drawFive(); drawTrade(); drawWP(); }
+$('#bStep').onclick=()=>{ mergeOnce(); drawBpe(); }; $('#bTen').onclick=()=>{ for(let i=0;i<10;i++) mergeOnce(); drawBpe(); }; $('#bReset').onclick=()=>{ bReset(); drawBpe(); };
+
+/* ---------- trade-off curve (precomputed from a fresh run) ---------- */
+const tP=new ML.Plot('#tPlot',{equal:false}); let curve=null;
+function buildCurve(){ const save={m:B.merges,w:B.words}; bReset(); curve=[]; const nb=baseChars().length; for(let k=0;k<=260;k++){ const toks=B.words.reduce((s,o)=>s+o.s.length*o.f,0); curve.push([nb+k,toks/WORDS.length]); if(!mergeOnce()) break; } B.merges=save.m; B.words=save.w; }
+function drawTrade(){ if(!curve) return; const P=ML.palette(), nb=baseChars().length, k=Math.min(B.merges.length,curve.length-1);
+  ML.chart(tP,[{pts:curve,color:P.c1,width:2.6},{pts:[curve[k]],color:P.c2,dots:true,r:7,noline:true}],{y0:0,xl:'vocabulary size',yfmt:v=>v.toFixed(1)}); }
+tP.onResize=drawTrade;
+
+/* ---------- five tokenisers ---------- */
+const WVOC=['[UNK]',...Object.keys(FREQ).sort()];
+function wordLevel(t){ return (t.toLowerCase().match(/[a-z]+|[0-9]+|[^\sa-z0-9]/gu)||[]).map(w=>WVOC.includes(w)?w:'[UNK]'); }
+function chars(t){ return [...t]; }
+function bytes(t){ return [...new TextEncoder().encode(t)]; }
+function bpe(t){ const out=[]; (t.toLowerCase().match(/[a-z]+|[^\sa-z]/gu)||[]).forEach(w=>{ if(/^[a-z]+$/.test(w)) out.push(...bpeWord(w,B.merges)); else out.push(w); }); return out; }
+function wpVocab(){ const V=new Set(); vocab().forEach(p=>{ if(p.startsWith('▁')) V.add(p.slice(1)); else V.add('##'+p); }); return V; }
+function wpWord(w,V,trace){ const out=[]; let i=0; while(i<w.length){ let j=w.length, piece=null; while(j>i){ const sub=(i?'##':'')+w.slice(i,j); if(trace) trace.push({i,j,sub,ok:V.has(sub)}); if(V.has(sub)){ piece=sub; break; } j--; } if(!piece) return ['[UNK]']; out.push(piece); i=j; } return out; }
+function wordpiece(t){ const V=wpVocab(), out=[]; (t.toLowerCase().match(/[a-z]+|[^\sa-z]/gu)||[]).forEach(w=>{ if(/^[a-z]+$/.test(w)) out.push(...wpWord(w,V)); else out.push(V.has(w)?w:'[UNK]'); }); return out; }
+function drawFive(){ const t=$('#txt').value, V=vocab(), WV=[...wpVocab()].sort();
+  const id=(arr,list)=>arr.map(x=>{ const k=list.indexOf(x); return k<0?'?':k; });
+  const rows=[
+    ['Word level','split on spaces and punctuation; vocabulary = every training word', wordLevel(t), x=>x, a=>id(a,WVOC), WVOC.length],
+    ['Character','every character is a token', chars(t), x=>x, a=>a.map(c=>c.codePointAt(0)), 'all of Unicode'],
+    ['Byte (UTF-8)','every byte; vocabulary is always 256', bytes(t), x=>x.toString(16).padStart(2,'0'), a=>a, 256],
+    ['BPE (subword)',`${B.merges.length} merges learned in section 2; ▁ marks a word start`, bpe(t), x=>x, a=>a.map(x=>{ const k=V.indexOf(x); return k<0?'?':k; }), V.length],
+    ['WordPiece','longest-match against the same subword vocabulary; ## continues a word', wordpiece(t), x=>x, a=>id(a,WV), WV.length+1]];
+  $('#five-out').innerHTML=rows.map(([name,desc,toks,show,ids,vs])=>`<div class="method"><h4>${name}<span>${toks.length} tokens · vocab ${vs}</span></h4>${NLP.chips(toks,{ids:ids(toks),show,colorBy:(x,i)=>x==='[UNK]'?2:i})}<p class="hint" style="margin-top:6px">${desc}</p></div>`).join(''); }
+$('#txt').addEventListener('input',drawFive); document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{ $('#txt').value=b.dataset.s; drawFive(); });
+
+/* ---------- WordPiece animation ---------- */
+let wpTimer=null;
+function drawWP(k){ const w=$('#wpIn').value.toLowerCase().replace(/[^a-z]/g,''), V=wpVocab(), tr=[], res=w?wpWord(w,V,tr):[]; const n=k===undefined?tr.length:k;
+  $('#wpSteps').innerHTML=`<div class="mono" style="font-size:12.5px;line-height:1.8;columns:2 230px;column-gap:20px">`+tr.map((s,q)=>`<div style="break-inside:avoid${q>=n?';visibility:hidden':''}"><span style="color:var(--muted)">${w.slice(0,s.i)}</span><b style="background:${s.ok?'color-mix(in srgb,var(--c5) 25%,transparent)':'color-mix(in srgb,var(--c4) 18%,transparent)'};border-radius:4px;padding:1px 3px">${esc(w.slice(s.i,s.j))}</b><span style="color:var(--muted)">${w.slice(s.j)}</span>  → ${esc(s.sub)} ${s.ok?'<b style="color:var(--c5)">✓ in vocabulary</b>':'✗'}</div>`).join('')+'</div>'+(n>=tr.length?`<p style="margin-top:8px"><b>Result:</b></p>${NLP.chips(res,{colorBy:(x,i)=>x==='[UNK]'?2:i})}`:'');
+  $('#wpPos').textContent=n+' / '+tr.length+' checks'; }
+$('#wpGo').onclick=()=>{ clearInterval(wpTimer); let k=0; const w=$('#wpIn').value.toLowerCase().replace(/[^a-z]/g,''), tr=[]; wpWord(w,wpVocab(),tr); wpTimer=setInterval(()=>{ k++; drawWP(k); if(k>=tr.length) clearInterval(wpTimer); },120); };
+$('#wpIn').addEventListener('input',()=>drawWP());
+
+ML.onTheme(drawBpe);
+bReset(); buildCurve(); for(let i=0;i<60;i++) mergeOnce(); drawBpe(); drawWP();
+})();
+</script>
+<script>NLP.nav('nlp','tokenisation'); ML.renderMath(document.body);</script>
+</body>
+</html>

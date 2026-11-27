@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SHAP values and local explanations, explained interactively</title>
+<meta name="description" content="Why did the model make this prediction? Shapley values from game theory worked by hand, SHAP waterfall, beeswarm and dependence plots on a live boosted-tree model, sampling and KernelSHAP, TreeSHAP, LIME, Integrated Gradients for neural networks, counterfactual explanations and the pitfalls of each.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Explaining models</p>
+  <h1>SHAP values: <span class="grad">why this prediction?</span></h1>
+  <p class="lede">The <a href="../interpretability/">previous page</a> asked what a model does overall. Here the question is narrower and often more urgent: why did it price <i>this</i> house at 212 thousand, or turn down <i>this</i> loan? SHAP answers by splitting the prediction into one share per feature, using a 70-year-old idea from game theory about sharing a prize fairly. We build it by hand, run it on the same house-price model, then meet the other local methods: LIME, gradients and counterfactuals.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#game">1 · Shapley values</a><a href="#local">2 · One prediction</a><a href="#global">3 · All predictions</a><a href="#compute">4 · Computing it</a><a href="#lime">5 · LIME</a><a href="#grad">6 · Neural nets</a><a href="#cf">7 · Counterfactuals</a><a href="#care">8 · Pitfalls</a><a href="#py">9 · Python</a><a href="#credits">10 · Credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is a SHAP value, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The idea</h3>
+      <p>Start from the model's average prediction over typical data, the <b>base value</b>. For one house the model predicts something else. A <a class="term" data-t="shap">SHAP value</a> is the part of that difference credited to one <a class="term" data-t="feature">feature</a>, and the parts add up exactly:</p>
+      <div class="mathbox c1">$$f(x)=\underbrace{\mathbb E[f(X)]}_{\text{base value}}+\phi_1+\phi_2+\dots+\phi_d .$$</div>
+      <p>“Area +31, age −18, distance −6, garden +9” is a complete account of why this prediction is 16 above average. The shares are <a class="term" data-t="shapley-value">Shapley values</a>, the unique way of splitting a total that satisfies a short list of fairness rules.</p>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Three friends share a taxi home. Alone, each fare would differ; together the ride costs one amount. How much should each pay? Shapley's answer: imagine the friends joining the ride one at a time in every possible order, note how much each one adds to the fare when they join, and average over the orders. Replace friends by features and the fare by the prediction, and you have SHAP.</p>
+      <div class="pc"><div class="pro"><b>Why people like it</b><ul><li>Adds up exactly to the prediction</li><li>One principled definition, any model</li><li>Local shares average into global plots</li></ul></div><div class="con"><b>What to watch</b><ul><li>Expensive without tricks</li><li>Depends on the background data</li><li>Credits the model, not the real world</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="coalition">Coalition</a><a class="term" data-t="background-data">Background data</a><a class="term" data-t="kernelshap">KernelSHAP</a><a class="term" data-t="treeshap">TreeSHAP</a><a class="term" data-t="lime">LIME</a><a class="term" data-t="integrated-gradients">Integrated Gradients</a><a class="term" data-t="counterfactual-explanation">Counterfactual</a></div>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="game" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Shapley values: share the prize fairly</h2>
+    <p class="sub">A tiny model with three features. \(v(S)\) is its prediction, relative to the average, when only the features in \(S\) are known. Edit the values or pick a preset; the table plays all 6 joining orders.</p>
+    <div class="seg" id="gPre"><button data-v="add" class="on">Additive</button><button data-v="int">Interaction</button><button data-v="red">Redundant pair</button></div>
+    <div class="gv" id="gVals"></div>
+    <div class="tblwrap"><table class="tbl" id="gTbl"></table></div>
+    <div class="plot short" id="pGame"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>In game theory, \(d\) players can form any <a class="term" data-t="coalition">coalition</a> \(S\), and a value function \(v(S)\) says what that coalition earns, with \(v(\varnothing)=0\). Lloyd Shapley (1953) asked how to divide the grand total \(v(\{1..d\})\) among the players. His answer averages each player's <b>marginal contribution</b> \(v(S\cup\{j\})-v(S)\) over every order in which the players could arrive:</p>
+      <div class="mathbox c2">$$\phi_j=\sum_{S\subseteq\{1..d\}\setminus\{j\}}\frac{|S|!\,(d-|S|-1)!}{d!}\,\Big[v(S\cup\{j\})-v(S)\Big].$$</div>
+      <p>The weight is just the fraction of orderings in which exactly the players in \(S\) arrive before \(j\). With three players there are \(3!=6\) orders, shown as the rows of the table.</p>
+      <div class="algo" data-anim="shapley"><h5 class="algo-h">Algorithm: exact Shapley values by orderings</h5><ol>
+        <li><span class="kw">input</span> players \(1..d\), value function \(v\) with \(v(\varnothing)=0\)</li>
+        <li>\(\phi_j\leftarrow0\) for every \(j\)</li>
+        <li><span class="kw">for</span> each of the \(d!\) orderings \(\pi\) <span class="kw">do</span></li>
+        <li class="i1">\(S\leftarrow\varnothing\)</li>
+        <li class="i1"><span class="kw">for</span> each player \(j\) in the order \(\pi\) <span class="kw">do</span></li>
+        <li class="i1">\(\quad\phi_j\leftarrow\phi_j+v(S\cup\{j\})-v(S)\); \(S\leftarrow S\cup\{j\}\) <span class="cm">marginal contribution</span></li>
+        <li><span class="kw">return</span> \(\phi_j/d!\) for every \(j\) <span class="cm">average over orderings</span></li>
+      </ol></div>
+      <p>Shapley proved this is the <i>only</i> split with four properties:</p>
+      <ul>
+        <li><b>Efficiency:</b> the shares add up to the total, \(\sum_j\phi_j=v(\text{all})\).</li>
+        <li><b>Symmetry:</b> two players who always add the same get the same.</li>
+        <li><b>Dummy:</b> a player who never adds anything gets 0.</li>
+        <li><b>Additivity:</b> for two games played together, shares add. (For models: the SHAP values of a sum of trees are the sums of each tree's values.)</li>
+      </ul>
+      <p>Try the presets. <b>Additive</b>: each feature adds the same whatever else is known, so every order agrees. <b>Interaction</b>: area and garden are only worth 30 together; the 30 is shared equally between them. <b>Redundant pair</b>: area and bedrooms carry the same information, so whoever arrives first takes it; on average they split it.</p>
+    </div>
+  </div>
+</section>
+
+<section id="local" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>Explaining one prediction: the waterfall</h2>
+    <p class="sub">Start at the base value (the average prediction over 40 background houses), add each feature's SHAP value, end at this house's prediction. Red pushes the price up, blue pushes it down. Exact values from all 64 coalitions.</p>
+    <div class="plot wide" id="pWf"></div>
+    <div class="ctl"><label for="wHouse"><span>House (from the 200 test houses)</span><output id="wHouseOut"></output></label><input type="range" id="wHouse" min="1" max="200" step="1" value="1"></div>
+    <div class="seg" id="wModel"><button data-v="gbm" class="on">Boosted trees</button><button data-v="lin">Linear regression</button></div>
+    <div class="stats" id="wStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>To use Shapley values on a model we need \(v(S)\): what does the model predict when it only “knows” the features in \(S\)? A model cannot leave an input blank, so SHAP fills the unknown features in from real data and averages. Take a set of <a class="term" data-t="background-data">background</a> houses \(z^{(1)},\dots,z^{(B)}\) (here 40 training houses):</p>
+      <div class="mathbox c1">$$v(S)=\frac1B\sum_{b=1}^{B}f\big(x_S,\;z^{(b)}_{\bar S}\big)\;-\;\frac1B\sum_{b}f\big(z^{(b)}\big),$$</div>
+      <p>that is, keep this house's values for the features in \(S\), take the rest from each background house, predict, average, and measure from the base value. Plug this \(v\) into Shapley's formula. With 6 features there are \(2^6=64\) coalitions, each needing 40 predictions: 2,560 predictions per house, fast enough to do exactly here.</p>
+      <p>Switch to the <b>linear</b> model. For a linear model the whole calculation collapses to one line, which the page checks for you:</p>
+      <div class="mathbox c2">$$\phi_j=\beta_j\,\big(x_j-\bar z_j\big):\quad\text{the coefficient times how far this house is from the average.}$$</div>
+      <p>So a SHAP value is not a coefficient. A large coefficient on a feature where this house is perfectly average gives a SHAP value of zero. With boosted trees the shares also absorb curves and interactions: a big house far from the centre gets a much more negative distance value than a small one at the same distance.</p>
+      <details class="deeper"><summary>Going deeper: interventional or observational? Which “missing” do we mean?</summary><div>
+        <p>The formula above replaces the unknown features independently of the known ones, the <b>interventional</b> (or marginal) value function \(\mathbb E_{Z}[f(x_S,Z_{\bar S})]\). The alternative, <b>observational</b> (conditional) SHAP, uses \(\mathbb E[f(X)\mid X_S=x_S]\), which respects correlations: knowing the area, it only fills in bedroom counts that go with that area. Janzing et al. (2020) argue the interventional version is the right one for explaining the <i>model</i> (it is the causal effect of the inputs on the output); the conditional one can give credit to features the model never uses, through their correlation with used ones. The conditional version is also much harder to estimate. The shap library's <code>Explainer</code> with a background masker and TreeSHAP's <code>feature_perturbation="interventional"</code> both compute the interventional values used here.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="global" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>From one house to all of them</h2>
+    <p class="sub" id="gSub"></p>
+    <div class="plot wide" id="pGl"></div>
+    <div class="seg" id="glView"><button data-v="bee" class="on">Beeswarm</button><button data-v="bar">Mean |SHAP|</button><button data-v="dep">Dependence</button></div>
+    <div class="seg" id="glFeat"></div>
+    <div class="stats" id="glStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Compute SHAP values for many houses and stack them. Three standard pictures, all from the same table of numbers (one row per house, one column per feature):</p>
+      <ul>
+        <li><b>Beeswarm (summary plot).</b> One row per feature, one dot per house, placed at its SHAP value and coloured by the feature's value (blue low, red high). Area: red dots on the right, so big houses are pushed up. Age: red on the left, but bunched, because the age effect levels off. The listing code stays close to zero; its small spread is noise the trees picked up.</li>
+        <li><b>Mean |SHAP|.</b> Average the absolute SHAP values per feature: a global <a class="term" data-t="feature-importance">importance</a> measured in the units of the prediction (thousands). Compare with <a href="../interpretability/#importance">permutation importance</a>: similar ranking, different question (how much it moves predictions, not how much accuracy it buys).</li>
+        <li><b>Dependence plot.</b> One feature's value across, its SHAP value up, coloured by a second feature. It is the SHAP cousin of the <a href="../interpretability/#pdp">PD curve</a>, but shows each house. Pick distance: the dots fan out by colour, because distance hurts large (red) houses more. Vertical spread at the same x is the signature of an <a class="term" data-t="interaction-effect">interaction</a>.</li>
+      </ul>
+      <details class="deeper"><summary>Going deeper: SHAP interaction values</summary><div>
+        <p>The Shapley interaction index (Grabisch and Roubens 1999) splits each \(\phi_j\) further into a main effect \(\phi_{jj}\) and pairwise terms \(\phi_{jk}=\phi_{kj}\), so that \(\phi_j=\phi_{jj}+\sum_{k\ne j}\phi_{jk}\). For trees, Lundberg et al. (2020) compute the whole \(d\times d\) matrix per prediction in polynomial time (<code>shap_interaction_values</code>). Summed over houses, the area–distance cell would light up here, and only that one.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="compute" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Computing SHAP when there are many features</h2>
+    <p class="sub">Error of two estimators against the exact values for the house picked in section 2, averaged over 8 runs, as the number of model predictions grows (log scale). Exact needs 2,560 predictions here; with 30 features it would need 43 billion.</p>
+    <div class="plot short" id="pCmp"></div>
+    <button class="btn" id="cRun">Run again</button>
+    <div class="stats" id="cStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>The exact sum has \(2^d\) terms: fine for 6 features, impossible for 100. Three ideas make SHAP practical.</p>
+      <h3>1. Sample orderings (Monte Carlo)</h3>
+      <p>Štrumbelj and Kononenko (2014): instead of all \(d!\) orders, draw random ones. For each, start from a random background house, switch its features to this house's values one at a time in that order, and record how much the prediction moves at each switch. Every ordering costs \(d+1\) predictions and gives one noisy sample of every \(\phi_j\); the error shrinks like \(1/\sqrt{\text{samples}}\) and the shares still add up exactly.</p>
+      <div class="algo" data-anim="shapmc"><h5 class="algo-h">Algorithm: Monte Carlo Shapley values (permutation sampling)</h5><ol>
+        <li><span class="kw">input</span> model \(f\), instance \(x\), background data, number of samples \(T\)</li>
+        <li><span class="kw">for</span> \(t=1\) <span class="kw">to</span> \(T\) <span class="kw">do</span></li>
+        <li class="i1">draw a random ordering \(\pi\) and a random background row \(z\)</li>
+        <li class="i1">\(r\leftarrow z\); \(p\leftarrow f(r)\)</li>
+        <li class="i1"><span class="kw">for</span> each \(j\) in the order \(\pi\) <span class="kw">do</span></li>
+        <li class="i1">\(\quad r_j\leftarrow x_j\); \(\phi_j\leftarrow\phi_j+f(r)-p\); \(p\leftarrow f(r)\) <span class="cm">switch one feature</span></li>
+        <li><span class="kw">return</span> \(\phi_j/T\) for every \(j\)</li>
+      </ol></div>
+      <h3>2. KernelSHAP: a weighted regression</h3>
+      <p>Lundberg and Lee (2017) proved that Shapley values are the solution of a weighted least-squares problem. Code each coalition as a 0/1 vector \(z'\), fit a linear model \(g(z')=\phi_0+\sum_j\phi_jz'_j\) to the values \(v(S)\), and weight each coalition by the <b>Shapley kernel</b></p>
+      <div class="mathbox c3">$$\pi(z')=\frac{d-1}{\binom{d}{|z'|}\,|z'|\,(d-|z'|)} .$$</div>
+      <p>Very small and very large coalitions get the most weight: they tell you the most about a single feature. Sampling a few hundred coalitions often gets close; with all of them the regression returns the exact Shapley values, which the orange curve reaches at 2,560 predictions.</p>
+      <div class="algo" data-anim="kernelshap"><h5 class="algo-h">Algorithm: KernelSHAP</h5><ol>
+        <li><span class="kw">input</span> value function \(v\), \(d\) features, number of coalitions \(K\)</li>
+        <li><span class="kw">for</span> \(k=1\) <span class="kw">to</span> \(K\) <span class="kw">do</span></li>
+        <li class="i1">draw a size \(s\) with probability \(\propto\frac{d-1}{s(d-s)}\), then a random coalition \(z'_k\) of that size</li>
+        <li class="i1">evaluate \(v(z'_k)\) with the background data <span class="cm">\(B\) predictions</span></li>
+        <li>solve \(\min_\phi\sum_k\big(v(z'_k)-\phi_0-\sum_j\phi_jz'_{kj}\big)^2\) subject to \(\sum_j\phi_j=f(x)-\phi_0\)</li>
+        <li><span class="kw">return</span> \(\phi_1,\dots,\phi_d\)</li>
+      </ol></div>
+      <h3>3. TreeSHAP: exact and fast for trees</h3>
+      <p>For tree ensembles, Lundberg et al. (2020) push all coalitions through each tree at once, tracking what fraction of each subset reaches each leaf. The result is exact in \(O(TLD^2)\) time (trees × leaves × depth²) instead of exponential: milliseconds per row for XGBoost, LightGBM and scikit-learn forests. This is why SHAP became the default explanation for tabular models. For deep networks, DeepSHAP and GradientSHAP use the gradient ideas of section 6.</p>
+    </div>
+  </div>
+</section>
+
+<section id="lime" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>LIME: a simple model that is right nearby</h2>
+    <p class="sub">A black-box loan model: shaded green where it approves. Click any point to explain it. Dots are LIME's random samples, sized by their weight; the dashed line is the local linear surrogate's 50% boundary, the arrow the true local direction (the gradient).</p>
+    <div class="plot sq" id="pLime"></div>
+    <div class="ctl"><label for="lW"><span>Kernel width (how local)</span><output id="lWOut"></output></label><input type="range" id="lW" min="0.1" max="3" step="0.05" value="0.75"></div>
+    <div class="ctl"><label for="lN"><span>Samples</span><output id="lNOut"></output></label><input type="range" id="lN" min="20" max="1000" step="10" value="300"></div>
+    <button class="btn" id="lRun">Resample</button>
+    <div class="stats" id="lStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p><a class="term" data-t="lime">LIME</a> (Ribeiro, Singh and Guestrin, 2016) explains one prediction by fitting an easy model, usually a sparse linear one, that only has to be right <i>near</i> that point. Any curved boundary looks straight if you zoom in far enough.</p>
+      <div class="algo" data-anim="lime"><h5 class="algo-h">Algorithm: LIME for tabular data</h5><ol>
+        <li><span class="kw">input</span> black box \(f\), instance \(x\), kernel width \(\sigma\), samples \(N\)</li>
+        <li><span class="kw">for</span> \(i=1\) <span class="kw">to</span> \(N\) <span class="kw">do</span></li>
+        <li class="i1">draw a perturbed point \(z_i\) <span class="cm">from the features' spread</span></li>
+        <li class="i1">\(y_i\leftarrow f(z_i)\); \(w_i\leftarrow\exp\!\big(-\lVert z_i-x\rVert^2/\sigma^2\big)\) <span class="cm">nearby counts more</span></li>
+        <li>fit a weighted linear model \(g\) to \((z_i,y_i)\) with weights \(w_i\) <span class="cm">often with a feature limit</span></li>
+        <li><span class="kw">return</span> the coefficients of \(g\) as the explanation</li>
+      </ol></div>
+      <p>It works for text and images too: perturb by deleting words or greying out patches of pixels (super-pixels). That flexibility is why LIME spread fast.</p>
+      <p>Now drag the kernel width. Small: only the nearest samples count, the surrogate tracks the gradient, but with few effective samples it jitters each time you resample. Large: the surrogate fits the whole curved boundary with one line and can point the wrong way. There is no principled choice of width, and Alvarez-Melis and Jaakkola (2018) found explanations of nearby points can disagree. The fidelity number tells you whether to trust a given explanation at all.</p>
+      <p class="hint">SHAP and LIME are related: KernelSHAP is LIME with one particular choice of kernel, loss and sampling, the choice that makes the coefficients Shapley values.</p>
+    </div>
+  </div>
+</section>
+
+<section id="grad" class="lab">
+  <div class="card hl">
+    <h2><span class="num">6</span>Neural networks: gradients and Integrated Gradients</h2>
+    <p class="sub">A small saturating model \(f=\sigma(2.5x_1+1.5x_2+x_1x_2-2)\). Drag the input (filled dot) and the baseline (ring). Bars compare gradient × input with Integrated Gradients; IG's bars always add up to \(f(x)-f(\text{baseline})\).</p>
+    <div class="plot sq" id="pIg"></div><div class="plot short" id="pIgB"></div>
+    <div class="ctl"><label for="igM"><span>Steps along the path</span><output id="igMOut"></output></label><input type="range" id="igM" min="1" max="64" step="1" value="16"></div>
+    <div class="stats" id="igStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A network is differentiable, so its <a class="term" data-t="gradient">gradient</a> is the obvious explanation: how much would the output change per unit nudge of each input? For an image, the gradient's size per pixel is a <a class="term" data-t="saliency-map">saliency map</a> (Simonyan et al., 2014). Multiply by the input and you get <b>gradient × input</b>, an attribution in the units of the output.</p>
+      <p>Gradients have a blind spot: <b>saturation</b>. Put the input at (2, 2), deep in the flat top of the sigmoid. The model is certain, its output far above the baseline's, yet the gradient is almost zero, so gradient × input says no feature mattered. <a class="term" data-t="integrated-gradients">Integrated Gradients</a> (Sundararajan, Taly and Yan, 2017) fixes this by walking a straight line from a <b>baseline</b> \(x'\) (a black image, all-zero embedding, or a reference input) to \(x\) and adding up the gradients along the way:</p>
+      <div class="mathbox c4">$$\mathrm{IG}_j(x)=(x_j-x'_j)\int_0^1\frac{\partial f\big(x'+\alpha(x-x')\big)}{\partial x_j}\,d\alpha .$$</div>
+      <p>By the fundamental theorem of calculus for path integrals, the attributions satisfy <b>completeness</b>: \(\sum_j\mathrm{IG}_j=f(x)-f(x')\), the same efficiency property as SHAP. In fact IG is the Aumann–Shapley value from game theory, the continuous version of Shapley.</p>
+      <div class="algo" data-anim="intgrad"><h5 class="algo-h">Algorithm: Integrated Gradients</h5><ol>
+        <li><span class="kw">input</span> differentiable model \(f\), input \(x\), baseline \(x'\), steps \(m\)</li>
+        <li>\(g\leftarrow0\)</li>
+        <li><span class="kw">for</span> \(k=1\) <span class="kw">to</span> \(m\) <span class="kw">do</span></li>
+        <li class="i1">\(z\leftarrow x'+\frac km(x-x')\) <span class="cm">a point on the straight path</span></li>
+        <li class="i1">\(g\leftarrow g+\nabla f(z)\) <span class="cm">one backward pass</span></li>
+        <li><span class="kw">return</span> \((x-x')\odot g/m\) <span class="cm">check: sum \(\approx f(x)-f(x')\)</span></li>
+      </ol></div>
+      <p>Lower the step count to 2 or 3 and watch the completeness gap grow: the integral is a sum, and 20 to 300 steps are typical in practice. Move the baseline and the attributions change: the explanation is always relative to a reference, just as SHAP's is relative to the background data.</p>
+      <h3>The wider toolbox for deep nets</h3>
+      <ul>
+        <li><b>SmoothGrad</b> averages gradients over noisy copies of the input to cut speckle. <b>Grad-CAM</b> weights a CNN's last feature maps by their gradients to get a coarse heat-map of where the network looked.</li>
+        <li><b>DeepSHAP</b> and <b>GradientSHAP</b> approximate SHAP for networks with back-propagation rules or IG from several baselines.</li>
+        <li><b>Attention weights</b> (see <a href="../../dl/nlp/self-attention/">self-attention</a>) show where a transformer reads, but are not by themselves explanations of the output (Jain and Wallace, 2019).</li>
+        <li><b>Mechanistic interpretability</b> opens the network itself: probes, concept vectors (TCAV), and sparse autoencoders that break a language model's activations into millions of human-readable features, then follow how they connect (Anthropic, 2023 to 2025).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="cf" class="lab">
+  <div class="card hl">
+    <h2><span class="num">7</span>Counterfactuals: what would have to change?</h2>
+    <p class="sub">The same loan model. Click a declined applicant (outside the green). The arrow is the smallest change that gets them approved; with the lock on, credit history cannot change.</p>
+    <div class="plot sq" id="pCf"></div>
+    <label class="toggle"><input type="checkbox" id="cfLock"> Credit history is fixed (only income can change)</label>
+    <div class="stats" id="cfStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>To the person who was declined, “income −0.21, history +0.05” is less useful than “with 1,200 more a month you would have been approved”. A <a class="term" data-t="counterfactual-explanation">counterfactual explanation</a> (Wachter, Mittelstadt and Russell, 2017) is the closest input that gets the outcome you want:</p>
+      <div class="mathbox c5">$$x^{\text{cf}}=\arg\min_{x'}\;d(x,x')\quad\text{subject to}\quad f(x')\ge0.5,$$</div>
+      <p>usually solved with a penalty \(\lambda\,(f(x')-0.5)^2+d(x,x')\) and gradient steps, or by search. Here the page searches every direction and keeps the nearest approved point, with distance measured after scaling each feature by its spread, so one unit means the same in both directions.</p>
+      <p>Good counterfactuals are <b>actionable</b> (do not ask anyone to get younger or change their history: tick the lock), <b>sparse</b> (change as few features as possible), and <b>plausible</b> (land where real applicants live). DiCE (Mothilal et al., 2020) returns several diverse ones. They need no access to the model's insides and match how lending rules phrase “reasons for decline”, but they say what would flip <i>the model</i>, which may not be what would change the real outcome.</p>
+    </div>
+  </div>
+</section>
+
+<section id="care" class="card">
+  <h2><span class="num">8</span>Using SHAP well: pitfalls and good habits</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>Things that go wrong</h3>
+      <ul>
+        <li><b>The background is part of the answer.</b> SHAP values explain the gap from the background's average. Explain a loan against all applicants or against approved applicants and you get different numbers. Choose it on purpose, and say what it was.</li>
+        <li><b>Correlated features.</b> Interventional SHAP fills in impossible combinations, as PD does; credit between near-copies can be shared out arbitrarily. Group them, or explain the group.</li>
+        <li><b>The output scale.</b> For classifiers, TreeSHAP explains the log-odds by default, where effects add; in probability space the same feature can look weaker at the extremes. Say which you plot.</li>
+        <li><b>Not causal.</b> A large SHAP value means the <i>model</i> leans on a feature, not that changing it would change the world. Shoe size predicts reading skill in children because both track age.</li>
+        <li><b>Explanations can be gamed.</b> <a href="https://arxiv.org/abs/1911.02508" target="_blank" rel="noopener">Slack et al. (2020)</a> built models that behave badly on real data but innocently on the off-manifold points LIME and KernelSHAP probe, so the explanations look clean.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Good habits</h3>
+      <ul>
+        <li>Check the model is accurate before explaining it.</li>
+        <li>Use TreeSHAP for trees (exact, fast); KernelSHAP or permutation sampling with a few hundred background rows otherwise.</li>
+        <li>Look at the beeswarm and dependence plots, not only the bar of means: the spread and the colours carry the story.</li>
+        <li>Cross-check with a second method (permutation importance, PD/ALE) and a second good model (the Rashomon effect).</li>
+        <li>For decisions about people, give reasons people can act on: counterfactuals or “top reasons” (in insurance and credit these are often required) and check explanations per group as part of a fairness review.</li>
+      </ul>
+      <p class="hint">Want to try a model on your own data first? The <a href="../playground/">ML Playground</a> trains it in the browser and shows importance under Output.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">9</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> shap, xgboost
+model = xgboost.XGBRegressor(max_depth=<span class="s">3</span>, n_estimators=<span class="s">150</span>).fit(X_tr, y_tr)
+
+explainer = shap.TreeExplainer(model, data=X_tr.sample(<span class="s">100</span>), feature_perturbation=<span class="s">"interventional"</span>)  <span class="c"># TreeSHAP</span>
+sv = explainer(X_te)                     <span class="c"># sv.values: one row per house, one column per feature; sv.base_values</span>
+shap.plots.waterfall(sv[<span class="s">0</span>])              <span class="c"># section 2</span>
+shap.plots.beeswarm(sv); shap.plots.bar(sv)                      <span class="c"># section 3</span>
+shap.plots.scatter(sv[:, <span class="s">"dist"</span>], color=sv[:, <span class="s">"size"</span>])           <span class="c"># dependence plot, coloured</span>
+explainer.shap_interaction_values(X_te)  <span class="c"># d x d interaction matrix per row</span>
+
+shap.Explainer(model.predict, shap.maskers.Independent(X_tr, <span class="s">100</span>), algorithm=<span class="s">"permutation"</span>)(X_te)  <span class="c"># any model</span>
+shap.KernelExplainer(model.predict, shap.kmeans(X_tr, <span class="s">20</span>)).shap_values(X_te.iloc[:<span class="s">5</span>], nsamples=<span class="s">500</span>)
+
+<span class="k">from</span> lime.lime_tabular <span class="k">import</span> LimeTabularExplainer
+LimeTabularExplainer(X_tr.values, feature_names=list(X.columns), mode=<span class="s">"regression"</span>, kernel_width=<span class="s">0.75</span>*np.sqrt(X.shape[<span class="s">1</span>])).explain_instance(X_te.values[<span class="s">0</span>], model.predict, num_features=<span class="s">5</span>)
+
+<span class="k">from</span> captum.attr <span class="k">import</span> IntegratedGradients           <span class="c"># PyTorch networks</span>
+attr, delta = IntegratedGradients(net).attribute(x, baselines=torch.zeros_like(x), n_steps=<span class="s">64</span>, return_convergence_delta=<span class="s">True</span>)
+
+<span class="k">import</span> dice_ml                                         <span class="c"># counterfactuals</span>
+dice_ml.Dice(dice_ml.Data(dataframe=df, continuous_features=[<span class="s">"income"</span>], outcome_name=<span class="s">"approved"</span>), dice_ml.Model(model=clf, backend=<span class="s">"sklearn"</span>)).generate_counterfactuals(q, total_CFs=<span class="s">3</span>, features_to_vary=[<span class="s">"income"</span>])</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">10</span>Sources and credits</h2>
+  <div class="prose">
+    <p>This page was written for this site with its own example, labs and code. It draws directly on Christoph Molnar's <a href="https://christophm.github.io/interpretable-ml-book/" target="_blank" rel="noopener"><i>Interpretable Machine Learning</i></a> (chapters on Shapley values, SHAP, LIME and counterfactual explanations; the taxi-style intuition for Shapley values follows its presentation), and on the documentation of the <a href="https://shap.readthedocs.io/" target="_blank" rel="noopener">shap library</a> by Scott Lundberg and contributors, whose waterfall, beeswarm and dependence plots this page re-creates, and whose “interventional versus observational” notes shaped section 2.</p>
+    <p>Original papers: Shapley 1953 (a value for n-person games); Aumann and Shapley 1974 (values of non-atomic games); Grabisch and Roubens 1999 (interaction index); Štrumbelj and Kononenko 2010 and 2014 (Shapley values for explaining predictions, by sampling); Lundberg and Lee 2017 (SHAP and KernelSHAP); Lundberg et al. 2020 (TreeSHAP, Nature Machine Intelligence); Janzing, Minorics and Blöbaum 2020 (feature relevance quantification: interventional versus observational); Ribeiro, Singh and Guestrin 2016 (LIME); Alvarez-Melis and Jaakkola 2018 (robustness of interpretability methods); Simonyan, Vedaldi and Zisserman 2014 (saliency maps); Smilkov et al. 2017 (SmoothGrad); Selvaraju et al. 2017 (Grad-CAM); Sundararajan, Taly and Yan 2017 (Integrated Gradients); Kim et al. 2018 (TCAV); Jain and Wallace 2019 (attention is not explanation); Wachter, Mittelstadt and Russell 2017 (counterfactual explanations); Mothilal, Sharma and Tan 2020 (DiCE); Slack et al. 2020 (fooling LIME and SHAP); Bricken et al. 2023 and Templeton et al. 2024 (sparse autoencoders for language-model features).</p>
+  </div>
+</section>
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything runs in your browser. Back: <a href="../interpretability/">&larr; Interpretability</a></p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../dl/assets/evo.js"></script>
+<script src="../assets/xai.js"></script>
+<script>
+(function(){
+const {$} = ML, X = XAI, F = X.FEATS;
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+const sgn=v=>(v>=0?'+':'−')+Math.abs(v).toFixed(1);
+if(window.EVO) EVO.render('#evoSlot','xai');
+const D = X.makeData(600, 11), TR = {X:D.X.slice(0,400), y:D.y.slice(0,400)}, TE = {X:D.X.slice(400), y:D.y.slice(400)};
+const M = { lin: X.ols(TR.X, TR.y), gbm: X.gbm(TR.X, TR.y, {trees:120, minLeaf:20, sub:.7}) }, BG = TR.X.slice(0,40);
+const NM = ['Area','Bedrooms','Age','Distance','Garden','Listing code'], mix=(a,b,t)=>{ const A=ML.rgb(a), B=ML.rgb(b); return `rgb(${A.map((v,i)=>Math.round(v+(B[i]-v)*t)).join(',')})`; };
+const lbl=(c,s,x,y,o={})=>{ const P=ML.palette(); c.save(); c.font=o.font||'12px Inter,system-ui'; c.fillStyle=o.color||P.ink; c.textAlign=o.align||'left'; c.textBaseline='middle'; c.fillText(s,x,y); c.restore(); };
+
+/* ---- 1 the game ---- */
+const PRE={add:{1:12,2:-8,4:10,3:4,5:22,6:2,7:14}, int:{1:0,2:-8,4:0,3:-8,5:30,6:-8,7:22}, red:{1:10,2:10,4:6,3:10,5:16,6:16,7:16}};
+const PN=['A = area','B = bedrooms','C = garden'], PNs=['A','B','C'], ORD=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+let G=Object.assign({},PRE.add); const pGame=new ML.Plot('#pGame',{equal:false});
+const setName=m=>m?'{'+[0,1,2].filter(j=>m&(1<<j)).map(j=>PNs[j]).join(',')+'}':'∅';
+function gInputs(){ $('#gVals').innerHTML=[1,2,4,3,5,6,7].map(m=>`<label>v(${setName(m)})<input type="number" step="1" data-m="${m}" value="${G[m]}"></label>`).join('');
+  $('#gVals').querySelectorAll('input').forEach(el=>el.oninput=()=>{ const v=parseFloat(el.value); if(isFinite(v)){ G[+el.dataset.m]=v; drawGame(); } }); }
+function drawGame(){ const P=ML.palette(), v=m=>m?G[m]:0, phi=[0,0,0];
+  let h='<tr><th>Order</th>'+PNs.map(s=>`<th>${s} adds</th>`).join('')+'</tr>';
+  ORD.forEach(o=>{ let S=0; const add=[0,0,0]; o.forEach(j=>{ add[j]=v(S|(1<<j))-v(S); S|=1<<j; }); add.forEach((a,j)=>phi[j]+=a/6); h+=`<tr><td>${o.map(j=>PNs[j]).join(' → ')}</td>`+add.map(a=>`<td style="color:${a>0?'var(--c2)':a<0?'var(--c3)':'var(--muted)'}">${a>0?'+':''}${a}</td>`).join('')+'</tr>'; });
+  h+='<tr><td><b>Average = φ</b></td>'+phi.map(p=>`<td><b>${p>0?'+':''}${p.toFixed(2)}</b></td>`).join('')+'</tr>'; $('#gTbl').innerHTML=h;
+  const c=pGame.ctx; pGame.clear(); const W=pGame.w, H=pGame.h, L=126, R=56, lo0=Math.min(0,...phi,v(7)), hi=Math.max(0,...phi,v(7)), lo=lo0<0?lo0-.25*(hi-lo0):0, fx=x=>L+(x-lo)/(hi-lo||1)*(W-L-R), rh=(H-20)/4;
+  [...phi,v(7)].forEach((p,i)=>{ const y=10+i*rh+rh*.2; c.fillStyle=i<3?(p>=0?P.c2:P.c3):P.c1; c.globalAlpha=.85; c.fillRect(Math.min(fx(0),fx(p)),y,Math.abs(fx(p)-fx(0)),rh*.6); c.globalAlpha=1;
+    lbl(c,i<3?'φ '+PN[i]:'total v(ABC)',L-8,y+rh*.3,{align:'right'}); lbl(c,(p>0?'+':'')+p.toFixed(2),p>=0?fx(p)+6:fx(p)-6,y+rh*.3,{align:p>=0?'left':'right',font:'600 12px Inter,system-ui'}); });
+  c.save(); c.strokeStyle=P.muted; c.beginPath(); c.moveTo(fx(0),6); c.lineTo(fx(0),H-6); c.stroke(); c.restore(); }
+ML.bindSeg('gPre',k=>{ G=Object.assign({},PRE[k]); gInputs(); drawGame(); }); pGame.onResize=drawGame;
+
+/* ---- 2 waterfall ---- */
+const pWf=new ML.Plot('#pWf',{equal:false}); let wI=0, wM='gbm', WF=null;
+function calcWf(){ const x=TE.X[wI], s=X.shapExact(M[wM],x,BG); WF=s; drawWf(); }
+function drawWf(){ if(!WF) return; const P=ML.palette(), c=pWf.ctx, x=TE.X[wI], {phi,base,fx}=WF; pWf.clear();
+  const ord=phi.map((p,j)=>j).sort((a,b)=>Math.abs(phi[a])-Math.abs(phi[b])), steps=[]; let cur=base; ord.forEach(j=>{ steps.push([j,cur,cur+phi[j]]); cur+=phi[j]; });
+  const vals=[base,fx,...steps.flatMap(s=>[s[1],s[2]])], lo=Math.min(...vals), hi=Math.max(...vals), pad=(hi-lo)*.12+2, W=pWf.w, H=pWf.h, L=Math.min(200,W*.42), R=14, T=28, B=30;
+  const X0=lo-pad, X1=hi+pad, sx=v=>L+(v-X0)/(X1-X0)*(W-L-R), n=steps.length, rh=(H-T-B)/n;
+  c.save(); c.strokeStyle=P.line; c.font='11px Inter,system-ui'; c.fillStyle=P.muted; c.textAlign='center'; const st=[5,10,20,25,50,100].find(k=>(X1-X0)/k<=7); for(let v=Math.ceil(X0/st)*st; v<=X1; v+=st){ c.beginPath(); c.moveTo(sx(v)+.5,T-6); c.lineTo(sx(v)+.5,H-B); c.stroke(); c.fillText(v,sx(v),H-B+14); } c.restore();
+  steps.slice().reverse().forEach(([j,a,b],i)=>{ const y=T+i*rh+rh*.18, h=rh*.64, col=b>=a?P.c2:P.c3; c.fillStyle=col; c.globalAlpha=.88; c.beginPath(); const x0=sx(Math.min(a,b)), x1=sx(Math.max(a,b)), tip=Math.min(8,(x1-x0)*.5);
+      if(b>=a){ c.moveTo(x0,y); c.lineTo(x1-tip,y); c.lineTo(x1,y+h/2); c.lineTo(x1-tip,y+h); c.lineTo(x0,y+h); } else { c.moveTo(x1,y); c.lineTo(x0+tip,y); c.lineTo(x0,y+h/2); c.lineTo(x0+tip,y+h); c.lineTo(x1,y+h); } c.closePath(); c.fill(); c.globalAlpha=1;
+      lbl(c,`${NM[j]} = ${F[j].fmt(x[j])}${F[j].unit&&j!==4?' '+F[j].unit:''}`,L-8,y+h/2,{align:'right'});
+      const t=sgn(b-a); lbl(c,t,b>=a?x1+5:x0-5,y+h/2,{align:b>=a?'left':'right',font:'600 12px Inter,system-ui',color:col});
+      if(i<n-1){ c.save(); c.strokeStyle=P.muted; c.setLineDash([2,3]); c.beginPath(); c.moveTo(sx(a),y+h); c.lineTo(sx(a),y+rh); c.stroke(); c.restore(); } });
+  c.save(); c.strokeStyle=P.ink; c.setLineDash([4,4]); c.beginPath(); c.moveTo(sx(base),T-4); c.lineTo(sx(base),H-B); c.moveTo(sx(fx),T-12); c.lineTo(sx(fx),T+rh*.2); c.stroke(); c.restore();
+  lbl(c,`f(x) = ${fx.toFixed(1)}`,sx(fx),T-16,{align:'center',font:'600 12px Inter,system-ui'}); lbl(c,`E[f(X)] = ${base.toFixed(1)}`,sx(base),H-8,{align:'center',font:'600 12px Inter,system-ui',color:P.muted});
+  const sum=base+phi.reduce((a,b)=>a+b,0); let chk='';
+  if(wM==='lin'){ const mb=F.map((_,j)=>X.mean(BG.map(r=>r[j]))), cf=M.lin.beta.map((b,j)=>b*(x[j]-mb[j])), err=Math.max(...cf.map((v,j)=>Math.abs(v-phi[j]))); chk=stat('c5',err<1e-6?'✓ matches':err.toExponential(1),'β(x − mean) formula'); }
+  $('#wStats').innerHTML=stat('c1',fx.toFixed(1),'prediction (thousands)')+stat('c3',base.toFixed(1),'base value')+stat('c4',Math.abs(sum-fx)<1e-6?'✓ exact':(sum-fx).toExponential(1),'base + sum of SHAP = prediction')+stat('c2',TE.y[wI].toFixed(1),'actual price')+chk; }
+ML.bindRange('wHouse',v=>{wI=v-1;calcWf();runCmp();}); ML.bindSeg('wModel',v=>{wM=v;calcWf();}); pWf.onResize=drawWf;
+
+/* ---- 3 global ---- */
+const pGl=new ML.Plot('#pGl',{equal:false}); let glV='bee', glF=3; const NG=120, SV={};
+$('#glFeat').innerHTML=NM.map((n,j)=>`<button data-v="${j}"${j===glF?' class="on"':''}>${n}</button>`).join(''); ML.tileRow('glFeat');
+function calcGl(){ if(SV.done||SV.busy) return; SV.busy=true; SV.rows=[]; let i=0; const step=()=>{ const t=performance.now(); while(i<NG && performance.now()-t<30){ SV.rows.push(X.shapExact(M.gbm,TE.X[i],BG).phi); i++; }
+    $('#gSub').textContent=i<NG?`Computing exact SHAP values for ${NG} test houses… ${i}/${NG}`:`Exact SHAP values of the boosted model for ${NG} test houses (${(NG*2560).toLocaleString()} predictions).`; drawGl(); if(i<NG) setTimeout(step,0); else { SV.done=true; SV.busy=false; drawGl(); } }; step(); }
+function drawGl(){ const P=ML.palette(), c=pGl.ctx, R=SV.rows||[], n=R.length; pGl.clear(); $('#glFeat').parentElement.style.display=glV==='dep'?'':'none'; if(!n) return;
+  const W=pGl.w, H=pGl.h, col=(j,i)=>{ const v=TE.X[i][j], a=X.quantile(TE.X.slice(0,NG).map(r=>r[j]),.05), b=X.quantile(TE.X.slice(0,NG).map(r=>r[j]),.95); return mix(P.c3,P.c2,Math.max(0,Math.min(1,(v-a)/(b-a||1)))); };
+  const mabs=F.map((_,j)=>X.mean(R.map(r=>Math.abs(r[j])))), order=mabs.map((v,j)=>j).sort((a,b)=>mabs[b]-mabs[a]);
+  if(glV==='bee'||glV==='bar'){ const L=Math.min(110,W*.26), Rr=14, T=glV==='bee'?34:12, B=28, rh=(H-T-B)/6; const all=R.flat(), lo=glV==='bar'?0:Math.min(...all), hi=glV==='bar'?Math.max(...mabs)*1.15:Math.max(...all), pad=glV==='bar'?0:(hi-lo)*.04;
+    const sx=v=>L+(v-lo+pad)/(hi-lo+2*pad)*(W-L-Rr); c.save(); c.strokeStyle=P.line; c.font='11px Inter,system-ui'; c.fillStyle=P.muted; c.textAlign='center'; const st=[5,10,20,25,50].find(k=>(hi-lo)/k<=7)||100; for(let v=Math.ceil((lo-pad)/st)*st; v<=hi+pad; v+=st){ c.beginPath(); c.moveTo(sx(v)+.5,T); c.lineTo(sx(v)+.5,H-B); c.stroke(); c.fillText(v,sx(v),H-B+14); }
+    c.textAlign='right'; c.fillText(glV==='bar'?'mean |SHAP value| (thousands)':'SHAP value (impact on the price, thousands)',W-Rr,H-4); c.strokeStyle=P.muted; c.beginPath(); c.moveTo(sx(0),T); c.lineTo(sx(0),H-B); c.stroke(); c.restore();
+    order.forEach((j,k)=>{ const yc=T+k*rh+rh/2; lbl(c,NM[j],L-10,yc,{align:'right'});
+      if(glV==='bar'){ c.fillStyle=P.c1; c.globalAlpha=.85; c.fillRect(sx(0),yc-rh*.28,sx(mabs[j])-sx(0),rh*.56); c.globalAlpha=1; lbl(c,mabs[j].toFixed(1),sx(mabs[j])+6,yc,{font:'600 12px Inter,system-ui'}); return; }
+      const bins=new Map(); R.forEach((r,i)=>{ const px=sx(r[j]), b=Math.round(px/5), k2=bins.get(b)||0; bins.set(b,k2+1); const off=(k2%2?1:-1)*Math.ceil(k2/2)*3.2; if(Math.abs(off)>rh*.45) return; c.beginPath(); c.arc(px,yc+off,2.8,0,7); c.fillStyle=col(j,i); c.globalAlpha=.9; c.fill(); }); c.globalAlpha=1; });
+    if(glV==='bee'){ const gx=W-Rr-120, gy=6; const gr=c.createLinearGradient(gx,0,gx+80,0); gr.addColorStop(0,P.c3); gr.addColorStop(1,P.c2); c.fillStyle=gr; c.fillRect(gx+20,gy,80,8); lbl(c,'low',gx+16,gy+4,{align:'right',font:'11px Inter,system-ui',color:P.muted}); lbl(c,'high',gx+104,gy+4,{font:'11px Inter,system-ui',color:P.muted}); lbl(c,'feature value',gx-52,gy+4,{align:'center',font:'11px Inter,system-ui',color:P.muted}); } }
+  else { const j=glF, k=j===0?3:0, xs=R.map((_,i)=>TE.X[i][j]), ys=R.map(r=>r[j]), x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys), py=(y1-y0)*.08+1, pxx=(x1-x0)*.04+.01;
+    const fr=ML.chart(pGl,[{pts:[[x0-pxx,y0-py],[x1+pxx,y1+py]],color:'transparent',noline:true}],{x0:x0-pxx,x1:x1+pxx,y0:y0-py,y1:y1+py,xl:F[j].name+(F[j].unit?' ('+F[j].unit+')':'')});
+    R.forEach((r,i)=>{ c.beginPath(); c.arc(fr.fx(xs[i]+(j===4||j===1?(((i*37)%11)-5)*.012*(x1-x0||1):0)),fr.fy(ys[i]),3.6,0,7); c.fillStyle=col(k,i); c.globalAlpha=.85; c.fill(); }); c.globalAlpha=1;
+    lbl(c,`SHAP value for ${NM[j].toLowerCase()} ↑   colour: ${NM[k].toLowerCase()} (blue low, red high)`,50,18,{font:'11px Inter,system-ui',color:P.muted}); }
+  const top=order[0]; $('#glStats').innerHTML=stat('c1',NM[top],'largest mean |SHAP| ('+mabs[top].toFixed(1)+')')+stat('c3',mabs[5].toFixed(2),'mean |SHAP|: listing code (noise)')+stat('c4',n+' / '+NG,'houses explained'); }
+ML.bindSeg('glView',v=>{glV=v;drawGl();}); ML.bindSeg('glFeat',v=>{glF=+v;drawGl();}); pGl.onResize=drawGl;
+if('IntersectionObserver' in window){ new IntersectionObserver((es,o)=>{ if(es.some(e=>e.isIntersecting)){ calcGl(); o.disconnect(); } },{rootMargin:'600px'}).observe($('#pGl')); } else calcGl();
+$('#gSub').textContent='Exact SHAP values of the boosted model for 120 test houses (computed when you scroll here).';
+
+/* ---- 4 estimators ---- */
+const pCmp=new ML.Plot('#pCmp',{equal:false}); let cSeed=1, CMP=null;
+function runCmp(){ const x=TE.X[wI], m=M.gbm, v=X.valueFn(m,x,BG), ex=X.shapExact(m,x,BG,v).phi, d=6, err=e=>X.mean(e.map((p,j)=>Math.abs(p-ex[j])));
+  const budP=[14,28,56,112,224,448,896,1792,3584], budK=[4,8,16,32,62];
+  const perm=budP.map(()=>0), kern=budK.map(()=>0), RUNS=8;
+  for(let r=0;r<RUNS;r++){ const R=X.rng(1000*cSeed+r+1);
+    const phi=new Array(d).fill(0); let done=0; budP.forEach((B,bi)=>{ const T=Math.floor(B/(d+1)); for(;done<T;done++){ const ord=[...Array(d).keys()]; for(let i=d-1;i>0;i--){ const k=R.int(i+1); [ord[i],ord[k]]=[ord[k],ord[i]]; } const rr=BG[R.int(BG.length)].slice(); let p=m.predict(rr); for(const j of ord){ rr[j]=x[j]; const q=m.predict(rr); phi[j]+=q-p; p=q; } } perm[bi]+=err(phi.map(s=>s/done))/RUNS; });
+    budK.forEach((K,bi)=>{ kern[bi]+=err(X.kernelShap(v,d,K,R).phi)/RUNS; }); }
+  CMP={perm:budP.map((b,i)=>[b,perm[i]]), kern:budK.map((K,i)=>[(K+2)*BG.length,Math.max(kern[i],1e-3)])}; drawCmp(); }
+function drawCmp(){ if(!CMP) return; const P=ML.palette(), ys=[...CMP.perm,...CMP.kern].map(p=>p[1]);
+  ML.chart(pCmp,[{pts:CMP.perm,color:P.c1,width:3,dots:true,r:4},{pts:CMP.kern,color:P.c4,width:3,dots:true,r:4}],{logx:true,x0:10,x1:4000,y0:0,y1:Math.max(...ys)*1.55,xl:'model predictions used (log scale)',vline:2560});
+  const c=pCmp.ctx; lbl(c,'● permutation sampling',52,18,{color:P.c1,font:'600 12px Inter,system-ui'}); lbl(c,'● KernelSHAP (40 background rows per coalition)',52,34,{color:P.c4,font:'600 12px Inter,system-ui'}); lbl(c,'mean |error| per feature (thousands) ↑   dashed: cost of the exact answer',52,50,{color:P.muted,font:'11px Inter,system-ui'});
+  $('#cStats').innerHTML=stat('c1',CMP.perm[CMP.perm.length-1][1].toFixed(2),'sampling error at 3,584 predictions')+stat('c4',CMP.kern[CMP.kern.length-1][1]<1e-2?'≈ 0':CMP.kern[CMP.kern.length-1][1].toFixed(3),'KernelSHAP error with all 62 coalitions')+stat('c3','2⁶ = 64','coalitions for 6 features'); }
+$('#cRun').onclick=()=>{cSeed++;runCmp();}; pCmp.onResize=drawCmp;
+
+/* ---- 5 LIME and 7 counterfactuals share a black-box loan model ---- */
+/* inputs: income (thousands a month, 0..10) and years of credit history (0..10); scaled by 2.5 around 5 */
+const BB = (a,b) => { const u=(a-5)/2.5, w=(b-5)/2.5; return ML.sigmoid(3.2*(w + 0.85*u - 0.55*Math.sin(2.2*u) + 0.25*u*u - 0.2)); };
+const grad = (a,b) => { const h=1e-4; return [(BB(a+h,b)-BB(a-h,b))/(2*h),(BB(a,b+h)-BB(a,b-h))/(2*h)]; };
+const B10={x0:0,x1:10,y0:0,y1:10};
+function shadeBB(plot){ const P=ML.palette(), c=plot.ctx; plot.clear(); const res=6, g=ML.rgb(P.c5), r=ML.rgb(P.c2), bg=ML.rgb(P.bg);
+  for(let px=0;px<plot.w;px+=res) for(let py=0;py<plot.h;py+=res){ const p=BB(plot.ix(px+res/2),plot.iy(py+res/2)), col=p>=.5?g:r, a=.10+.22*Math.abs(2*p-1); c.fillStyle=`rgb(${bg.map((v,i)=>Math.round(v*(1-a)+col[i]*a)).join(',')})`; c.fillRect(px,py,res,res); }
+  plot.contour((x,y)=>BB(x,y),.5,{color:P.c5,width:2}); plot.grid(2,true); lbl(c,'income →',plot.w-8,plot.h-16,{align:'right',font:'11px Inter,system-ui',color:P.muted}); lbl(c,'credit history (years) ↑',26,12,{font:'11px Inter,system-ui',color:P.muted}); }
+const pLime=new ML.Plot('#pLime',{bounds:B10}); let lx=[3.6,4.4], lW=.75, lN=300, lSeed=1, LM=null;
+function fitLime(seed){ const R=X.rng(seed), Z=[], y=[], w=[]; for(let i=0;i<lN;i++){ const z=[5+2.5*R.gauss(),5+2.5*R.gauss()]; Z.push(z); y.push(BB(z[0],z[1])); const d2=((z[0]-lx[0])/2.5)**2+((z[1]-lx[1])/2.5)**2; w.push(Math.exp(-d2/(lW*lW))); }
+  const A=[[0,0,0],[0,0,0],[0,0,0]], b=[0,0,0]; Z.forEach((z,i)=>{ const f=[1,(z[0]-lx[0])/2.5,(z[1]-lx[1])/2.5]; for(let a=0;a<3;a++){ b[a]+=w[i]*f[a]*y[i]; for(let k=0;k<3;k++) A[a][k]+=w[i]*f[a]*f[k]; } }); for(let a=1;a<3;a++) A[a][a]+=1e-3;
+  const beta=X.solve(A,b); let sw=0,my=0; w.forEach((wi,i)=>{ sw+=wi; my+=wi*y[i]; }); my/=sw; let ss=0, se=0; Z.forEach((z,i)=>{ const g=beta[0]+beta[1]*(z[0]-lx[0])/2.5+beta[2]*(z[1]-lx[1])/2.5; ss+=w[i]*(y[i]-my)**2; se+=w[i]*(y[i]-g)**2; });
+  return {Z,w,beta,fid:1-se/(ss||1),neff:sw*sw/w.reduce((s,v)=>s+v*v,0)}; }
+function runLime(){ LM=fitLime(lSeed); const angs=[]; for(let k=0;k<12;k++){ const b=fitLime(500+lSeed*13+k).beta; angs.push(Math.atan2(b[2],b[1])); } const ma=Math.atan2(X.mean(angs.map(Math.sin)),X.mean(angs.map(Math.cos)));
+  LM.spread=Math.sqrt(X.mean(angs.map(a=>{ let d=a-ma; while(d>Math.PI) d-=2*Math.PI; while(d<-Math.PI) d+=2*Math.PI; return d*d; })))*180/Math.PI; drawLime(); }
+function drawLime(){ if(!LM) return; const P=ML.palette(), c=pLime.ctx; shadeBB(pLime); const mw=Math.max(...LM.w);
+  LM.Z.forEach((z,i)=>{ if(z[0]<0||z[0]>10||z[1]<0||z[1]>10) return; const r=1.2+4.5*Math.sqrt(LM.w[i]/mw); c.beginPath(); c.arc(pLime.X(z[0]),pLime.Y(z[1]),r,0,7); c.fillStyle=BB(z[0],z[1])>=.5?P.c5:P.c2; c.globalAlpha=.35+.5*LM.w[i]/mw; c.fill(); }); c.globalAlpha=1;
+  const [b0,b1,b2]=LM.beta; /* surrogate: b0 + b1 u + b2 w = 0.5 where u=(x-lx)/2.5 */ pLime.hline(b1/2.5,b2/2.5,b0-.5-b1*lx[0]/2.5-b2*lx[1]/2.5,{color:P.ink,width:2.5,dash:[7,5]});
+  const g=grad(lx[0],lx[1]), gl=Math.hypot(...g)||1; pLime.arrow(lx[0],lx[1],lx[0]+1.6*g[0]/gl,lx[1]+1.6*g[1]/gl,{color:P.c4,width:3});
+  const sl=Math.hypot(b1,b2)||1; pLime.arrow(lx[0],lx[1],lx[0]+1.3*b1/sl,lx[1]+1.3*b2/sl,{color:P.ink,width:2});
+  c.beginPath(); c.arc(pLime.X(lx[0]),pLime.Y(lx[1]),7,0,7); c.fillStyle=P.c1; c.fill(); c.strokeStyle=P.card; c.lineWidth=2; c.stroke();
+  const ang=Math.acos(Math.max(-1,Math.min(1,(g[0]*b1+g[1]*b2)/(gl*sl))))*180/Math.PI;
+  $('#lStats').innerHTML=stat('c1',BB(lx[0],lx[1]).toFixed(2),'black-box probability of approval')+stat('c4',ang.toFixed(0)+'°','angle between LIME and the true gradient')+stat('c5',LM.fid.toFixed(2),'local fidelity (weighted R²)')+stat('c3',LM.neff.toFixed(0),'effective samples')+stat('c2','± '+LM.spread.toFixed(0)+'°','LIME direction over 12 resamples'); }
+pLime.pointer({down:(x,y)=>{ lx=[Math.max(0,Math.min(10,x)),Math.max(0,Math.min(10,y))]; runLime(); }});
+ML.bindRange('lW',v=>{lW=v;runLime();},v=>v.toFixed(2)); ML.bindRange('lN',v=>{lN=v;runLime();}); $('#lRun').onclick=()=>{lSeed++;runLime();}; pLime.onResize=drawLime;
+
+/* ---- 7 counterfactual ---- */
+const pCf=new ML.Plot('#pCf',{bounds:B10}); let cfx=[3.2,3.4];
+function findCf(){ const lock=$('#cfLock').checked, x=cfx; if(BB(x[0],x[1])>=.5) return {ok:true,already:true};
+  let best=null; const dirs=lock?[0]:[...Array(360).keys()].map(k=>k*Math.PI/180);
+  for(const t of dirs){ const ux=lock?1:Math.cos(t), uy=lock?0:Math.sin(t); for(let r=0.01;r<12;r+=0.02){ const a=x[0]+ux*r, b=x[1]+uy*r; if(a<0||a>10||b<0||b>10) break; if(BB(a,b)>=.5){ if(!best||r<best.r) best={r,a,b}; break; } } }
+  return best?{ok:true,...best}:{ok:false}; }
+function drawCf(){ const P=ML.palette(), c=pCf.ctx; shadeBB(pCf); const r=findCf();
+  if(r.ok&&!r.already){ pCf.arrow(cfx[0],cfx[1],r.a,r.b,{color:P.ink,width:3}); c.beginPath(); c.arc(pCf.X(r.a),pCf.Y(r.b),6,0,7); c.fillStyle=P.c5; c.fill(); c.strokeStyle=P.card; c.lineWidth=2; c.stroke(); }
+  c.beginPath(); c.arc(pCf.X(cfx[0]),pCf.Y(cfx[1]),7,0,7); c.fillStyle=P.c2; c.fill(); c.strokeStyle=P.card; c.lineWidth=2; c.stroke();
+  $('#cfStats').innerHTML = r.already ? stat('c5','approved','already approved: click a point in the red area') : !r.ok ? stat('c2','none','no approval within reach with this lock') :
+    stat('c2',BB(cfx[0],cfx[1]).toFixed(2),'approval probability now')+stat('c1',(r.a>=cfx[0]?'+':'−')+Math.round(1000*Math.abs(r.a-cfx[0])/10)*10,'change in monthly income')+stat('c3',sgn(r.b-cfx[1])+' yrs','change in credit history')+stat('c4',BB(r.a,r.b).toFixed(2),'approval probability after'); }
+pCf.pointer({down:(x,y)=>{ cfx=[Math.max(0,Math.min(10,x)),Math.max(0,Math.min(10,y))]; drawCf(); }}); $('#cfLock').onchange=drawCf; pCf.onResize=drawCf;
+
+/* ---- 6 integrated gradients ---- */
+const IGF=(a,b)=>ML.sigmoid(2.5*a+1.5*b+a*b-2), IGG=(a,b)=>{ const s=IGF(a,b), d=s*(1-s); return [d*(2.5+b), d*(1.5+a)]; };
+const pIg=new ML.Plot('#pIg',{bounds:{x0:-.6,x1:2.6,y0:-.6,y1:2.6}}), pIgB=new ML.Plot('#pIgB',{equal:false}); let igx=[2,2], igb=[0,0], igM=16, drag=null;
+function drawIg(){ const P=ML.palette(), c=pIg.ctx; pIg.clear(); pIg.regions((a,b)=>IGF(a,b),6,.9); [.1,.3,.5,.7,.9].forEach(l=>pIg.contour(IGF,l,{color:P.muted,width:1,alpha:.6})); pIg.grid(1,true);
+  pIg.line(igb[0],igb[1],igx[0],igx[1],{color:P.ink,width:2,dash:[5,4]}); let g=[0,0]; for(let k=1;k<=igM;k++){ const a=igb[0]+k/igM*(igx[0]-igb[0]), b=igb[1]+k/igM*(igx[1]-igb[1]), d=IGG(a,b); g[0]+=d[0]/igM; g[1]+=d[1]/igM; c.beginPath(); c.arc(pIg.X(a),pIg.Y(b),3,0,7); c.fillStyle=P.c4; c.fill(); }
+  c.beginPath(); c.arc(pIg.X(igb[0]),pIg.Y(igb[1]),8,0,7); c.strokeStyle=P.ink; c.lineWidth=3; c.stroke(); c.beginPath(); c.arc(pIg.X(igx[0]),pIg.Y(igx[1]),8,0,7); c.fillStyle=P.c1; c.fill(); c.strokeStyle=P.card; c.lineWidth=2; c.stroke();
+  pIg.text('baseline',igb[0],igb[1],{dx:12,dy:16,halo:true}); pIg.text('input',igx[0],igx[1],{dx:12,dy:-10,halo:true});
+  const ig=[(igx[0]-igb[0])*g[0],(igx[1]-igb[1])*g[1]], gd=IGG(igx[0],igx[1]), gi=[gd[0]*igx[0],gd[1]*igx[1]], tot=IGF(igx[0],igx[1])-IGF(igb[0],igb[1]);
+  pIgB.clear(); const cb=pIgB.ctx, W=pIgB.w, H=pIgB.h, vals=[...ig,...gi,tot,ig[0]+ig[1]], lo=Math.min(0,...vals), hi=Math.max(0,...vals), L=16, T=34, B=26, sy=v=>T+(hi-v)/(hi-lo||1)*(H-T-B), bw=(W-2*L)/6;
+  const bars=[['IG x₁',ig[0],P.c4],['IG x₂',ig[1],P.c4],['g×in x₁',gi[0],P.c3],['g×in x₂',gi[1],P.c3],['Σ IG',ig[0]+ig[1],P.c1],['f(x)−f(x′)',tot,P.ink]];
+  cb.save(); cb.strokeStyle=P.muted; cb.beginPath(); cb.moveTo(L,sy(0)); cb.lineTo(W-L,sy(0)); cb.stroke(); cb.restore();
+  bars.forEach(([n,v,col],i)=>{ const x=L+bw*(i+.1), y0=sy(0), y1=sy(v); cb.fillStyle=col; cb.globalAlpha=.85; cb.fillRect(x,Math.min(y0,y1),bw*.8,Math.abs(y1-y0)); cb.globalAlpha=1;
+    lbl(cb,v.toFixed(3),x+bw*.4,v>=0?y1-9:y1+9,{align:'center',font:'600 11px Inter,system-ui'}); lbl(cb,n,x+bw*.4,H-B+12,{align:'center',font:'11px Inter,system-ui',color:P.muted}); });
+  lbl(cb,'attributions (orange: Integrated Gradients, cyan: gradient × input)',L,14,{font:'600 12px Inter,system-ui',color:P.muted});
+  $('#igStats').innerHTML=stat('c1',IGF(igx[0],igx[1]).toFixed(3),'f(input)')+stat('c3',Math.hypot(...gd).toExponential(1),'size of the gradient at the input')+stat('c4',(ig[0]+ig[1]-tot).toExponential(1),'completeness gap Σ IG − (f(x) − f(x′))'); }
+pIg.pointer({down:(x,y)=>{ drag=Math.hypot(x-igx[0],y-igx[1])<Math.hypot(x-igb[0],y-igb[1])?'x':'b'; }, move:(x,y)=>{ const p=[Math.max(-.5,Math.min(2.5,x)),Math.max(-.5,Math.min(2.5,y))]; if(drag==='x') igx=p; else igb=p; drawIg(); }, up:()=>{drag=null;}});
+ML.bindRange('igM',v=>{igM=v;drawIg();}); pIg.onResize=drawIg; pIgB.onResize=drawIg;
+
+ML.onTheme(()=>{ drawGame(); drawWf(); drawGl(); drawCmp(); drawLime(); drawCf(); drawIg(); });
+gInputs(); drawGame(); calcWf(); runLime(); drawCf(); drawIg(); setTimeout(runCmp,50);
+})();
+</script>
+<style>
+.gv{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:6px 10px;margin:10px 0}
+.gv label{display:flex;flex-direction:column;font:500 12px "JetBrains Mono",ui-monospace,monospace;color:var(--muted);gap:3px}
+.gv input{width:100%;font:600 14px "JetBrains Mono",ui-monospace,monospace;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+#gTbl td,#gTbl th{text-align:center;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px}
+</style>
+<script>ML.nav('shap'); ML.renderMath(document.body);</script>
+</body>
+</html>

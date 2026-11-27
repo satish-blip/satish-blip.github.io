@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ViLBERT and co-attention</title>
+<meta name="description" content="ViLBERT gives text and images their own transformer streams and connects them with co-attentional transformer (Co-TRM) layers, where each stream asks questions of the other. Interactive co-attention maps, the Co-TRM layer step by step, masked multimodal pre-training and alignment prediction.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP &middot; Multimodal (part 3 of 5)</p>
+  <h1>ViLBERT: <span class="grad">two streams that talk through co-attention</span></h1>
+  <p class="lede"><a href="../visualbert/">VisualBERT</a> poured words and image regions into one BERT. ViLBERT, published the same month (Lu et al., 2019), keeps them apart: one transformer for the text, another for the image, and special <b>co-attentional transformer layers</b> (Co-TRM) where the text stream asks the image questions and the image stream asks the text. This page builds that layer from the attention you already know.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#arch">1 · Two streams</a><a href="#co">2 · Co-attention, live</a><a href="#cotrm">3 · The Co-TRM layer</a><a href="#pre">4 · Pre-training</a><a href="#vs">5 · ViLBERT, VisualBERT, LXMERT</a><a href="#py">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is ViLBERT, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>Words and image regions are very different kinds of input. A word embedding is a learned lookup that BERT has already polished on billions of words; a region feature is 2,048 numbers from an object detector. Throwing them into one transformer (the single-stream approach) forces both through the same weights at every layer, and the image tokens can disturb the language knowledge that BERT spent so long learning. We would like each modality to be processed in its own way, at its own depth, and still let the two exchange information wherever they need to.</p>
+      <h3>The idea</h3><p>ViLBERT is a <a class="term" data-t="single-stream">two-stream</a> <a class="term" data-t="multimodal">multimodal</a> model. A text stream (initialised from BERT) and an image stream (over <a class="term" data-t="region-features">region features</a>) run side by side. At chosen depths they are joined by <a class="term" data-t="co-attention">co-attentional transformer</a> layers: the text stream's <i>queries</i> attend over the image stream's <i>keys and values</i>, and at the same time the image's queries attend over the text. It is <a class="term" data-t="cross-attention">cross-attention</a> in both directions at once.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Text: BERT tokens. Image: an [IMG] token plus one token per detected region, with its box position.</li><li>Each stream runs its own transformer layers.</li><li>At a Co-TRM layer the streams swap keys and values, so each attends to the other.</li><li>Pre-train on image–caption pairs; read off [CLS] and [IMG] for tasks.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Two experts reviewing a news photo and its caption: a picture editor and a copy editor. Each works at their own desk with their own skills. Every so often they meet: the copy editor asks "where is the dog?", the picture editor asks "what is this red thing called?". Then they go back to their desks with what they learned.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Keeps BERT's language layers intact</li><li>Each modality gets its own width and depth</li><li>Cross-modal attention is explicit and inspectable</li></ul></div><div class="con"><b>Watch out for</b><ul><li>More parameters and more moving parts than single-stream</li><li>No direct word-to-word attention inside a Co-TRM layer (it comes from the TRM layers)</li><li>Still relies on a frozen object detector</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="co-attention">Co-attention</a><a class="term" data-t="single-stream">Two-stream</a><a class="term" data-t="cross-attention">Cross-attention</a><a class="term" data-t="region-features">Region features</a><a class="term" data-t="qkv">Query, key, value</a><a class="term" data-t="mlm">Masked language modelling</a><a class="term" data-t="visualbert">VisualBERT</a><a class="term" data-t="grounding">Grounding</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="arch" class="card hl">
+  <h2><span class="num">1</span>Two streams, joined by co-attention</h2>
+  <div class="grid2">
+    <div><svg class="diagram" viewBox="0 0 560 430" id="archSvg"></svg><p class="hint">Four of the six co-attention pairs are drawn. At the top, \(h_{\text{CLS}}\odot h_{\text{IMG}}\) feeds the "do they match?" head used in pre-training.</p></div>
+    <div class="prose">
+      <p><b>Text stream</b> (left): the 12 layers of BERT-base, width 768, starting from BERT's pre-trained weights. Its input is the usual \([\text{CLS}],w_1,\dots,w_n,[\text{SEP}]\).</p>
+      <p><b>Image stream</b> (right): its own transformer with its own width (1,024 in the released model). Its input is a special \([\text{IMG}]\) token, the mean of all region features, followed by one token per region:</p>
+      <div class="mathbox c4">$$v_j=W_ff_j+W_bb_j,\qquad b_j=\Big(\tfrac{x_1}{W},\tfrac{y_1}{H},\tfrac{x_2}{W},\tfrac{y_2}{H},\tfrac{\text{box area}}{\text{image area}}\Big)$$</div>
+      <p>Regions have no natural order, so instead of a position index each one carries its 5-number box location \(b_j\).</p>
+      <p><b>Co-TRM layers</b> (the crossing arrows) connect the streams. In the released model the image stream has 6 layers, each paired by co-attention with one of the last 6 text layers, so the text gets 6 layers of language-only processing first. Between Co-TRM layers each stream also has ordinary self-attention (TRM) layers to mix information <i>within</i> the modality.</p>
+    </div>
+  </div>
+</section>
+
+<section id="co" class="card">
+  <h2><span class="num">2</span>Co-attention, live</h2>
+  <p class="sub">A Co-TRM layer computes two attention maps at once. Left: each word (a query) looks over the image tokens. Right: each image token (a query) looks over the words. Tap a row in either map to light up what it looks at.</p>
+  <div class="grid2">
+    <div>
+      <h3 style="margin-top:0">Text asks, image answers \(\;\operatorname{softmax}(Q_WK_V^\top/\sqrt d)\)</h3>
+      <div id="cTW" style="overflow-x:auto"></div>
+      <h3>Image asks, text answers \(\;\operatorname{softmax}(Q_VK_W^\top/\sqrt d)\)</h3>
+      <div id="cVW" style="overflow-x:auto"></div>
+    </div>
+    <div>
+      <div class="plot sq" id="cImg" style="max-width:360px"></div>
+      <div id="cWords" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:8px"><div class="seg" id="cScene"><button data-v="park" class="on">Park</button><button data-v="kitchen">Kitchen</button><button data-v="street">Street</button></div></div>
+      <div class="note" id="cNote" style="margin-top:8px"></div>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:12px">
+    <div class="prose">
+      <h3 style="margin-top:0">Which scores does each design compute?</h3>
+      <p>Lay all tokens out as one long sequence, text first, then image. Self-attention over it fills all four blocks of the score matrix. A Co-TRM layer fills only the two <i>cross</i> blocks; the TRM layers in each stream fill the two <i>diagonal</i> blocks, separately. Same ingredients, organised differently.</p>
+      <div class="row" style="margin-top:6px"><div class="seg" id="bSeg"><button data-v="single" class="on">Single-stream layer</button><button data-v="co">Co-TRM layer</button><button data-v="trm">TRM layers</button></div></div>
+      <div class="stats" id="bStats" style="margin-top:8px"></div>
+    </div>
+    <div><div class="plot sq" id="bPlot" style="max-width:320px"></div></div>
+  </div>
+  <p class="hint">Weights in the two maps come from simple hand-set rules (words look at the regions they name, function words look at the [IMG] summary, regions look back at the words that name them) to show the pattern; they are not from a trained network.</p>
+</section>
+
+<section id="cotrm" class="card hl">
+  <h2><span class="num">3</span>The Co-TRM layer, step by step</h2>
+  <p class="sub">A standard transformer layer is: multi-head self-attention, add and normalise, feed-forward, add and normalise. A Co-TRM layer changes exactly one thing: in the attention step, each stream takes its keys and values from the <i>other</i> stream.</p>
+  <div class="grid2">
+    <div class="prose">
+      <p>Write \(H_W\) for the text states (\(n\times d_W\)) and \(H_V\) for the image states (\(m\times d_V\)). Each stream has its own projection matrices.</p>
+      <p><b>Text attends to image.</b> Queries from text, keys and values from image:</p>
+      <div class="mathbox c1">$$\tilde H_W=\operatorname{softmax}\!\Big(\frac{(H_WW_Q^{W})(H_VW_K^{V})^\top}{\sqrt{d}}\Big)H_VW_V^{V}$$</div>
+      <p><b>Image attends to text.</b> The mirror image:</p>
+      <div class="mathbox c4">$$\tilde H_V=\operatorname{softmax}\!\Big(\frac{(H_VW_Q^{V})(H_WW_K^{W})^\top}{\sqrt{d}}\Big)H_WW_V^{W}$$</div>
+      <p><b>Each stream keeps its own residual.</b> \(H_W\leftarrow\operatorname{LN}(H_W+\tilde H_W)\), then a text feed-forward network; \(H_V\leftarrow\operatorname{LN}(H_V+\tilde H_V)\), then an image feed-forward network. So a word's vector stays a word's vector, now enriched with what it found in the image, and vice versa.</p>
+      <p>The attention matrices have shapes \(n\times m\) and \(m\times n\), so the two streams may have different lengths and (with suitable \(W_Q,W_K\)) different widths.</p>
+    </div>
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: one co-attentional transformer (Co-TRM) layer</h5><ol>
+        <li><span class="kw">input</span> text states \(H_W\) (\(n\) tokens), image states \(H_V\) (\(m\) tokens)</li>
+        <li>\(Q_W,K_W,V_W\leftarrow\) projections of \(H_W\) <span class="cm">text weights</span></li>
+        <li>\(Q_V,K_V,V_V\leftarrow\) projections of \(H_V\) <span class="cm">image weights</span></li>
+        <li>\(\tilde H_W\leftarrow\operatorname{softmax}(Q_WK_V^\top/\sqrt d)\,V_V\) <span class="cm">text asks, image answers</span></li>
+        <li>\(\tilde H_V\leftarrow\operatorname{softmax}(Q_VK_W^\top/\sqrt d)\,V_W\) <span class="cm">image asks, text answers</span></li>
+        <li>\(H_W\leftarrow\operatorname{LN}(H_W+\tilde H_W)\); \(H_V\leftarrow\operatorname{LN}(H_V+\tilde H_V)\) <span class="cm">own residual</span></li>
+        <li>\(H_W\leftarrow\operatorname{LN}(H_W+\operatorname{FFN}_W(H_W))\); \(H_V\leftarrow\operatorname{LN}(H_V+\operatorname{FFN}_V(H_V))\)</li>
+        <li><span class="kw">return</span> \(H_W,H_V\) <span class="cm">next: a TRM self-attention layer in each stream</span></li>
+      </ol></div>
+      <details class="deeper" style="margin-top:12px"><summary>Going deeper: why steps 4 and 5 use the old states, and what multi-head adds</summary><div>
+        <p>Both cross-attentions read \(H_W\) and \(H_V\) from <i>before</i> the layer, so they can run in parallel and neither direction gets a head start. If the text were updated first and the image then attended to the updated text, information could bounce text → image → text within one layer, and the order would matter.</p>
+        <p>As everywhere else, attention is multi-head: with 8 heads, each head has its own \(W_Q,W_K,W_V\) of width \(d/8\) and can ask a different question of the other modality (one head finds the object a noun names, another finds the colour an adjective describes). The heads' outputs are concatenated and mixed by \(W_O\) before the residual add.</p>
+        <p>Compared with one single-stream layer over \(n+m\) tokens, a Co-TRM layer computes \(2nm\) scores instead of \((n+m)^2\): it skips the within-modality scores, which the TRM layers provide separately.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="pre" class="card">
+  <h2><span class="num">4</span>Pre-training: masked multimodal modelling and alignment</h2>
+  <p class="sub">ViLBERT is pre-trained on Conceptual Captions, about 3 million images with captions scraped from alt-text on the web. Like VisualBERT, it masks words and checks whether caption and image match. Unlike VisualBERT, it also masks <b>image regions</b> and asks the model to say what was there.</p>
+  <div class="grid2">
+    <div>
+      <h3 style="margin-top:0">Masked region: what was in this box?</h3>
+      <p class="hint" style="margin-top:0">Tap a region in the list to mask it: its features are replaced by zeros, so the model has to infer it from the caption and the other regions. The target is the detector's own class distribution for that box.</p>
+      <div id="mList" style="margin:6px 0"></div>
+      <div class="grid2" style="gap:12px"><div><b style="font-size:13px">target (detector)</b><div id="mTgt"></div></div><div><b style="font-size:13px">model's guess</b><div id="mPred"></div></div></div>
+      <div class="note" id="mNote" style="margin-top:8px"></div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Alignment: do they belong together?</h3>
+      <div class="plot sq" id="aImg" style="max-width:280px"></div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px"><div class="seg" id="pScene"><button data-v="park" class="on">Park</button><button data-v="kitchen">Kitchen</button><button data-v="street">Street</button></div><div class="seg" id="pCap"><button data-v="true" class="on">Its own caption</button><button data-v="false">Another caption</button></div></div>
+      <div id="aOut" style="margin-top:8px"></div>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: ViLBERT pre-training step</h5><ol>
+        <li><span class="kw">input</span> regions \(f_{1..m}\) with boxes \(b_{1..m}\), a caption \(w_{1..n}\) that is the true one with probability \(\tfrac12\)</li>
+        <li>image tokens: \([\text{IMG}]\) (mean feature), then \(v_j\leftarrow W_ff_j+W_bb_j\)</li>
+        <li>text tokens: \([\text{CLS}],w_1..w_n,[\text{SEP}]\) as in BERT</li>
+        <li>mask about 15% of words and 15% of regions <span class="cm">masked region features → 0, 90% of the time</span></li>
+        <li>run both streams through their TRM and Co-TRM layers <span class="cm">they exchange information</span></li>
+        <li>\(\mathcal L_{\text{word}}\leftarrow-\sum\log p(w_i\mid h_i)\) over masked words</li>
+        <li>\(\mathcal L_{\text{region}}\leftarrow\sum\operatorname{KL}\big(q_{\text{det}}(\cdot\mid j)\,\|\,p(\cdot\mid h_j)\big)\) over masked regions</li>
+        <li>\(\mathcal L_{\text{align}}\leftarrow\) cross-entropy of \(\sigma\big(u^\top(h_{\text{IMG}}\odot h_{\text{CLS}})\big)\) against "caption is true"</li>
+        <li>update all weights to reduce the sum <span class="cm">masking losses only on true pairs</span></li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: why predict a class distribution, and why multiply [IMG] and [CLS]</summary><div>
+        <p><b>Regions are not words.</b> A masked word has one right answer from a fixed vocabulary. A masked region's 2,048 features are continuous and noisy, so regressing them exactly is a poor target. ViLBERT instead asks for the detector's own soft opinion about the box, a distribution \(q_{\text{det}}\) over its 1,600 Visual Genome classes, and minimises the KL divergence \(\sum_cq_{\text{det}}(c)\log\frac{q_{\text{det}}(c)}{p(c)}\). If the detector was unsure (dog 0.6, cat 0.3), the model is not punished for being unsure in the same way.</p>
+        <p><b>Alignment from two summaries.</b> In a two-stream model there is no single token that has read both modalities from the start, so the alignment head combines the summaries of both streams. The element-wise product \(h_{\text{IMG}}\odot h_{\text{CLS}}\) is large in the dimensions where both agree, and a linear layer turns it into an "aligned or not" score. When the caption is a random one, the masked-word and masked-region losses are switched off, because the text is no evidence for the image.</p>
+        <p>The pre-trained model is then fine-tuned for visual question answering, visual commonsense reasoning, referring expressions (find the box for "the man on the left") and caption-based image retrieval, where it improved on task-specific models; its retrieval works even zero-shot, straight from the alignment head.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="vs" class="card">
+  <h2><span class="num">5</span>ViLBERT, VisualBERT and LXMERT side by side</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th></th><th>VisualBERT</th><th>ViLBERT</th><th>LXMERT</th></tr>
+    <tr><td>Streams</td><td>one (single-stream)</td><td>two, linked by Co-TRM</td><td>two encoders, then a cross-modality encoder</td></tr>
+    <tr><td>How text meets image</td><td>self-attention over [words; regions] in every layer</td><td>co-attention at paired layers</td><td>cross-attention + self-attention in 5 cross layers</td></tr>
+    <tr><td>Region position</td><td>aligned word position (if known)</td><td>5-number box</td><td>box coordinates</td></tr>
+    <tr><td>Masks image regions?</td><td>no</td><td>yes, predict class distribution</td><td>yes, predict class and features</td></tr>
+    <tr><td>Image–text matching</td><td>[CLS]</td><td>\(h_{\text{IMG}}\odot h_{\text{CLS}}\)</td><td>[CLS]</td></tr>
+    <tr><td>Pre-training data</td><td>COCO captions</td><td>Conceptual Captions (~3 M)</td><td>COCO + Visual Genome + VQA data</td></tr>
+  </table></div>
+  <div class="prose" style="margin-top:10px">
+    <p>Later work (UNITER, Oscar) found that with enough data a single stream does as well or better, which is why most current models are closer to VisualBERT's design. But the Co-TRM layer survived: <b>cross-attention between a language model and a vision encoder</b> is exactly how Flamingo lets a frozen language model look at images, how BLIP-2's Q-Former reads a frozen ViT, and how text prompts steer image generators. See <a href="../cross-attention/">cross-attention</a> for the one-directional version.</p>
+  </div>
+</section>
+
+<p class="hint" style="max-width:var(--maxw,1100px);margin:0 auto 24px">Next: <a href="../clip/">part 4, CLIP</a>, drops fusion altogether: two separate encoders, trained so that a picture and its caption land on the same point in one shared space.</p>
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> torch, torch.nn <span class="k">as</span> nn
+
+<span class="k">class</span> CoTRM(nn.Module):
+    <span class="c">"""One co-attentional transformer layer: each stream attends to the other."""</span>
+    <span class="k">def</span> __init__(self, dw=<span class="s">768</span>, dv=<span class="s">1024</span>, heads=<span class="s">8</span>):
+        super().__init__()
+        self.w_from_v = nn.MultiheadAttention(dw, heads, kdim=dv, vdim=dv, batch_first=<span class="k">True</span>)  <span class="c"># text asks image</span>
+        self.v_from_w = nn.MultiheadAttention(dv, heads, kdim=dw, vdim=dw, batch_first=<span class="k">True</span>)  <span class="c"># image asks text</span>
+        self.ln_w1, self.ln_w2 = nn.LayerNorm(dw), nn.LayerNorm(dw)
+        self.ln_v1, self.ln_v2 = nn.LayerNorm(dv), nn.LayerNorm(dv)
+        self.ff_w = nn.Sequential(nn.Linear(dw, <span class="s">4</span>*dw), nn.GELU(), nn.Linear(<span class="s">4</span>*dw, dw))
+        self.ff_v = nn.Sequential(nn.Linear(dv, <span class="s">4</span>*dv), nn.GELU(), nn.Linear(<span class="s">4</span>*dv, dv))
+    <span class="k">def</span> forward(self, Hw, Hv):
+        aw, Aw = self.w_from_v(Hw, Hv, Hv)       <span class="c"># queries: text; keys, values: image (old states)</span>
+        av, Av = self.v_from_w(Hv, Hw, Hw)       <span class="c"># queries: image; keys, values: text (old states)</span>
+        Hw = self.ln_w1(Hw + aw); Hv = self.ln_v1(Hv + av)
+        Hw = self.ln_w2(Hw + self.ff_w(Hw)); Hv = self.ln_v2(Hv + self.ff_v(Hv))
+        <span class="k">return</span> Hw, Hv, Aw, Av
+
+Hw = torch.randn(<span class="s">1</span>, <span class="s">12</span>, <span class="s">768</span>)    <span class="c"># [CLS] + 10 words + [SEP]</span>
+Hv = torch.randn(<span class="s">1</span>, <span class="s">37</span>, <span class="s">1024</span>)   <span class="c"># [IMG] + 36 regions</span>
+Hw, Hv, Aw, Av = CoTRM()(Hw, Hv)
+print(Aw.shape, Av.shape)            <span class="c"># (1, 12, 37) and (1, 37, 12)</span>
+<span class="c"># the full pre-trained ViLBERT lives in facebookresearch/vilbert-multi-task on GitHub</span></pre>
+</section>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/vis.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette(); const N=192;
+const FUNC=new Set(['a','the','with','under','on','next','to','behind','waits','sits','plays']);
+const COLS=()=>{ const P=P0(); return [P.c1,P.c4,P.c3,P.c5,P.c2]; };
+function cv(host){ host=typeof host==='string'?$(host):host; let c=host.querySelector('canvas'); if(!c){ c=document.createElement('canvas'); c.style.width='100%'; c.style.height='100%'; c.style.display='block'; host.appendChild(c); }
+  const r=host.getBoundingClientRect(), dpr=Math.min(2,window.devicePixelRatio||1); const w=Math.max(10,r.width), h=Math.max(10,r.height); c.width=Math.round(w*dpr); c.height=Math.round(h*dpr); const x=c.getContext('2d'); x.setTransform(dpr,0,0,dpr,0,0); return {c,x,w,h}; }
+function scene(host,key,o={}){ const {x,w,h}=cv(host), s=Math.min(w,h), S=VIS.SCENES[key], C=COLS(); x.clearRect(0,0,w,h); x.drawImage(VIS.canvas(key,N),0,0,s,s);
+  if(o.weights){ x.fillStyle='rgba(0,0,0,.45)'; x.fillRect(0,0,s,s); S.objects.forEach((ob,j)=>{ const a=o.weights[j]; if(a<.02) return; x.save(); x.globalAlpha=Math.min(1,a*1.6+.15); x.drawImage(VIS.canvas(key,N),ob.box[0]*N,ob.box[1]*N,ob.box[2]*N,ob.box[3]*N,ob.box[0]*s,ob.box[1]*s,ob.box[2]*s,ob.box[3]*s); x.restore(); }); }
+  if(o.masked!=null){ const b=S.objects[o.masked].box; x.fillStyle='rgba(30,30,30,.85)'; x.fillRect(b[0]*s,b[1]*s,b[2]*s,b[3]*s); }
+  S.objects.forEach((ob,j)=>{ const col=o.sel===j?P0().c2:C[j%5], b=ob.box; x.strokeStyle=col; x.lineWidth=o.sel===j?4:(o.weights?1+o.weights[j]*6:2.2); x.strokeRect(b[0]*s,b[1]*s,b[2]*s,b[3]*s); x.font='600 12px Inter,system-ui'; const t='r'+(j+1)+' '+(o.masked===j?'?':ob.label)+(o.weights?' '+Math.round(o.weights[j]*100)+'%':''), tw=x.measureText(t).width+8, ty=Math.max(0,b[1]*s-16); x.fillStyle=col; x.fillRect(b[0]*s,ty,tw,16); x.fillStyle='#fff'; x.fillText(t,b[0]*s+4,ty+12); }); }
+const words=k=>VIS.SCENES[k].caption.split(' ');
+const names=o=>o.tags.concat([o.label]);
+/* ---------- 1. architecture diagram ---------- */
+function drawArch(){ const P=P0(); let s=''; const box=(x,y,w,h,t,c,fill)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="7" fill="${c}" fill-opacity="${fill??.16}" stroke="${c}"/><text x="${x+w/2}" y="${y+h/2+4.5}" text-anchor="middle" font-size="12.5" fill="${P.ink}">${t}</text>`;
+  const LX=40, RX=330, BW=190, BH=26;
+  s+=`<text x="${LX+BW/2}" y="18" text-anchor="middle" font-size="13" font-weight="700" fill="${P.c1}">Text stream (BERT, 768)</text><text x="${RX+BW/2}" y="18" text-anchor="middle" font-size="13" font-weight="700" fill="${P.c4}">Image stream (1,024)</text>`;
+  s+=box(LX,392,BW,BH,'[CLS] a dog plays … [SEP]',P.c1,.3)+box(RX,392,BW,BH,'[IMG] r1 r2 … rm (+ boxes)',P.c4,.3);
+  s+=box(LX,344,BW,BH*1.5,'6 × TRM (language only)',P.c1);
+  const ys=[290,226,162,98]; ys.forEach((y,i)=>{ s+=box(LX,y,BW,BH,'Co-TRM',P.c3,.25)+box(RX,y,BW,BH,'Co-TRM',P.c3,.25)+box(LX,y-30,BW,BH,'TRM',P.c1)+box(RX,y-30,BW,BH,'TRM',P.c4);
+    s+=`<path d="M${LX+BW},${y+8} C${LX+BW+50},${y+8} ${RX-50},${y+18} ${RX},${y+18}" fill="none" stroke="${P.c2}" stroke-width="2.2" marker-end="url(#ah)"/><path d="M${RX},${y+8} C${RX-50},${y+8} ${LX+BW+50},${y+18} ${LX+BW},${y+18}" fill="none" stroke="${P.c2}" stroke-width="2.2" marker-end="url(#ah)"/>`; });
+  s+=box(LX,26,BW,BH,'h_CLS',P.c1,.3)+box(RX,26,BW,BH,'h_IMG',P.c4,.3);
+  s+=`<text x="280" y="43" text-anchor="middle" font-size="13" font-weight="700" fill="${P.c2}">⊙</text>`;
+  s+=`<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10z" fill="${P.c2}"/></marker></defs>`;
+  s+=`<text x="280" y="${ys[0]+50}" text-anchor="middle" font-size="12" fill="${P.c2}">keys and values cross over</text>`;
+  $('#archSvg').innerHTML=s; }
+/* ---------- 2. co-attention maps ---------- */
+let cS='park', cRow={side:'w',i:null};
+function coMaps(k){ const W=words(k), S=VIS.SCENES[k], wt=['[CLS]',...W,'[SEP]'], vt=['[IMG]',...S.objects.map((o,j)=>'r'+(j+1)+' '+o.label)];
+  const isW=i=>i>=1&&i<=W.length, wd=i=>W[i-1];
+  const TW=wt.map((t,i)=>NLP.softmax(vt.map((v,j)=>{ let s=0; if(j===0) s+=(i===0||i===wt.length-1)?2.5:(isW(i)&&FUNC.has(wd(i))?2.2:.6); if(j>0&&isW(i)&&names(S.objects[j-1]).includes(wd(i))) s+=4; return s; })));
+  const VW=vt.map((v,j)=>NLP.softmax(wt.map((t,i)=>{ let s=0; if(j===0) s+=(i===0)?2.5:(isW(i)&&!FUNC.has(wd(i))?.8:0); if(j>0&&isW(i)&&names(S.objects[j-1]).includes(wd(i))) s+=4; if(j>0&&(i===0||i===wt.length-1)) s+=1.4; return s; })));
+  return {wt,vt,TW,VW}; }
+function drawCo(){ const C=coMaps(cS), S=VIS.SCENES[cS], W=words(cS); if(cRow.i==null){ cRow={side:'w',i:1+W.findIndex(w=>!FUNC.has(w))}; }
+  const short=t=>t.replace(/^r(\d) .*/,'r$1');
+  NLP.heat('#cTW',C.TW,C.wt,C.vt.map(short),{max:1,fmt:v=>v>=.1?Math.round(v*100):'',rowW:'64px',color:P0().c1,selRow:cRow.side==='w'?cRow.i:null,onRow:i=>{ cRow={side:'w',i}; drawCo(); }});
+  NLP.heat('#cVW',C.VW,C.vt,C.wt,{max:1,fmt:v=>v>=.1?Math.round(v*100):'',rowW:'86px',color:P0().c4,selRow:cRow.side==='v'?cRow.i:null,onRow:i=>{ cRow={side:'v',i}; drawCo(); }});
+  let note='';
+  if(cRow.side==='w'){ const r=C.TW[cRow.i]; scene('#cImg',cS,{weights:r.slice(1)}); $('#cWords').innerHTML=NLP.chips(C.wt,{colorBy:(t,i)=>i===cRow.i?5:i%5});
+    const b=r.indexOf(Math.max(...r)); note=`<b>${NLP.esc(C.wt[cRow.i])}</b> asks the image. It puts ${Math.round(r[b]*100)}% on <b>${NLP.esc(C.vt[b])}</b>${b===0?', the whole-image summary, because it names nothing in particular':''}. The answer it gets back is a weighted mix of image values, added to its own vector.`; }
+  else { const r=C.VW[cRow.i]; scene('#cImg',cS,{sel:cRow.i>0?cRow.i-1:null}); const mx=Math.max(...r);
+    $('#cWords').innerHTML='<div class="chips2">'+C.wt.map((t,i)=>`<span class="tok" style="background:${NLP.seq(r[i]/mx,P0().c4)};color:${NLP.ink(r[i]/mx)}">${NLP.esc(t)}</span>`).join('')+'</div>';
+    const b=r.indexOf(mx); note=`<b>${NLP.esc(C.vt[cRow.i])}</b> asks the text. It puts ${Math.round(mx*100)}% on <b>${NLP.esc(C.wt[b])}</b>. The region's vector now carries a trace of the word that names it.`; }
+  $('#cNote').innerHTML=note+' Tap any row label to change the query.'; }
+ML.bindSeg('cScene',v=>{ cS=v; cRow={side:'w',i:null}; drawCo(); });
+/* block diagram of computed scores */
+let bMode='single';
+function drawBlocks(){ const {x,w,h}=cv('#bPlot'), P=P0(), s=Math.min(w,h), n=12, m=6, T=n+m, c=(s-40)/T, ox=30, oy=10; x.clearRect(0,0,w,h);
+  for(let i=0;i<T;i++) for(let j=0;j<T;j++){ const ti=i<n, tj=j<n, cross=ti!==tj; const on=bMode==='single'||(bMode==='co'&&cross)||(bMode==='trm'&&!cross);
+    x.fillStyle=on?(cross?P.c2:(ti?P.c1:P.c4)):P.soft; x.globalAlpha=on?.75:1; x.fillRect(ox+j*c+.5,oy+i*c+.5,c-1,c-1); }
+  x.globalAlpha=1; x.fillStyle=P.ink; x.font='600 11px Inter'; x.textAlign='center'; x.fillText('text keys',ox+n*c/2,oy+T*c+14); x.fillText('image',ox+n*c+m*c/2,oy+T*c+14);
+  x.save(); x.translate(ox-8,oy+n*c/2); x.rotate(-Math.PI/2); x.fillText('text queries',0,0); x.restore(); x.save(); x.translate(ox-8,oy+n*c+m*c/2); x.rotate(-Math.PI/2); x.fillText('image',0,0); x.restore();
+  const f=v=>v.toLocaleString('en'), cnt=bMode==='single'?T*T:bMode==='co'?2*n*m:n*n+m*m;
+  $('#bStats').innerHTML=[['c2',f(cnt),'scores per head (12 text, 6 image tokens)'],['c3',bMode==='single'?'one shared':'two',bMode==='single'?'set of weights for both modalities':'sets of weights, one per stream']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+ML.bindSeg('bSeg',v=>{ bMode=v; drawBlocks(); });
+/* ---------- 4a. masked region ---------- */
+const CLASSES=['dog','cat','ball','tree','sun','cup','apple','table','car','bus','grass','road','traffic light','person'];
+let mS='park', mJ=1;
+function drawMReg(){ const S=VIS.SCENES[mS], W=words(mS); if(mJ>=S.objects.length) mJ=0; const ob=S.objects[mJ], P=P0();
+  $('#mList').innerHTML='<div class="chips2">'+S.objects.map((o,j)=>`<button class="tok" data-j="${j}" style="cursor:pointer;border:0;font:inherit;background:${j===mJ?'var(--c2)':NLP.tokColor(j)};color:${j===mJ?'#fff':'var(--ink)'}">r${j+1} ${j===mJ?'[MASK]':NLP.esc(o.label)}</button>`).join('')+'</div>';
+  $('#mList').querySelectorAll('button').forEach(b=>b.onclick=()=>{ mJ=+b.dataset.j; drawMReg(); drawAlign(); });
+  const near={dog:['cat'],cat:['dog'],ball:['apple'],apple:['ball'],car:['bus'],bus:['car'],tree:['grass'],cup:['table'],table:['cup'],sun:['ball'],grass:['tree'],road:['grass'],'traffic light':['person']};
+  const tgt=CLASSES.map(c=>c===ob.label?3.2:(near[ob.label]||[]).includes(c)?2:0), q=NLP.softmax(tgt);
+  const inCap=W.includes(ob.label)||ob.tags.some(t=>W.includes(t)&&!['red','blue','yellow','green'].includes(t));
+  const ctx=CLASSES.map(c=>{ let s=0; if(W.includes(c)) s+=2.4; if(S.objects.some((o,j)=>j!==mJ&&o.label===c)) s-=1.5; if(['red','blue','yellow'].some(col=>W.includes(col)&&ob.tags.includes(col))&&(c===ob.label)) s+=1; return s; }), p=NLP.softmax(ctx);
+  const top=a=>a.map((v,i)=>({label:CLASSES[i],value:v})).sort((a,b)=>b.value-a.value).slice(0,4);
+  $('#mTgt').innerHTML=NLP.bars(top(q).map(x=>({...x,color:P.c4})),{lw:'64px',max:1,fmt:v=>Math.round(v*100)+'%'});
+  $('#mPred').innerHTML=NLP.bars(top(p).map(x=>({...x,color:x.label===ob.label?P.c5:P.c3})),{lw:'64px',max:1,fmt:v=>Math.round(v*100)+'%'});
+  const kl=q.reduce((s,qi,i)=>s+(qi>1e-9?qi*Math.log(qi/Math.max(p[i],1e-9)):0),0);
+  $('#mNote').innerHTML=`The box held a <b>${NLP.esc(ob.label)}</b>. ${inCap?`The caption mentions it, so co-attention from the text lets the model fill the gap.`:`The caption never mentions it, so the model can only guess from the other regions: a hard example.`} KL(target ‖ guess) = ${kl.toFixed(2)}; training lowers it.`;
+  scene('#aImg',mS,{masked:mJ}); }
+/* ---------- 4b. alignment ---------- */
+let aTrue=true;
+function drawAlign(){ const keys=Object.keys(VIS.SCENES), other=keys[(keys.indexOf(mS)+1)%keys.length], cap=aTrue?VIS.SCENES[mS].caption:VIS.SCENES[other].caption, S=VIS.SCENES[mS];
+  const present=new Set(S.objects.flatMap(names)), content=cap.split(' ').filter(w=>!FUNC.has(w)), hit=content.filter(w=>present.has(w)), p=ML.sigmoid(6*hit.length/content.length-2.5), P=P0();
+  scene('#aImg',mS,{masked:mJ});
+  $('#aOut').innerHTML=`<div class="mono" style="font-size:13px;margin-bottom:6px">text: ${NLP.esc(cap)}</div>`+NLP.bars([{label:'aligned',value:p,color:P.c5},{label:'not',value:1-p,color:P.c4}],{lw:'64px',max:1,fmt:v=>Math.round(v*100)+'%'})
+   +`<p class="hint">Score from \\(h_{\\text{IMG}}\\odot h_{\\text{CLS}}\\): high when the two summaries agree. ${hit.length} of ${content.length} content words match a region. ${aTrue?'True pair: masked-word and masked-region losses are used too.':'Random pair: only the alignment loss is used.'}</p>`; ML.renderMath($('#aOut')); }
+ML.bindSeg('pScene',v=>{ mS=v; mJ=1; drawMReg(); drawAlign(); }); ML.bindSeg('pCap',v=>{ aTrue=v==='true'; drawAlign(); });
+function all(){ drawArch(); drawCo(); drawBlocks(); drawMReg(); drawAlign(); }
+all(); let rw=0; window.addEventListener('resize',()=>{ if(Math.abs(innerWidth-rw)>4){ rw=innerWidth; all(); } }); ML.onTheme(all);
+})();
+</script>
+<script>NLP.nav('nlp','vilbert'); ML.renderMath(document.body);</script>
+</body>
+</html>

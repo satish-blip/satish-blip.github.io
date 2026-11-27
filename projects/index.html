@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projects | Satish Thuwal</title>
+<meta name="description" content="Pricing Junction, an actuary-first pricing tool, and other things Satish Thuwal has built: an interactive ML & DL learning path, a no-code ML playground and a word2vec playground.">
+<meta property="og:title" content="Projects | Satish Thuwal">
+<meta property="og:description" content="Pricing Junction, an actuary-first pricing tool, and other things Satish Thuwal has built: an interactive ML & DL learning path, a no-code ML playground and a word2vec playground.">
+<meta property="og:url" content="https://satish-blip.github.io/projects/">
+<meta property="og:image" content="https://satish-blip.github.io/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#faf7f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12110f" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="https://satish-blip.github.io/projects/">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="subpage p-projects">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="../" aria-label="Satish Thuwal, home">Satish Thuwal<span class="brand-tag">FIAI</span></a>
+    <nav aria-label="Site"><a href="../about/"><span class="dot d-about" aria-hidden="true"></span>About</a><a href="../projects/" aria-current="page"><span class="dot d-projects" aria-hidden="true"></span>Projects</a><a href="../learn/"><span class="dot d-learn" aria-hidden="true"></span>Learn</a><a href="../ml/playground/"><span class="dot d-ml" aria-hidden="true"></span>Play</a></nav>
+  </div>
+  <div class="progress" aria-hidden="true"><span></span></div>
+</header>
+<main id="main">
+  <section class="masthead">
+    <div class="wrap mast-in">
+      <div><p class="mast-k">Projects</p><h1>Things I&rsquo;m building.</h1><p class="mast-lede">The main one is Pricing Junction, a pricing tool designed around how pricing actuaries really work. Alongside it are the learning tools I build while studying machine learning.</p></div><svg class="mast-logo" viewBox="0 0 64 64" role="img" aria-label="Pricing Junction logo"><rect x="2" y="2" width="60" height="60" rx="10" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="2"/><path d="M12 18 C24 18 26 32 34 32 M12 32 H34 M12 46 C24 46 26 32 34 32" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><circle cx="35" cy="32" r="4.6" fill="#fb7a45"/><path d="M39 32 C44 32 46 22 52 20" fill="none" stroke="#fb7a45" stroke-width="3.2" stroke-linecap="round"/><circle cx="52" cy="20" r="2.6" fill="#fb7a45"/></svg>
+    </div>
+  </section>
+  <section id="building" class="section building">
+    <div class="wrap">
+      <p class="kicker">Pricing Junction</p>
+      <div class="pj-head"><svg class="pj-logo" viewBox="0 0 64 64" role="img" aria-label="Pricing Junction logo"><rect x="2" y="2" width="60" height="60" rx="10" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="2"/><path d="M12 18 C24 18 26 32 34 32 M12 32 H34 M12 46 C24 46 26 32 34 32" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><circle cx="35" cy="32" r="4.6" fill="#fb7a45"/><path d="M39 32 C44 32 46 22 52 20" fill="none" stroke="#fb7a45" stroke-width="3.2" stroke-linecap="round"/><circle cx="52" cy="20" r="2.6" fill="#fb7a45"/></svg><div><h2>Pricing Junction</h2><p class="pj-tag">An actuary-first pricing tool.</p></div></div>
+      <div class="pj-body">
+        <p class="sub">A personal project, in progress and independent of my employer. Much pricing software is designed around underwriting workflow or IT constraints. I'm building one around how pricing actuaries really work: judgement-heavy, audit-bound and short on time.</p>
+        <p class="sub">Today most pricing decisions lead with judgement, not because actuaries prefer it, but because the statistical tools they would use cannot be built or maintained in Excel. Pricing Junction puts full statistical support behind every decision, so that methods like exposure rating and ILF curves are not luxuries but the standard: quick to calibrate, easy to compare, and simple to choose between.</p>
+      </div>
+
+      <figure class="pipeline">
+        <figcaption><span class="ex-n">Exhibit 2</span> The pricing flow, end to end</figcaption>
+        <ol class="flow" aria-label="Pricing flow">
+          <li><span aria-hidden="true">01</span>Data &amp; exposure</li>
+          <li><span aria-hidden="true">02</span>Claims development</li>
+          <li><span aria-hidden="true">03</span>Trend &amp; inflation</li>
+          <li><span aria-hidden="true">04</span>Stochastic &amp; EVT simulation</li>
+          <li><span aria-hidden="true">05</span>Layer &amp; structure pricing</li>
+        </ol>
+      </figure>
+
+      <div class="principles">
+        <div class="principle">
+          <h3><span class="fn" aria-hidden="true">&dagger;</span>Judgement stays visible</h3>
+          <p>Every method choice is shown side by side, and every override needs a written reason, so the actuary's judgement becomes part of the record rather than lost in a spreadsheet.</p>
+        </div>
+        <div class="principle">
+          <h3><span class="fn" aria-hidden="true">&Dagger;</span>Every number traces back</h3>
+          <p>Each calculation is reconciled against transparent Excel workings and a step-by-step audit trail, so a reviewer can follow any figure to its source.</p>
+        </div>
+        <div class="principle">
+          <h3><span class="fn" aria-hidden="true">&sect;</span>Built for the tail</h3>
+          <p>Simulation and extreme value methods are first-class rather than bolted on, because high-excess layers are where simple methods break.</p>
+        </div>
+      </div>
+      <p class="note">Details are kept general here. Happy to talk through the approach.</p>
+    </div>
+  </section>
+
+  <!-- MORE PROJECTS -->
+  <section id="more" class="section alt">
+    <div class="wrap">
+      <p class="kicker">Also built</p>
+      <h2>Learning tools, free in the browser.</h2>
+      <p class="sub">Side projects that grew out of learning machine learning properly. Everything runs client-side: no sign-up, no server.</p>
+      <div class="proj-grid">
+        <a class="proj p-learn" href="../learn/"><span class="proj-k">Learn</span><h3>An interactive way to learn ML &amp; DL</h3><p>Seven steps from maths foundations to multimodal transformers. Every page has live visuals, step-by-step maths and animated pseudocode.</p><span class="proj-go">Start learning &rarr;</span></a>
+        <a class="proj p-play" href="../ml/playground/"><span class="proj-k">Play</span><h3>No-code ML Playground</h3><p>Import a dataset, check and clean it, build a pipeline and train 24 models in the browser, then export the matching scikit-learn code.</p><span class="proj-go">Open the playground &rarr;</span></a>
+        <a class="proj p-play" href="../ml/glm-studio/"><span class="proj-k">Play</span><h3>GLM Pricing Studio</h3><p>Build an insurance pricing GLM on a synthetic motor portfolio: exposure offsets, weights, banding and merges, relativities, lift and Gini, a drag-and-drop workflow, a statistical view of every number and matching statsmodels code.</p><span class="proj-go">Open the studio &rarr;</span></a>
+        <a class="proj p-play" href="../ml/reserving/"><span class="proj-k">Play</span><h3>Stochastic Reserving Playground</h3><p>Go from the chain ladder to stochastic reserving: link ratios and tails, Bornhuetter&ndash;Ferguson and Cape Cod, Mack, the ODP bootstrap, one-year risk and Clark curves, checked against the textbook&rsquo;s worked examples, with Python code for every step.</p><span class="proj-go">Open the playground &rarr;</span></a>
+        <a class="proj p-w2v" href="../word2vec/"><span class="proj-k">Play</span><h3>Word2vec playground</h3><p>Do arithmetic with word meanings (king &minus; man + woman &asymp; queen) on 100,000 real word vectors.</p><span class="proj-go">Try it &rarr;</span></a>
+        <a class="proj p-play" href="../dl/lab/"><span class="proj-k">Play</span><h3>DL lab</h3><p>Three deep-learning sandboxes in the browser: slide your own convolution kernels over pictures, watch a small network train with its activations and gradients drawn live, and explore self-attention heatmaps for any short sentence.</p><span class="proj-go">Open the lab &rarr;</span></a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap colophon">
+    <p class="colo-name">Satish Thuwal, FIAI <span>Pricing actuary &middot; Gurugram</span></p>
+    <p class="colo-set"><a href="../">Home</a> &middot; <a href="../about/">About</a> &middot; <a href="../projects/">Projects</a> &middot; <a href="../learn/">Learn</a> &middot; <a href="../ml/playground/">Play</a></p>
+    <p class="colo-yr">&copy; <span id="yr">2026</span> Satish Thuwal. All rights reserved. <a href="https://github.com/satish-blip/satish-blip.github.io/blob/main/LICENSE">Licence</a></p>
+  </div>
+</footer>
+<script>document.getElementById('yr').textContent=new Date().getFullYear();</script>
+<script src="../home.js"></script>
+<script src="../site.js"></script>
+</body>
+</html>

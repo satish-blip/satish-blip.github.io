@@ -1,0 +1,19 @@
+---
+layout: page
+title: Writing
+description: Notes on pricing, CAT modelling, EVT, data science and building actuarial tools.
+---
+<section class="section blog-index">
+  <div class="wrap">
+    <p class="kicker">Writing</p>
+    <h1 class="page-title">Notes on pricing, risk and tooling.</h1>
+    <p class="sub-plain">Occasional posts on pricing, CAT modelling, extreme value methods, data science and what I learn building actuarial tools. Opinions are my own.</p>
+    {% if site.posts.size > 0 %}
+    <ol class="post-list">
+      {% for post in site.posts %}{% include post-card.html post=post %}{% endfor %}
+    </ol>
+    {% else %}
+    <p class="empty">The first post is on its way.</p>
+    {% endif %}
+  </div>
+</section>

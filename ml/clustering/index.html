@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clustering explained interactively: k-means, hierarchical clustering, DBSCAN, HDBSCAN and Gaussian mixtures</title>
+<meta name="description" content="Find groups in unlabelled data, step by step in your browser: k-means and k-means++, choosing k with the elbow and silhouette, agglomerative clustering and dendrograms, DBSCAN and HDBSCAN for odd shapes and noise, and Gaussian mixture models fitted by expectation–maximisation.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../math/assets/mx.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Unsupervised learning</p>
+  <h1>Clustering: <span class="grad">finding groups nobody labelled</span></h1>
+  <p class="lede">You have customers, genes, documents or sensor readings, and no labels. Clustering asks the data a simple question: which points belong together? This page builds the four main answers, centres (k-means), merges (hierarchical), density (DBSCAN and HDBSCAN) and probabilities (Gaussian mixtures), and runs each one live so you can see where it shines and where it breaks.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#kmeans">1 · k-means</a><a href="#choosek">2 · Choosing k</a><a href="#hier">3 · Hierarchical</a><a href="#dbscan">4 · DBSCAN</a><a href="#hdbscan">5 · HDBSCAN</a><a href="#gmm">6 · Mixtures &amp; EM</a><a href="#which">7 · Which one?</a><a href="#py">8 · Python</a><a href="#credits">9 · Credits</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is clustering, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3>
+      <p>In <a class="term" data-t="supervised">supervised learning</a> every example comes with an answer. Most data in the world do not. A shop has millions of purchase histories but no column called “customer type”; a biologist has thousands of cells but no label saying which kind each one is. We still want to know what kinds of thing are in there.</p>
+      <h3>The idea</h3>
+      <p><a class="term" data-t="clustering">Clustering</a> splits the points into groups so that points in the same group are similar and points in different groups are not. Everything depends on what “similar” means, and each family of methods means something different:</p>
+      <ol class="steps2"><li><b>Centres.</b> A cluster is the points closest to one central point (<a class="term" data-t="k-means">k-means</a>).</li><li><b>Merges.</b> Start with every point alone and keep joining the two closest groups (<a class="term" data-t="hierarchical-clustering">hierarchical clustering</a>).</li><li><b>Density.</b> A cluster is a crowded region separated from others by emptier space (<a class="term" data-t="dbscan">DBSCAN</a>, <a class="term" data-t="hdbscan">HDBSCAN</a>).</li><li><b>Probability.</b> The data were drawn from a few bell-shaped clouds; find them (<a class="term" data-t="gmm">Gaussian mixtures</a>).</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Tip a bag of mixed buttons on a table and sort them without instructions. You might sort by colour, by size, or by the number of holes, and each choice gives different, equally “correct” piles. Clustering is the same: the algorithm and the distance you choose decide which piles you get, so the result is a hypothesis to check, not a fact.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Customer and market segments</li><li>Grouping documents, images or genes</li><li>Compressing data (colour palettes, vector quantisation)</li><li>Spotting points that fit no group</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Every method finds clusters, even in pure noise</li><li>Feature scaling changes the answer</li><li>The number of clusters is a choice, not a given</li><li>Distances lose meaning in very high dimensions</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="centroid">Centroid</a><a class="term" data-t="inertia">Inertia</a><a class="term" data-t="k-means-pp">k-means++</a><a class="term" data-t="silhouette">Silhouette</a><a class="term" data-t="dendrogram">Dendrogram</a><a class="term" data-t="linkage">Linkage</a><a class="term" data-t="core-point">Core point</a><a class="term" data-t="em-algorithm">EM algorithm</a><a class="term" data-t="responsibility">Responsibility</a></div>
+    </div>
+  </div>
+  <div id="evoSlot"></div>
+</section>
+
+<section id="kmeans" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>k-means, one step at a time</h2>
+    <p class="sub">Large rings are the centroids. Press <b>Step</b> to alternate the two moves: colour every point by its nearest centroid, then move each centroid to the mean of its points. The thin lines are the borders between centroids’ territories.</p>
+    <div class="plot sq" id="pKm"></div>
+    <div class="seg" id="kmData"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="kmStep">Step</button><button class="btn" id="kmRun">Run to the end</button><button class="btn" id="kmNew">New start</button><span class="pos" id="kmPos"></span></div>
+    <div class="stats" id="kmStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Take \(n\) points \(x^{(1)},\dots,x^{(n)}\) and a number \(k\). We want \(k\) centres \(\mu_1,\dots,\mu_k\) and an assignment \(c^{(i)}\in\{1,\dots,k\}\) of each point to a centre. How do we score a choice? Add up the squared distance from every point to its own centre:</p>
+      <div class="mathbox c1">$$J(c,\mu)=\sum_{i=1}^{n}\big\lVert x^{(i)}-\mu_{c^{(i)}}\big\rVert^2 .$$</div>
+      <p>This is called the <a class="term" data-t="inertia">inertia</a> (or within-cluster sum of squares). Minimising it over everything at once is hard (NP-hard, in fact), but minimising over one half while the other is fixed is easy:</p>
+      <ul><li><b>Fix the centres, choose the assignments.</b> Each term depends on one \(c^{(i)}\) only, so give each point its nearest centre: \(c^{(i)}=\arg\min_j\lVert x^{(i)}-\mu_j\rVert^2\).</li><li><b>Fix the assignments, choose the centres.</b> For cluster \(j\), \(\sum_{i:c^{(i)}=j}\lVert x^{(i)}-\mu_j\rVert^2\) is a bowl in \(\mu_j\); setting its gradient to zero gives the mean of the cluster’s points, the <a class="term" data-t="centroid">centroid</a>.</li></ul>
+      <p>Neither move can raise \(J\), and there are finitely many assignments, so the loop always stops. It stops at a <i>local</i> minimum, though: try <b>New start</b> on the stretched blobs with random starts and you will see different answers with different \(J\). That is why libraries run it several times and keep the best, and why the seeding matters.</p>
+      <div class="ctl"><label for="kmK"><span>Number of clusters \(k\)</span><output id="kmKOut"></output></label><input type="range" id="kmK" min="1" max="8" step="1" value="4"></div>
+      <div class="seg" id="kmInit"><button data-v="++" class="on">k-means++ start</button><button data-v="random">Random start</button></div>
+      <div class="algo" data-anim="kmeans"><h5 class="algo-h">Algorithm: k-means (Lloyd’s algorithm)</h5><ol>
+        <li><span class="kw">input</span> points \(x^{(1)},\dots,x^{(n)}\), number of clusters \(k\)</li>
+        <li>choose starting centres \(\mu_1,\dots,\mu_k\) <span class="cm">k-means++ below</span></li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1"><span class="kw">for</span> each point: \(c^{(i)}\leftarrow\arg\min_j\lVert x^{(i)}-\mu_j\rVert^2\) <span class="cm">assignment step</span></li>
+        <li class="i1"><span class="kw">for</span> each cluster: \(\mu_j\leftarrow\) mean of the points with \(c^{(i)}=j\) <span class="cm">update step</span></li>
+        <li><span class="kw">until</span> no assignment changes</li>
+        <li><span class="kw">return</span> \(c,\ \mu\) and the inertia \(J\)</li>
+      </ol></div>
+      <div class="algo" data-anim="kmpp"><h5 class="algo-h">Algorithm: k-means++ seeding</h5><ol>
+        <li>pick the first centre uniformly at random from the points</li>
+        <li><span class="kw">while</span> fewer than \(k\) centres <span class="kw">do</span></li>
+        <li class="i1">\(D(x)\leftarrow\) distance from each point to its nearest chosen centre</li>
+        <li class="i1">pick the next centre at random with probability \(\propto D(x)^2\) <span class="cm">far points are likely</span></li>
+        <li><span class="kw">return</span> the \(k\) centres, then run Lloyd’s algorithm</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: what k-means assumes, and why k-means++ works</summary><div>
+        <p>Each cluster is the set of points nearer to its centre than to any other centre, so the borders are straight lines (a Voronoi diagram). k-means therefore suits round, similar-sized groups and fails on long, curved or nested ones, as the moons and rings show. It is also the special case of a Gaussian mixture with equal, spherical covariances and hard assignments (section 6).</p>
+        <p>Arthur and Vassilvitskii (2007) proved that k-means++ seeding alone gives an expected inertia within a factor \(O(\log k)\) of the best possible, and in practice it needs fewer Lloyd iterations. Each iteration costs \(O(nkd)\), which is why k-means scales to millions of points (mini-batch k-means scales further still).</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="choosek" class="lab">
+  <div class="card hl">
+    <h2><span class="num">2</span>How many clusters? Elbow and silhouette</h2>
+    <p class="sub">k-means run for \(k=1\) to 8 on the data from section 1 (best of 4 starts each). Left axis, purple: inertia. Orange: mean silhouette (scaled to the same axis; its value is in the table). The best silhouette is ringed.</p>
+    <div class="plot wide" id="pK"></div>
+    <div class="tblwrap"><table class="tbl" id="kTable"></table></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Inertia always falls as \(k\) grows (with \(k=n\) it is zero), so we cannot just minimise it. Two common heuristics:</p>
+      <p><b>The elbow.</b> Plot inertia against \(k\) and look for the bend where adding a cluster stops paying off. On the round blobs the elbow is sharp at 4. On real data it is often a gentle curve with no clear bend.</p>
+      <p><b>The <a class="term" data-t="silhouette">silhouette</a>.</b> For each point, let \(a(i)\) be its mean distance to the other points of its own cluster and \(b(i)\) its mean distance to the points of the nearest other cluster. Then</p>
+      <div class="mathbox c4">$$s(i)=\frac{b(i)-a(i)}{\max\{a(i),\,b(i)\}}\in[-1,1].$$</div>
+      <p>\(s(i)\) near 1 means the point sits deep inside its cluster, near 0 means it is on a border, and negative means it is probably in the wrong cluster. The mean silhouette over all points is highest for compact, well-separated clusters, so we pick the \(k\) that maximises it.</p>
+      <p>Both measures reward round, separated groups, so they share k-means’ blind spots: on the rings they happily prefer a wrong answer. Switch the data to <b>No structure</b>: the silhouette never reaches 0.5, which is one hint that the clusters are not real. The honest test is usually outside the data: do the groups mean something, and are they stable when you resample?</p>
+      <details class="deeper"><summary>Going deeper: other ways to choose k</summary><div>
+        <p>The <b>gap statistic</b> (Tibshirani, Walther and Hastie, 2001) compares \(\log J(k)\) with its value on uniform random data of the same extent and picks the \(k\) with the largest gap. For Gaussian mixtures, the <b>BIC</b> \(-2\log L+p\log n\) penalises extra parameters and is a principled choice (section 6). <b>Stability</b>: cluster many bootstrap samples and keep the \(k\) whose clusters agree most across samples, measured by the adjusted Rand index.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="hier" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Hierarchical clustering and the dendrogram</h2>
+    <p class="sub">120 points merged bottom-up. The dendrogram (below) records every merge at the height where it happened. Drag the cut line on the dendrogram, or use the slider, to choose how many clusters to keep.</p>
+    <div class="plot sq" id="pH"></div>
+    <div class="plot short" id="pD" style="margin-top:10px"></div>
+    <div class="seg" id="hData"></div>
+    <div class="stats" id="hStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p><a class="term" data-t="hierarchical-clustering">Agglomerative clustering</a> needs no \(k\) up front. Start with \(n\) clusters of one point each. At every step merge the two closest clusters, until one is left. The result is a tree, the <a class="term" data-t="dendrogram">dendrogram</a>; cutting it at any height gives a flat clustering.</p>
+      <p>The one design choice is how to measure the distance between two <i>clusters</i> \(A\) and \(B\), called the <a class="term" data-t="linkage">linkage</a>:</p>
+      <div class="mathbox c3">$$\begin{aligned}\text{single:}&\ \min_{a\in A,b\in B}\lVert a-b\rVert &\quad \text{complete:}&\ \max_{a\in A,b\in B}\lVert a-b\rVert\\ \text{average:}&\ \tfrac{1}{|A||B|}\textstyle\sum_{a,b}\lVert a-b\rVert &\quad \text{Ward:}&\ \Delta J=\tfrac{|A||B|}{|A|+|B|}\lVert\mu_A-\mu_B\rVert^2\end{aligned}$$</div>
+      <ul><li><b>Single</b> follows chains of near neighbours, so it finds moons and rings, but one bridge of noise merges two groups (“chaining”).</li><li><b>Complete</b> and <b>average</b> prefer compact groups of similar width.</li><li><b>Ward</b> merges the pair that raises the k-means inertia \(J\) the least, so it behaves like a hierarchical k-means. It is the usual default.</li></ul>
+      <div class="seg" id="hLink"><button data-v="ward" class="on">Ward</button><button data-v="average">Average</button><button data-v="complete">Complete</button><button data-v="single">Single</button></div>
+      <div class="ctl"><label for="hK"><span>Clusters kept (cut)</span><output id="hKOut"></output></label><input type="range" id="hK" min="1" max="8" step="1" value="2"></div>
+      <div class="algo" data-anim="agglo"><h5 class="algo-h">Algorithm: agglomerative clustering</h5><ol>
+        <li><span class="kw">input</span> points, a linkage (single, complete, average or Ward)</li>
+        <li>make each point its own cluster; compute all pairwise distances</li>
+        <li><span class="kw">while</span> more than one cluster <span class="kw">do</span></li>
+        <li class="i1">find the two clusters \(A,B\) with the smallest linkage distance</li>
+        <li class="i1">merge them; record the merge and its height in the dendrogram</li>
+        <li class="i1">update the distances from \(A\cup B\) to every other cluster <span class="cm">Lance–Williams formula</span></li>
+        <li><span class="kw">return</span> the dendrogram; cut it at a height (or at \(k\) clusters)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: cost, and the Lance–Williams update</summary><div>
+        <p>All four linkages can be updated from the old distances alone: \(d(A\cup B,C)=\alpha_A d(A,C)+\alpha_B d(B,C)+\beta d(A,B)+\gamma|d(A,C)-d(B,C)|\), with constants that depend on the linkage (for single linkage \(\alpha=\tfrac12,\beta=0,\gamma=-\tfrac12\), giving the minimum). The simple version on this page costs \(O(n^3)\) time and \(O(n^2)\) memory, fine for thousands of points but not millions. Single linkage equals cutting the minimum spanning tree, which is how HDBSCAN builds on it.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="dbscan" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>DBSCAN: clusters are crowded regions</h2>
+    <p class="sub">Filled dots are <b>core points</b> (at least minPts points within ε, counting themselves), small dots are <b>border points</b> (within ε of a core point), grey crosses are <b>noise</b>. Tap a point to draw its ε-circle.</p>
+    <div class="plot sq" id="pDb"></div>
+    <div class="seg" id="dbData"></div>
+    <div class="stats" id="dbStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Centres cannot describe a moon or a ring. <a class="term" data-t="dbscan">DBSCAN</a> (Ester et al., 1996) uses density instead. It has two settings: a radius \(\varepsilon\) and a count minPts. The \(\varepsilon\)-neighbourhood of a point is \(N_\varepsilon(x)=\{y:\lVert x-y\rVert\le\varepsilon\}\).</p>
+      <ul><li>A <a class="term" data-t="core-point">core point</a> has \(|N_\varepsilon(x)|\ge\) minPts: it sits inside a crowd.</li><li>Two core points within \(\varepsilon\) of each other are in the same cluster; follow such links as far as they go.</li><li>A non-core point within \(\varepsilon\) of a core point joins that cluster as a border point; anything else is noise.</li></ul>
+      <p>DBSCAN finds the number of clusters itself, follows any shape, and labels outliers instead of forcing them into a group. Its weakness is the single \(\varepsilon\): on the <b>Mixed density</b> data, an \(\varepsilon\) small enough to split the tight group from its neighbours leaves the loose group as noise, and one large enough for the loose group merges everything else. The next section fixes that.</p>
+      <div class="ctl"><label for="dbE"><span>Radius \(\varepsilon\)</span><output id="dbEOut"></output></label><input type="range" id="dbE" min="0.05" max="1.2" step="0.01" value="0.3"></div>
+      <div class="ctl"><label for="dbM"><span>minPts</span><output id="dbMOut"></output></label><input type="range" id="dbM" min="2" max="25" step="1" value="5"></div>
+      <p class="hint">Picking ε: sort every point’s distance to its minPts-th neighbour and look for the knee of that curve (shown below); a common rule is minPts ≈ 2 × the number of features.</p>
+      <div class="plot short" id="pKd"></div>
+      <div class="algo" data-anim="dbscan"><h5 class="algo-h">Algorithm: DBSCAN</h5><ol>
+        <li><span class="kw">input</span> points, radius \(\varepsilon\), minPts</li>
+        <li><span class="kw">for</span> each point \(p\): find \(N_\varepsilon(p)\); \(p\) is core if \(|N_\varepsilon(p)|\ge\) minPts</li>
+        <li><span class="kw">for</span> each core point \(p\) not yet labelled <span class="kw">do</span></li>
+        <li class="i1">start a new cluster; put \(p\) on a queue</li>
+        <li class="i1"><span class="kw">while</span> the queue is not empty: pop \(q\); label every point of \(N_\varepsilon(q)\); queue the core points among them <span class="cm">grow through core points</span></li>
+        <li>points never labelled are noise</li>
+        <li><span class="kw">return</span> the cluster labels (−1 for noise)</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="hdbscan" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>HDBSCAN: every density at once</h2>
+    <p class="sub">Mixed-density data clustered two ways. Top: DBSCAN with the ε and minPts from section 4. Bottom: HDBSCAN, which has no ε, only a smallest cluster size. Grey crosses are noise. Numbers give the agreement with the true groups (adjusted Rand index, 1 = perfect).</p>
+    <div class="plot sq" id="pHd1"></div>
+    <div class="plot sq" id="pHd2" style="margin-top:10px"></div>
+    <div class="stats" id="hdStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p><a class="term" data-t="hdbscan">HDBSCAN</a> (Campello, Moulavi and Sander, 2013) runs DBSCAN for <i>every</i> ε at once and keeps the clusters that survive longest. In four steps:</p>
+      <ol><li><b>Core distance.</b> \(\text{core}_m(x)\) = distance to the \(m\)-th nearest neighbour: small in crowds, large in sparse areas.</li><li><b>Mutual reachability.</b> \(d_{\text{mr}}(a,b)=\max\{\text{core}_m(a),\ \text{core}_m(b),\ \lVert a-b\rVert\}\). Sparse points are pushed away from everything, so noise cannot bridge clusters.</li><li><b>Tree.</b> Build the minimum spanning tree under \(d_{\text{mr}}\) and remove edges from longest to shortest. That is single-linkage clustering, i.e. DBSCAN at every ε.</li><li><b>Condense and select.</b> Lower ε (raise \(\lambda=1/\varepsilon\)). A split counts only if both sides have at least <i>min cluster size</i> points; otherwise the small side just “falls out” as noise. Each cluster’s <i>stability</i> is \(\sum_{x}(\lambda_x-\lambda_{\text{birth}})\), how long its points stay in it. Keep the set of non-overlapping clusters with the largest total stability.</li></ol>
+      <p>The result handles mixed densities, needs one intuitive setting, and gives noise labels. It is now usually the first density method to try (it is in scikit-learn as <code>HDBSCAN</code>).</p>
+      <div class="ctl"><label for="hdM"><span>Smallest cluster size</span><output id="hdMOut"></output></label><input type="range" id="hdM" min="4" max="40" step="1" value="12"></div>
+      <div class="algo" data-anim="hdbscan"><h5 class="algo-h">Algorithm: HDBSCAN</h5><ol>
+        <li><span class="kw">input</span> points, smallest cluster size \(m\)</li>
+        <li>core distance of each point = distance to its \(m\)-th nearest neighbour</li>
+        <li>build the minimum spanning tree under mutual-reachability distance</li>
+        <li>sort its edges; removing them from longest to shortest gives the cluster tree</li>
+        <li>condense: a split counts only if both parts have \(\ge m\) points <span class="cm">else the small part is noise</span></li>
+        <li>stability of a cluster \(=\sum_x(\lambda_x-\lambda_{\text{birth}})\)</li>
+        <li>bottom-up: keep a cluster if it is more stable than its children together</li>
+        <li><span class="kw">return</span> the kept clusters; other points are noise</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="gmm" class="lab">
+  <div class="card hl">
+    <h2><span class="num">6</span>Gaussian mixtures and expectation–maximisation</h2>
+    <p class="sub">Each ellipse is one Gaussian (drawn at 1 and 2 standard deviations). Point colours are blended by <b>responsibility</b>: a point halfway between two clouds is half one colour, half the other. Step through EM and watch the log-likelihood (below) climb.</p>
+    <div class="plot sq" id="pG"></div>
+    <div class="seg" id="gData"></div>
+    <div class="player" style="margin-top:10px"><button class="btn primary" id="gStep">E + M step</button><button class="btn" id="gRun">Run 50 steps</button><button class="btn" id="gNew">New start</button><span class="pos" id="gPos"></span></div>
+    <div class="plot short" id="pGl"></div>
+    <div class="stats" id="gStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>A <a class="term" data-t="gmm">Gaussian mixture model</a> says each point was made in two steps: first pick a component \(z\in\{1,\dots,k\}\) with probability \(\phi_j\), then draw \(x\) from a Gaussian \(\mathcal N(\mu_j,\Sigma_j)\). The density of \(x\) is</p>
+      <div class="mathbox c1">$$p(x)=\sum_{j=1}^{k}\phi_j\,\mathcal N(x\mid\mu_j,\Sigma_j).$$</div>
+      <p>If we knew every \(z^{(i)}\) this would be <a href="../lda-gda/">GDA</a>: fit one Gaussian per group. We do not, so the <a class="term" data-t="em-algorithm">EM algorithm</a> guesses them softly and improves the guess:</p>
+      <ul><li><b>E-step.</b> For each point, the <a class="term" data-t="responsibility">responsibility</a> of component \(j\) is the posterior probability that it made the point: \(w^{(i)}_j=\dfrac{\phi_j\,\mathcal N(x^{(i)}\mid\mu_j,\Sigma_j)}{\sum_l\phi_l\,\mathcal N(x^{(i)}\mid\mu_l,\Sigma_l)}\).</li><li><b>M-step.</b> Refit each Gaussian with the points weighted by responsibility: \(N_j=\sum_i w^{(i)}_j\), \(\phi_j=N_j/n\), \(\mu_j=\tfrac{1}{N_j}\sum_i w^{(i)}_jx^{(i)}\), \(\Sigma_j=\tfrac{1}{N_j}\sum_i w^{(i)}_j(x^{(i)}-\mu_j)(x^{(i)}-\mu_j)^\top\).</li></ul>
+      <p>Each EM step can never lower the log-likelihood \(\ell=\sum_i\log p(x^{(i)})\) (the chart below the plot), so it converges, again to a local maximum. Because each component has its own covariance, a mixture fits the tilted, stretched groups that k-means cuts wrongly, and it says how sure it is about every point.</p>
+      <div class="ctl"><label for="gK"><span>Components \(k\)</span><output id="gKOut"></output></label><input type="range" id="gK" min="1" max="6" step="1" value="3"></div>
+      <div class="algo" data-anim="em"><h5 class="algo-h">Algorithm: EM for a Gaussian mixture</h5><ol>
+        <li><span class="kw">input</span> points, number of components \(k\)</li>
+        <li>initialise \(\phi_j,\mu_j,\Sigma_j\) <span class="cm">e.g. from k-means++</span></li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1">E-step: \(w^{(i)}_j\leftarrow P(z^{(i)}=j\mid x^{(i)})\) for every point and component</li>
+        <li class="i1">M-step: \(\phi_j,\mu_j,\Sigma_j\leftarrow\) weighted proportion, mean and covariance</li>
+        <li class="i1">compute the log-likelihood \(\ell\)</li>
+        <li><span class="kw">until</span> \(\ell\) stops improving</li>
+        <li><span class="kw">return</span> the mixture and the responsibilities</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: why EM climbs, and k-means as a special case</summary><div>
+        <p>For any distribution \(Q_i\) over \(z^{(i)}\), Jensen’s inequality gives a lower bound \(\ell(\theta)\ge\sum_i\sum_jQ_i(j)\log\frac{p(x^{(i)},z^{(i)}=j;\theta)}{Q_i(j)}\), the evidence lower bound. The E-step sets \(Q_i\) to the posterior, which makes the bound touch \(\ell\) at the current \(\theta\); the M-step maximises the bound over \(\theta\). So \(\ell(\theta_{t+1})\ge\text{bound}(\theta_{t+1})\ge\text{bound}(\theta_t)=\ell(\theta_t)\). This argument is the same one used by variational autoencoders.</p>
+        <p>Fix every \(\Sigma_j=\sigma^2I\) and \(\phi_j=1/k\) and let \(\sigma\to0\): responsibilities become 0 or 1 (nearest centre) and the M-step becomes the centroid update, which is exactly k-means. To choose \(k\), compare the BIC \(-2\ell+p\log n\), where \(p\) counts the parameters (in 2-D, each component adds 2 means, 3 covariance entries and 1 weight).</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="which" class="lab">
+  <div class="card hl">
+    <h2><span class="num">7</span>Which method for which shape?</h2>
+    <p class="sub">The same data clustered five ways with sensible settings (k set to the true number for the methods that need it). The score under each is the adjusted Rand index against the true groups: 1 is perfect, 0 is no better than chance.</p>
+    <div class="seg" id="wData"></div>
+    <div class="cl-gal" id="wGal"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <div class="tblwrap"><table class="tbl txt">
+        <tr><th>Method</th><th>You choose</th><th>Cluster shape</th><th>Noise label?</th><th>Scales to</th></tr>
+        <tr><td><b>k-means</b></td><td>\(k\)</td><td>Round, similar size</td><td>No</td><td>Millions (mini-batch)</td></tr>
+        <tr><td><b>Ward / agglomerative</b></td><td>Linkage, cut</td><td>Ward: round; single: chains</td><td>No</td><td>Tens of thousands</td></tr>
+        <tr><td><b>DBSCAN</b></td><td>\(\varepsilon\), minPts</td><td>Any, one density</td><td>Yes</td><td>Large, with a spatial index</td></tr>
+        <tr><td><b>HDBSCAN</b></td><td>Smallest cluster size</td><td>Any, mixed densities</td><td>Yes</td><td>Large</td></tr>
+        <tr><td><b>Gaussian mixture</b></td><td>\(k\), covariance type</td><td>Ellipses, soft</td><td>Via low density</td><td>Large</td></tr>
+      </table></div>
+      <p>Practical order: scale the features (see <a href="../datasets/">datasets</a>), try k-means or a mixture for a quick baseline, then HDBSCAN if the groups are irregular or you expect noise. In high dimensions cluster on a reduced representation (PCA, or embeddings from a neural network). Use <a href="../tsne-umap/">t-SNE or UMAP</a> to <i>look</i> at the result, but be careful clustering directly on their output, because they distort densities.</p>
+      <p>Always look at the pure-noise case: every method above reports clusters on <b>No structure</b>. A clustering is only worth acting on if it is stable across resamples and settings, and means something to someone who knows the data.</p>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">8</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.preprocessing <span class="k">import</span> StandardScaler
+<span class="k">from</span> sklearn.cluster <span class="k">import</span> KMeans, AgglomerativeClustering, DBSCAN, HDBSCAN
+<span class="k">from</span> sklearn.mixture <span class="k">import</span> GaussianMixture
+<span class="k">from</span> sklearn.metrics <span class="k">import</span> silhouette_score, adjusted_rand_score
+
+X = StandardScaler().fit_transform(X_raw)                       <span class="c"># distances need comparable units</span>
+
+<span class="k">for</span> k <span class="k">in</span> range(<span class="s">2</span>, <span class="s">9</span>):                                         <span class="c"># elbow and silhouette</span>
+    km = KMeans(n_clusters=k, init=<span class="s">"k-means++"</span>, n_init=<span class="s">10</span>, random_state=<span class="s">0</span>).fit(X)
+    print(k, km.inertia_, silhouette_score(X, km.labels_))
+
+ward   = AgglomerativeClustering(n_clusters=<span class="s">4</span>, linkage=<span class="s">"ward"</span>).fit_predict(X)
+db     = DBSCAN(eps=<span class="s">0.3</span>, min_samples=<span class="s">5</span>).fit_predict(X)          <span class="c"># -1 = noise</span>
+hdb    = HDBSCAN(min_cluster_size=<span class="s">12</span>).fit_predict(X)              <span class="c"># scikit-learn &gt;= 1.3</span>
+gmm    = GaussianMixture(n_components=<span class="s">3</span>, covariance_type=<span class="s">"full"</span>, n_init=<span class="s">5</span>).fit(X)
+soft   = gmm.predict_proba(X)                                     <span class="c"># responsibilities</span>
+print(gmm.bic(X), adjusted_rand_score(y_true, gmm.predict(X)))  <span class="c"># if you happen to have labels</span>
+
+<span class="k">from</span> scipy.cluster.hierarchy <span class="k">import</span> linkage, dendrogram, fcluster  <span class="c"># the full tree</span>
+Z = linkage(X, method=<span class="s">"average"</span>); dendrogram(Z); labels = fcluster(Z, t=<span class="s">4</span>, criterion=<span class="s">"maxclust"</span>)</pre>
+</section>
+
+<section id="credits" class="card">
+  <h2><span class="num">9</span>Sources and credits</h2>
+  <div class="prose">
+    <p>The explanations, demos and code on this page were written for this site. The k-means and EM derivations follow the notation of Andrew Ng’s Stanford CS229 lecture notes on unsupervised learning, and the comparison of methods by shape takes its idea from the well-known <a href="https://scikit-learn.org/stable/modules/clustering.html" target="_blank" rel="noopener">scikit-learn clustering guide</a>. The HDBSCAN steps follow the clear account in the <a href="https://hdbscan.readthedocs.io/en/latest/how_hdbscan_works.html" target="_blank" rel="noopener">hdbscan library documentation</a> by McInnes, Healy and Astels.</p>
+    <p>Original papers: Lloyd 1957/1982 (least squares quantisation); MacQueen 1967 (k-means); Arthur and Vassilvitskii 2007 (k-means++); Ward 1963 (hierarchical grouping); Dempster, Laird and Rubin 1977 (the EM algorithm); Ester, Kriegel, Sander and Xu 1996 (DBSCAN); Campello, Moulavi and Sander 2013 (HDBSCAN); Rousseeuw 1987 (silhouettes); Tibshirani, Walther and Hastie 2001 (gap statistic); Hubert and Arabie 1985 (adjusted Rand index).</p>
+  </div>
+</section>
+<script type="application/json" id="quizData">[
+ {"q":"k-means alternates two steps. Which pair?","o":["Split the worst cluster, then merge the closest two","Assign each point to its nearest centre, then move each centre to the mean of its points","Compute responsibilities, then fit covariances","Remove noise, then grow clusters from core points"],"a":1,"e":"Assignment and update steps each lower (or keep) the inertia \\(J\\), so the loop always stops, though only at a local minimum."},
+ {"q":"Why does k-means fail on the two-moons data?","o":["It needs more iterations","Its borders between centres are straight lines, so it can only cut the plane into convex pieces","It cannot handle two clusters","It ignores the first feature"],"a":1,"e":"Each k-means cluster is a Voronoi cell, which is convex. Density methods (DBSCAN, HDBSCAN) or single linkage follow curved shapes."},
+ {"q":"A point has mean distance 1.0 to its own cluster and 3.0 to the nearest other cluster. Its silhouette is…","o":["0.33","0.67","2.0","−0.67"],"a":1,"e":"\\(s=(b-a)/\\max(a,b)=(3-1)/3\\approx0.67\\): comfortably inside its own cluster."},
+ {"q":"In DBSCAN, a point with fewer than minPts neighbours within ε, but lying within ε of a core point, is…","o":["A core point","A border point in that core point’s cluster","Noise","A new cluster"],"a":1,"e":"Border points join a cluster but cannot extend it; only core points pass membership on."},
+ {"q":"What does the E-step of EM for a Gaussian mixture compute?","o":["The new means","For every point, the probability that each component generated it (the responsibilities)","The number of clusters","The distance matrix"],"a":1,"e":"The M-step then refits weights, means and covariances using those responsibilities as soft counts."}
+]</script>
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything runs in your browser. Next: <a href="../tsne-umap/">t-SNE and UMAP: maps of high-dimensional data &rarr;</a></p>
+</main>
+<script src="../../ml/assets/core.js"></script>
+<script src="../../ml/assets/gloss.js"></script>
+<script src="../../dl/assets/nlp.js"></script>
+<script src="../../math/assets/mx.js"></script>
+<script src="../../dl/assets/evo.js"></script>
+<script src="../assets/unsup.js"></script>
+<script>
+(function(){
+const {$} = ML;
+const stat=(c,v,l)=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`;
+if(window.EVO) EVO.render('#evoSlot','unsup');
+const NAMES={blobs:'Round blobs',aniso:'Stretched',moons:'Moons',rings:'Rings',density:'Mixed density',noise:'No structure'};
+const TRUEK={blobs:4,aniso:3,moons:2,rings:2,density:3,noise:3};
+function dsSeg(id, cur, cb, only){ const el=$('#'+id); el.innerHTML=(only||US.DATA.map(d=>d.id)).map(k=>`<button data-v="${k}"${k===cur?' class="on"':''} title="${US.DATA.find(d=>d.id===k).desc}">${NAMES[k]}</button>`).join(''); ML.bindSeg(el, cb); if(ML.tileRow) ML.tileRow(el); }
+const P = () => ML.palette();
+function blend(cols, w){ const rgb=cols.map(c=>ML.rgb(c)); let r=0,g=0,b=0; w.forEach((v,j)=>{ r+=v*rgb[j][0]; g+=v*rgb[j][1]; b+=v*rgb[j][2]; }); return `rgb(${r|0},${g|0},${b|0})`; }
+function drawPts(plot, X, lab, o={}){ const C=US.colors(), pal=P(), c=plot.ctx; c.save();
+  X.forEach((x,i)=>{ const px=plot.X(x[0]), py=plot.Y(x[1]); const l=lab? lab[i] : -2;
+    if(l===-1 && o.noiseX!==false){ c.strokeStyle=pal.muted; c.lineWidth=1.4; c.globalAlpha=.8; c.beginPath(); c.moveTo(px-3,py-3); c.lineTo(px+3,py+3); c.moveTo(px+3,py-3); c.lineTo(px-3,py+3); c.stroke(); return; }
+    c.globalAlpha=1; c.beginPath(); c.arc(px,py,o.r? o.r(i) : 3.6,0,7); c.fillStyle= o.color? o.color(i) : l===-2? pal.muted : US.col(l,C); c.fill(); c.lineWidth=1; c.strokeStyle=pal.dark?'#0b0d19':'#fff'; c.stroke(); });
+  c.restore(); }
+function score(plot, txt){ const c=plot.ctx, pal=P(); c.save(); c.font='600 12.5px Inter,system-ui'; c.textAlign='left'; c.lineWidth=4; c.strokeStyle=pal.bg; c.strokeText(txt,8,18); c.fillStyle=pal.ink; c.fillText(txt,8,18); c.restore(); }
+
+/* ---------- 1 · k-means ---------- */
+const pKm=new ML.Plot('#pKm'); let kmD='blobs', kmK=4, kmInit='++', D1=US.make('blobs',300,3), C=null, A=null, kmIt=0, kmDone=false, kmSeed=1, phase=0;
+function kmStart(){ D1=US.make(kmD,300,3); C=US.kmInit(D1.X,kmK,kmInit,US.rng(kmSeed)); A=null; kmIt=0; kmDone=false; phase=0; drawKm(); drawK(); }
+function kmStep(){ if(kmDone) return; if(phase===0){ const r=US.kmAssign(D1.X,C); if(A && r.a.every((v,i)=>v===A[i])) kmDone=true; A=r.a; phase=1; } else { C=US.kmUpdate(D1.X,A,C); kmIt++; phase=0; } drawKm(); }
+function drawKm(){ const pal=P(), Cs=US.colors(); pKm.clear(); pKm.grid(1);
+  if(A){ /* Voronoi territories lightly shaded */ const c=pKm.ctx, res=6; c.save(); c.globalAlpha=.09; for(let px=0;px<pKm.w;px+=res) for(let py=0;py<pKm.h;py+=res){ const x=[pKm.ix(px+res/2),pKm.iy(py+res/2)]; let b=0,bd=Infinity; C.forEach((m,j)=>{ const d=US.d2(x,m); if(d<bd){bd=d;b=j;} }); c.fillStyle=US.col(b,Cs); c.fillRect(px,py,res,res); } c.restore(); }
+  drawPts(pKm, D1.X, A);
+  C.forEach((m,j)=>{ const c=pKm.ctx, X=pKm.X(m[0]), Y=pKm.Y(m[1]); c.save(); c.lineWidth=4; c.strokeStyle=pal.dark?'#0b0d19':'#fff'; c.beginPath(); c.arc(X,Y,10,0,7); c.stroke(); c.lineWidth=2.6; c.strokeStyle=US.col(j,Cs); c.stroke(); c.fillStyle=pal.ink; c.beginPath(); c.arc(X,Y,2.5,0,7); c.fill(); c.restore(); });
+  const J=A? US.kmAssign(D1.X,C).inertia : NaN;
+  $('#kmPos').textContent = kmDone? `converged after ${kmIt} updates` : A? (phase===1? `next: move the centres (update ${kmIt+1})` : `next: reassign the points`) : 'next: assign every point';
+  $('#kmStats').innerHTML=stat('c1', isNaN(J)?'–':J.toFixed(1),'inertia J')+stat('c3', kmIt,'centre updates')+stat('c4', A && kmK>1 && kmDone? US.silhouette(D1.X,A).mean.toFixed(2) : '–','mean silhouette (at the end)'); }
+$('#kmStep').addEventListener('click',kmStep);
+$('#kmRun').addEventListener('click',()=>{ let g=0; while(!kmDone && g++<400) kmStep(); });
+$('#kmNew').addEventListener('click',()=>{ kmSeed++; kmStart(); });
+dsSeg('kmData', kmD, v=>{ kmD=v; kmStart(); });
+ML.bindSeg('kmInit', v=>{ kmInit=v; kmStart(); });
+ML.bindRange('kmK', v=>{ kmK=v; kmStart(); });
+pKm.onResize=()=>{ if(!C) kmStart(); else drawKm(); };
+
+/* ---------- 2 · choosing k ---------- */
+const pK=new ML.Plot('#pK',{equal:false}); let kCache=null;
+function drawK(){ if(!kCache || kCache.id!==kmD){ const R=[]; for(let k=1;k<=8;k++){ const r=US.kmeans(D1.X,k,{nInit:4,seed:k}); R.push({k, J:r.inertia, s:k>1? US.silhouette(D1.X,r.a).mean : NaN}); } kCache={id:kmD,R}; }
+  const pal=P(), R=kCache.R, Jm=R[0].J, best=R.filter(r=>r.k>1).reduce((a,b)=>b.s>a.s?b:a);
+  const fr=ML.chart(pK,[{pts:R.map(r=>[r.k,r.J]),color:pal.c1,width:2.6,dots:true,r:4},{pts:R.filter(r=>r.k>1).map(r=>[r.k,r.s*Jm]),color:pal.c4,width:2.2,dots:true,r:4,dash:[6,4]}],{x0:1,x1:8,y0:0,y1:Jm*1.05,xl:'k',yfmt:v=>v.toFixed(0)});
+  if(fr){ const c=pK.ctx; c.save(); c.strokeStyle=pal.c4; c.lineWidth=2.5; c.beginPath(); c.arc(fr.fx(best.k),fr.fy(best.s*Jm),9,0,7); c.stroke(); c.restore(); }
+  $('#kTable').innerHTML='<tr><th>k</th>'+R.map(r=>`<th>${r.k}</th>`).join('')+'</tr><tr><td>Inertia</td>'+R.map(r=>`<td>${r.J.toFixed(0)}</td>`).join('')+'</tr><tr><td>Silhouette</td>'+R.map(r=>`<td${r===best?' style="color:var(--c4);font-weight:700"':''}>${isNaN(r.s)?'–':r.s.toFixed(2)}</td>`).join('')+'</tr>'; }
+pK.onResize=()=>{ if(C) drawK(); };
+
+/* ---------- 3 · hierarchical ---------- */
+const pH=new ML.Plot('#pH'), pD=new ML.Plot('#pD',{equal:false}); let hD='blobs', hLink='ward', hK=4, HX=null, HM=null, HT=null;
+function hFit(){ HX=US.make(hD,120,11).X; HM=US.agglo(HX,hLink); HT=US.dendro(HM,HX.length); drawH(); }
+function drawH(){ const n=HX.length, lab=US.cut(HM,n,hK), pal=P(), Cs=US.colors(); pH.clear(); pH.grid(1); drawPts(pH,HX,lab);
+  pD.clear(); const c=pD.ctx, L=10, R=10, T=14, B=14, W=pD.w-L-R, H=pD.h-T-B, hmax=HM[HM.length-1].h*1.04, fx=x=>L+(x+.5)/n*W, fy=h=>T+H-h/hmax*H;
+  const cutH = hK<=1? hmax : (HM[n-hK-1].h + HM[n-hK].h)/2;   /* between the merge that is kept and the one undone */
+  const colOf={}; const lead=x=>{ if(x<n) return lab[x]; return colOf[x]; }; HM.forEach((m,t)=>{ const a=lead(m.a), b=lead(m.b); colOf[n+t]= a===b? a : -1; });
+  c.save(); c.lineWidth=1.3; HM.forEach((m,t)=>{ const id=n+t, col= m.h<=cutH && colOf[id]>=0 ? US.col(colOf[id],Cs) : pal.muted; c.strokeStyle=col;
+    c.beginPath(); c.moveTo(fx(HT.xs[m.a]),fy(HT.ys[m.a])); c.lineTo(fx(HT.xs[m.a]),fy(m.h)); c.lineTo(fx(HT.xs[m.b]),fy(m.h)); c.lineTo(fx(HT.xs[m.b]),fy(HT.ys[m.b])); c.stroke(); });
+  c.strokeStyle=pal.c2; c.lineWidth=2; c.setLineDash([6,4]); c.beginPath(); c.moveTo(L,fy(cutH)); c.lineTo(L+W,fy(cutH)); c.stroke(); c.setLineDash([]); c.fillStyle=pal.c2; c.font='600 12px Inter,system-ui'; c.fillText('cut → '+hK+' cluster'+(hK>1?'s':''),L+4,fy(cutH)-6); c.restore();
+  pD._cut={fy, hmax, T, H};
+  const truth=US.make(hD,120,11).y; $('#hStats').innerHTML=stat('c1',hK,'clusters after the cut')+stat('c3',HM[n-2].h.toFixed(2),'height of the last merge')+stat('c5',US.ari(lab,truth).toFixed(2),'agreement with true groups (ARI)'); }
+pD.pointer({down:(x,y,px,py)=>hDrag(py), move:(x,y,px,py)=>hDrag(py)});
+function hDrag(py){ if(!pD._cut) return; const {T,H,hmax}=pD._cut, h=(T+H-py)/H*hmax, n=HX.length; let k=1; for(let t=n-2;t>=0;t--){ if(HM[t].h>h) k=n-t; else break; } k=Math.max(1,Math.min(8,k)); if(k!==hK){ hK=k; const el=$('#hK'); el.value=k; $('#hKOut').textContent=k; drawH(); } }
+dsSeg('hData', hD, v=>{ hD=v; hK=TRUEK[v]; $('#hK').value=hK; $('#hKOut').textContent=hK; hFit(); });
+ML.bindSeg('hLink', v=>{ hLink=v; hFit(); });
+ML.bindRange('hK', v=>{ hK=v; drawH(); });
+$('#hK').value=hK; $('#hKOut').textContent=hK;
+pH.onResize=()=>{ if(!HX) hFit(); else drawH(); }; pD.onResize=()=>{ if(HX) drawH(); };
+
+/* ---------- 4 · DBSCAN ---------- */
+const pDb=new ML.Plot('#pDb'), pKd=new ML.Plot('#pKd',{equal:false}); let dbD='moons', dbE=.3, dbM=5, DB=US.make('moons',300,3), DR=null, dbSel=-1;
+function dbFit(){ DR=US.dbscan(DB.X,dbE,dbM); drawDb(); drawKd(); }
+function drawDb(){ const pal=P(), Cs=US.colors(); pDb.clear(); pDb.grid(1);
+  if(dbSel>=0){ const x=DB.X[dbSel], c=pDb.ctx; c.save(); c.beginPath(); c.arc(pDb.X(x[0]),pDb.Y(x[1]),pDb.X(dbE)-pDb.X(0),0,7); c.fillStyle=pal.c1; c.globalAlpha=.12; c.fill(); c.globalAlpha=1; c.strokeStyle=pal.c1; c.lineWidth=1.6; c.stroke(); c.restore(); }
+  drawPts(pDb, DB.X, DR.lab, {r:i=>DR.type[i]==='core'? 4.2 : 2.6});
+  const nz=DR.lab.filter(v=>v<0).length; $('#dbStats').innerHTML=stat('c1',DR.k,'clusters found')+stat('c3',DR.core.filter(Boolean).length,'core points')+stat('c4',nz,'noise points')+stat('c5',US.ari(DR.lab,DB.y).toFixed(2),'ARI vs true groups');
+  if(dbSel>=0){ const nb=DB.X.filter(y=>US.dist(y,DB.X[dbSel])<=dbE).length; score(pDb, `${nb} point${nb>1?'s':''} within ε (minPts ${dbM}) → ${DR.type[dbSel]}`); } }
+function drawKd(){ const pal=P(), kd=US.kdist(DB.X,dbM-1); ML.chart(pKd,[{pts:kd.map((v,i)=>[i,v]),color:pal.c3,width:2.2},{pts:[[0,dbE],[kd.length,dbE]],color:pal.c2,width:1.5,dash:[5,4]}],{x0:0,x1:kd.length,y0:0,y1:Math.min(2,Math.max(...kd))*1.05,xl:'points sorted by distance to their minPts-th neighbour'}); }
+pDb.pointer({down:(x,y)=>{ const i=pDb.nearest(DB.X,pDb.X(x),pDb.Y(y),16); dbSel=i; drawDb(); }});
+dsSeg('dbData', dbD, v=>{ dbD=v; DB=US.make(v,300,3); dbSel=-1; dbFit(); drawHd(); });
+ML.bindRange('dbE', v=>{ dbE=v; dbFit(); drawHd(); }, v=>v.toFixed(2)); ML.bindRange('dbM', v=>{ dbM=v; dbFit(); drawHd(); });
+pDb.onResize=()=>{ if(!DR) dbFit(); else drawDb(); }; pKd.onResize=()=>{ if(DR) drawKd(); };
+
+/* ---------- 5 · HDBSCAN ---------- */
+const pHd1=new ML.Plot('#pHd1'), pHd2=new ML.Plot('#pHd2'); let hdM=12; const HDD=US.make('density',300,3); let HDR=null, hdMfit=-1;
+function drawHd(){ if(hdMfit!==hdM){ HDR=US.hdbscan(HDD.X,hdM); hdMfit=hdM; } const r1=US.dbscan(HDD.X,dbE,dbM);
+  [[pHd1,r1.lab,`DBSCAN (ε ${dbE.toFixed(2)})`],[pHd2,HDR.lab,`HDBSCAN (min size ${hdM})`]].forEach(([pl,lab,t])=>{ pl.clear(); pl.grid(1); drawPts(pl,HDD.X,lab); const k=new Set(lab.filter(v=>v>=0)).size; score(pl, `${t} · ${k} clusters · ARI ${US.ari(lab,HDD.y).toFixed(2)}`); });
+  $('#hdStats').innerHTML=stat('c4',r1.lab.filter(v=>v<0).length,'DBSCAN noise points')+stat('c1',HDR.lab.filter(v=>v<0).length,'HDBSCAN noise points')+stat('c5',HDR.k,'HDBSCAN clusters'); }
+ML.bindRange('hdM', v=>{ hdM=v; drawHd(); });
+pHd1.onResize=()=>drawHd(); pHd2.onResize=()=>drawHd();
+
+/* ---------- 6 · Gaussian mixture ---------- */
+const pG=new ML.Plot('#pG'), pGl=new ML.Plot('#pGl',{equal:false}); let gD='aniso', gK=3, GD=US.make('aniso',300,3), GM=null, GR=null, GL=[], gSeed=2;
+function gStart(){ GD=US.make(gD,300,3); GM=US.gmmInit(GD.X,gK,gSeed); GR=null; GL=[]; drawG(); }
+function gStep(){ const r=US.emStep(GD.X,GM); GM=r.M; GR=US.emStep(GD.X,GM).R; GL.push(US.loglik(GD.X,GM)); drawG(); }
+function drawG(){ const pal=P(), Cs=US.colors().slice(0,gK); pG.clear(); pG.grid(1);
+  drawPts(pG, GD.X, null, {color:i=> GR? blend(Cs,GR[i]) : pal.muted});
+  GM.mu.forEach((m,j)=>{ [1,2].forEach(s=>pG.ellipse(m,GM.S[j],s,{color:US.col(j,Cs),width:s===1?2.6:1.4,dash:s===2?[5,4]:null,fill:s===1?US.col(j,Cs):null,fillAlpha:.08})); const c=pG.ctx; c.save(); c.fillStyle=US.col(j,Cs); c.beginPath(); c.arc(pG.X(m[0]),pG.Y(m[1]),5,0,7); c.fill(); c.restore(); });
+  if(GL.length) ML.chart(pGl,[{pts:GL.map((v,i)=>[i+1,v]),color:pal.c1,width:2.4}],{x0:1,x1:Math.max(10,GL.length),xl:'EM step',yfmt:v=>v.toFixed(0)}); else { pGl.clear(); }
+  $('#gPos').textContent = GL.length? 'step '+GL.length : 'press a button to start';
+  const unsure = GR? GR.filter(r=>Math.max(...r)<.8).length : 0, bic = GL.length? -2*GL[GL.length-1]+(6*gK-1)*Math.log(GD.X.length) : NaN;
+  $('#gStats').innerHTML=stat('c1',GL.length? GL[GL.length-1].toFixed(1):'–','log-likelihood ℓ')+stat('c4',GR? unsure:'–','points with max responsibility < 0.8')+stat('c3',isNaN(bic)?'–':bic.toFixed(0),'BIC (lower is better)')+stat('c5',GR&&GL.length>5? US.ari(GR.map(r=>r.indexOf(Math.max(...r))),GD.y).toFixed(2):'–','ARI vs true groups'); }
+$('#gStep').addEventListener('click',gStep); $('#gRun').addEventListener('click',()=>{ for(let t=0;t<50;t++){ const r=US.emStep(GD.X,GM); GM=r.M; GL.push(US.loglik(GD.X,GM)); } GR=US.emStep(GD.X,GM).R; drawG(); });
+$('#gNew').addEventListener('click',()=>{ gSeed++; gStart(); });
+dsSeg('gData', gD, v=>{ gD=v; gStart(); }, ['blobs','aniso','moons','density']);
+ML.bindRange('gK', v=>{ gK=v; gStart(); });
+pG.onResize=()=>{ if(!GM) gStart(); else drawG(); }; pGl.onResize=()=>{ if(GM) drawG(); };
+
+/* ---------- 7 · gallery ---------- */
+let wD='aniso'; const gal=$('#wGal'); const METHODS=[['k-means','km'],['Ward','ward'],['DBSCAN','db'],['HDBSCAN','hdb'],['Gaussian mixture','gmm']];
+gal.innerHTML=METHODS.map(([t,k])=>`<figure><div class="plot sq" id="w_${k}"></div><figcaption><b>${t}</b><span id="w_${k}_s"></span></figcaption></figure>`).join('');
+const WP={}; METHODS.forEach(([,k])=>{ WP[k]=new ML.Plot('#w_'+k); });
+const EPS={blobs:.3,aniso:.22,moons:.25,rings:.32,density:.25,noise:.3};
+function drawW(){ const D=US.make(wD,240,3), k=TRUEK[wD], X=D.X; const L={};
+  L.km=US.kmeans(X,k,{nInit:4}).a; L.ward=(()=>{ const sub=X; return US.cut(US.agglo(sub,'ward'),sub.length,k); })(); L.db=US.dbscan(X,EPS[wD],5).lab; L.hdb=US.hdbscan(X,12).lab;
+  let M=US.gmmInit(X,k,2); for(let t=0;t<80;t++) M=US.emStep(X,M).M; L.gmm=US.emStep(X,M).R.map(r=>r.indexOf(Math.max(...r)));
+  METHODS.forEach(([,m])=>{ const pl=WP[m]; pl.clear(); drawPts(pl,X,L[m],{r:()=>2.8}); $('#w_'+m+'_s').textContent = wD==='noise' ? `${new Set(L[m].filter(v=>v>=0)).size} “clusters”` : 'ARI '+US.ari(L[m],D.y).toFixed(2); }); }
+dsSeg('wData', wD, v=>{ wD=v; drawW(); });
+let wT=0; Object.values(WP).forEach(pl=>{ pl.onResize=()=>{ clearTimeout(wT); wT=setTimeout(drawW,30); }; });
+kmStart(); hFit(); dbFit(); drawHd(); gStart(); drawW();
+ML.onTheme && ML.onTheme(()=>{ drawKm(); drawK(); drawH(); drawDb(); drawHd(); drawG(); drawW(); });
+})();
+</script>
+<script>ML.nav('clustering'); ML.renderMath(document.body);</script>
+</body>
+</html>

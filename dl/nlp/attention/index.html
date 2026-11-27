@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Attention</title>
+<meta name="description" content="Why one summary vector is a bottleneck, a draggable query and keys with four score functions and a temperature dial, translation alignments, and the query-key-value maths step by step.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP</p>
+  <h1>Attention: <span class="grad">look back at what matters</span></h1>
+  <p class="lede">A recurrent network has to squeeze everything it has read into one hidden vector. Attention removes that squeeze: at every step the model keeps all the earlier vectors and, for the job at hand, takes a weighted average of them, with the weights computed on the fly from how well each one matches what it is looking for.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#neck">1 · The bottleneck</a><a href="#score">2 · Query, keys, scores</a><a href="#align">3 · Alignment in translation</a><a href="#maths">4 · Q, K, V step by step</a><a href="#kinds">5 · Kinds of attention</a><a href="#py">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is attention, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>An encoder–decoder translator squeezes the whole source sentence into one fixed vector, then writes the translation from that vector alone. For a five-word sentence that works; for a fifty-word one, the vector is a bottleneck and early words get forgotten. A human translator does something smarter: while writing each word, they glance back at the part of the source that matters right now. We want a network that can do that glance, and learn where to look.</p>
+      <h3>The idea</h3><p><a class="term" data-t="attention">Attention</a> lets a model look back at all the vectors it has, instead of a single summary, and take a weighted average of them. The weights come from comparing a <a class="term" data-t="qkv">query</a> (what I am looking for) with each key (what each item offers), then passing the scores through a <a class="term" data-t="softmax">softmax</a> so they are positive and add up to 1.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Score each key against the query (for example a dot product).</li><li>Divide by \(\sqrt d\) (<a class="term" data-t="scaled-dot">scaled dot product</a>) and apply softmax to get weights.</li><li>Output the weighted average of the values.</li><li>Everything is differentiable, so the model learns what to look for.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>Searching a library: your question is the query, the catalogue cards are the keys, the books are the values. Instead of picking one book, you take a blend, mostly from the best matches.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Removes the one-vector bottleneck</li><li>Direct path between any two positions</li><li>Weights are visible and often interpretable</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Cost grows with (queries × keys)</li><li>Weights are not a full explanation of the model</li><li>Needs position information added separately</li></ul></div></div>
+      
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="attention">Attention</a><a class="term" data-t="qkv">Query, key, value</a><a class="term" data-t="softmax">Softmax</a><a class="term" data-t="scaled-dot">Scaled dot product</a><a class="term" data-t="seq2seq">Sequence to sequence</a><a class="term" data-t="encoder">Encoder</a><a class="term" data-t="decoder">Decoder</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="neck" class="card hl">
+  <h2><span class="num">1</span>The bottleneck: one vector cannot hold a whole sentence</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>In a 2014 <a class="term" data-t="seq2seq">sequence-to-sequence</a> translator, the <a class="term" data-t="encoder">encoder</a> RNN reads the sentence and hands the <a class="term" data-t="decoder">decoder</a> only its final hidden state. Long sentences were translated badly, because one fixed-size vector has to carry every word.</p>
+      <p>This experiment measures that squeeze. Store \(N\) random "facts" (a key vector and a value vector, 16 numbers each), then try to read back fact 1 using a noisy copy of its key.</p>
+      <ul>
+        <li><b>One summary vector</b> (the bottleneck): keep only the average of the values. Whatever you ask, you get the same blend back.</li>
+        <li><b>Attention</b>: keep all \(N\) values; score each key against the query, turn the scores into weights with <a class="term" data-t="softmax">softmax</a>, return the weighted average.</li>
+      </ul>
+      <div class="ctl"><label for="nN"><span>Number of stored facts \(N\)</span><output id="nNOut"></output></label><input type="range" id="nN" min="1" max="40" value="12"></div>
+      <div class="row"><button class="btn" id="nNew">New random facts</button></div>
+      <div class="stats" id="nStats" style="margin-top:10px"></div>
+    </div>
+    <div>
+      <div class="plot wide" id="nPlot"></div>
+      <div class="legend"><span><i class="sw" style="background:var(--c4)"></i>one summary vector</span><span><i class="sw" style="background:var(--c1)"></i>attention</span></div>
+      <p class="hint">Cosine similarity between what comes back and the true value of fact 1 (1 = perfect), averaged over 40 random trials, for every \(N\) from 1 to 40. The summary falls like \(1/\sqrt N\); attention stays near 1.</p>
+      <h3>Attention weights for the current facts</h3><div id="nBars"></div>
+    </div>
+  </div>
+</section>
+
+<section id="score" class="card">
+  <h2><span class="num">2</span>Query, keys and scores: drag them around</h2>
+  <p class="sub">The star is the <b>query</b> (what the model is looking for). The five dots are <b>keys</b> (labels on the stored items). Drag any of them. The diamond is the output: the weighted average of the items.</p>
+  <div class="grid2">
+    <div><div class="plot" id="sPlot"></div>
+      <p class="hint">Line thickness and ring size show each key's attention weight. Here the values are the keys themselves, so the output lands between them; in a real model the values are separate vectors.</p></div>
+    <div>
+      <div class="seg" id="sSeg"><button data-v="dot">Dot product</button><button data-v="scaled" class="on">Scaled dot</button><button data-v="cos">Cosine</button><button data-v="add">Additive</button></div>
+      <div class="mathbox c2" id="sFormula" style="margin-top:10px"></div>
+      <div class="ctl"><label for="sT"><span>Temperature \(\tau\) (divide scores before softmax)</span><output id="sTOut"></output></label><input type="range" id="sT" min="-2" max="2" step="0.05" value="0"></div>
+      <h3 style="margin-top:6px">Scores</h3><div id="sScores"></div>
+      <h3>Weights after softmax</h3><div id="sWeights"></div>
+      <div class="note" id="sNote"></div>
+    </div>
+  </div>
+</section>
+
+<section id="align" class="card">
+  <h2><span class="num">3</span>Alignment: what a translator looks at</h2>
+  <div class="grid2">
+    <div><div id="aHeat"></div>
+      <p class="hint">Illustrative weights in the style of the first attention paper (Bahdanau, Cho and Bengio, 2015, Figure 3). Rows: the French word being written. Columns: the English words it attends to. Click a row.</p></div>
+    <div class="prose">
+      <p>Each time the decoder writes a word, it attends over every encoder state. Plotting the weights gives an <b>alignment</b>: mostly a diagonal, because English and French mostly share word order, with a reversed block where they do not ("European Economic Area" becomes "zone économique européenne").</p>
+      <p>Nobody told the model which words correspond. The alignment is a side effect of minimising translation <a class="term" data-t="loss">loss</a>: attending to the right word is simply the cheapest way to predict the next one.</p>
+      <div class="ctl"><label for="aS"><span>Sharpness (raise weights to a power, renormalise)</span><output id="aSOut"></output></label><input type="range" id="aS" min="0.2" max="4" step="0.1" value="1"></div>
+      <h3>Writing "<span id="aWord"></span>": attention over the English words</h3><div id="aBars"></div>
+    </div>
+  </div>
+</section>
+
+<section id="maths" class="card hl">
+  <h2><span class="num">4</span>Queries, keys and values, step by step</h2>
+  <p class="sub">The general recipe works on whole matrices at once: 3 queries attend over 4 stored items. Keys and queries have \(d_k=3\) numbers, values have \(d_v=2\). Press "New numbers" and follow one row through.</p>
+  <div class="mathbox c1">$$\operatorname{Attention}(Q,K,V)=\operatorname{softmax}\!\Big(\frac{QK^\top}{\sqrt{d_k}}\Big)V$$</div>
+  <div class="row" style="margin:8px 0"><button class="btn" id="qNew">New numbers</button><span class="hint" style="margin:0">Click a row of the weight matrix to follow that query.</span></div>
+  <div class="grid3">
+    <div><h3>\(Q\) (3 × 3)</h3><div id="qQ"></div></div>
+    <div><h3>\(K\) (4 × 3)</h3><div id="qK"></div></div>
+    <div><h3>\(V\) (4 × 2)</h3><div id="qV"></div></div>
+  </div>
+  <div class="grid3" style="margin-top:6px">
+    <div><h3>Scores \(S=QK^\top/\sqrt{3}\) (3 × 4)</h3><div id="qS"></div></div>
+    <div><h3>Weights \(A=\operatorname{softmax}(S)\) by row</h3><div id="qA"></div></div>
+    <div><h3>Output \(O=AV\) (3 × 2)</h3><div id="qO"></div></div>
+  </div>
+  <div class="mathbox c3" id="qCalc" style="margin-top:10px;font-size:13px"></div>
+  <div class="note">Every row of \(A\) sums to 1, so each output row is a <b>convex combination</b> of the value rows: attention can only mix what is stored, never invent new values. Costs: \(n_q\times n_k\) scores, which becomes \(n^2\) when a sequence attends to itself (see <a href="../self-attention/">self-attention</a>).</div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: scaled dot-product attention</h5><ol>
+        <li><span class="kw">input</span> queries \(Q\) (\(n\times d\)), keys \(K\) (\(m\times d\)), values \(V\) (\(m\times d_v\))</li>
+        <li><span class="kw">for</span> each query \(q_i\) <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">for</span> each key \(k_j\) <span class="kw">do</span> \(s_{ij}\leftarrow q_i^\top k_j/\sqrt d\) <span class="cm">how well does item j match?</span></li>
+        <li class="i1">\(a_{ij}\leftarrow e^{s_{ij}}/\sum_{j'}e^{s_{ij'}}\) <span class="cm">softmax: positive, sums to 1</span></li>
+        <li class="i1">\(o_i\leftarrow\sum_ja_{ij}v_j\) <span class="cm">weighted average of the values</span></li>
+        <li><span class="kw">return</span> \(O\) <span class="cm">all at once: softmax(QKᵀ/√d)V</span></li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: attention as a soft dictionary lookup</summary><div>
+        <p>A Python dictionary does a hard lookup: compare the query with every key, return the value of the one exact match. Attention makes every step smooth. The comparison is a dot product (large when the vectors point the same way), the "pick one" becomes a softmax (mostly the best match, a little of the others), and the result is a blend of values. Because every step is differentiable, backprop can teach the network what to ask for (\(W_Q\)), how to advertise each item (\(W_K\)) and what to hand over (\(W_V\)).</p>
+        <p>Why \(\sqrt d\)? If the entries of \(q\) and \(k\) are independent with mean 0 and variance 1, then \(q^\top k\) is a sum of \(d\) such products and has variance \(d\). For \(d=64\) the scores have spread 8, the softmax becomes almost one-hot, and its gradients almost vanish. Dividing by \(\sqrt d\) brings the variance back to 1, whatever the dimension.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="kinds" class="card">
+  <h2><span class="num">5</span>Kinds of attention</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Name</th><th>Year</th><th>Score \(s(q,k)\)</th><th>Notes</th></tr>
+    <tr><td>Additive (Bahdanau)</td><td>2014</td><td>\(v^\top\tanh(W_1q+W_2k)\)</td><td>a small <a class="term" data-t="mlp">MLP</a>; first attention for translation, RNN encoder and decoder</td></tr>
+    <tr><td>Multiplicative (Luong)</td><td>2015</td><td>\(q^\top W k\) or \(q^\top k\)</td><td>cheaper; one matrix product for all pairs</td></tr>
+    <tr><td>Scaled dot product</td><td>2017</td><td>\(q^\top k/\sqrt{d_k}\)</td><td>the transformer's choice; scaling keeps softmax from saturating as \(d_k\) grows</td></tr>
+    <tr><td><a class="term" data-t="cross-attention">Cross-attention</a></td><td>2014 / 2017</td><td>any of the above</td><td>queries from one sequence, keys and values from another (decoder over encoder, text over image)</td></tr>
+    <tr><td><a class="term" data-t="self-attention">Self-attention</a></td><td>2017</td><td>scaled dot</td><td>queries, keys and values all from the same sequence</td></tr>
+    <tr><td><a class="term" data-t="multi-head">Multi-head</a></td><td>2017</td><td>scaled dot, several times</td><td>\(h\) heads with their own projections look for different things in parallel</td></tr>
+  </table></div>
+  <p class="hint">Next: <a href="../cross-attention/">cross-attention</a> builds a working translator-style decoder over an encoder, and <a href="../self-attention/">self-attention</a> lets every word look at every other word.</p>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> torch, torch.nn.functional <span class="k">as</span> F
+
+Q = torch.randn(<span class="s">3</span>, <span class="s">3</span>); K = torch.randn(<span class="s">4</span>, <span class="s">3</span>); V = torch.randn(<span class="s">4</span>, <span class="s">2</span>)
+A = torch.softmax(Q @ K.T / K.shape[-<span class="s">1</span>] ** <span class="s">0.5</span>, dim=-<span class="s">1</span>)   <span class="c"># 3 x 4, rows sum to 1</span>
+O = A @ V                                                    <span class="c"># 3 x 2</span>
+
+<span class="c"># the fused, memory-efficient version used inside transformers</span>
+O2 = F.scaled_dot_product_attention(Q[<span class="k">None</span>], K[<span class="k">None</span>], V[<span class="k">None</span>])[<span class="s">0</span>]
+<span class="k">assert</span> torch.allclose(O, O2, atol=<span class="s">1e-6</span>)</pre>
+</section>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette();
+
+/* ---------- 1. bottleneck ---------- */
+const D=16, BETA=8, SIG=0.3; let nSeed=1;
+const unitv=v=>{ const n=Math.hypot(...v)||1; return v.map(x=>x/n); };
+const randU=r=>unitv(Array.from({length:D},()=>r.gauss()));
+function trial(N,r){ const K=Array.from({length:N},()=>randU(r)), V=Array.from({length:N},()=>randU(r));
+  const q=K[0].map(x=>x+SIG*r.gauss()/Math.sqrt(D));
+  const mean=V[0].map((_,d)=>V.reduce((s,v)=>s+v[d],0)/N);
+  const a=NLP.softmax(K.map(k=>BETA*NLP.dot(q,k)));
+  const att=V[0].map((_,d)=>V.reduce((s,v,i)=>s+a[i]*v[d],0));
+  return {neck:NLP.cos(mean,V[0]), att:NLP.cos(att,V[0]), a}; }
+const nP=new ML.Plot('#nPlot',{equal:false}); let curve=null;
+function buildCurve(){ const r=ML.rng(100+nSeed); const A=[],B=[];
+  for(let N=1;N<=40;N++){ let s1=0,s2=0; for(let t=0;t<40;t++){ const o=trial(N,r); s1+=o.neck; s2+=o.att; } A.push([N,s1/40]); B.push([N,s2/40]); }
+  curve={A,B}; }
+function drawNeck(){ const P=P0(), N=+$('#nN').value; $('#nNOut').textContent=N;
+  ML.chart(nP,[{pts:curve.A,color:P.c4,width:2.4},{pts:curve.B,color:P.c1,width:2.4}],{y0:0,y1:1.02,x0:1,x1:40,xl:'stored facts N',vline:N});
+  const o=trial(N,ML.rng(7+nSeed*13+N));
+  $('#nStats').innerHTML=`<div class="stat c4"><b>${o.neck.toFixed(2)}</b><span>summary vector: cosine to the true answer</span></div><div class="stat c1"><b>${o.att.toFixed(2)}</b><span>attention: cosine to the true answer</span></div><div class="stat c3"><b>${(o.a[0]*100).toFixed(0)}%</b><span>weight attention puts on fact 1</span></div>`;
+  const items=o.a.map((w,i)=>({label:'fact '+(i+1),value:w,color:i?P.muted:P.c1})).sort((x,y)=>y.value-x.value).slice(0,6);
+  $('#nBars').innerHTML=NLP.bars(items,{max:1,fmt:v=>(v*100).toFixed(1)+'%'}); }
+$('#nN').addEventListener('input',drawNeck); $('#nNew').addEventListener('click',()=>{ nSeed++; buildCurve(); drawNeck(); });
+nP.onResize=drawNeck;
+
+/* ---------- 2. score explorer ---------- */
+const sP=new ML.Plot('#sPlot',{bounds:{x0:-3,x1:3,y0:-3,y1:3}});
+const KCOL=['#7c3aed','#db2777','#0891b2','#16a34a','#ca8a04'];
+let keys=[[2.2,0.6],[0.9,1.6],[-1.6,1.2],[-0.8,-1.9],[1.4,-1.5]], q=[1.3,0.7], smode='scaled', drag=-1;
+const ar=ML.rng(5), W1=NLP.randM(8,2,ar,0.9), W2=NLP.randM(8,2,ar,0.9), va=Array.from({length:8},()=>ar.gauss());
+function scoreOf(k){ if(smode==='dot') return NLP.dot(q,k); if(smode==='scaled') return NLP.dot(q,k)/Math.SQRT2; if(smode==='cos') return 3*NLP.cos(q,k);
+  const h=W1.map((r,i)=>Math.tanh(NLP.dot(r,q)+NLP.dot(W2[i],k))); return NLP.dot(va,h); }
+const FORM={dot:'s_i=q^\\top k_i', scaled:'s_i=\\dfrac{q^\\top k_i}{\\sqrt{d}}\\quad(d=2)', cos:'s_i=3\\cdot\\dfrac{q^\\top k_i}{\\lVert q\\rVert\\,\\lVert k_i\\rVert}', add:'s_i=v^\\top\\tanh(W_1q+W_2k_i)'};
+const NOTE={dot:'Plain dot product rewards length as well as direction: drag a key far from the centre and it grabs the weight even when it points a little away from the query.',
+  scaled:'The transformer\u2019s score. Dividing by \\(\\sqrt d\\) does not change which key wins, only how sharp the softmax is; it matters when \\(d\\) is 64 or 128 (try the demo on the self-attention page).',
+  cos:'Cosine ignores length completely: only the angle between query and key counts. The factor 3 plays the role of an inverse temperature.',
+  add:'Additive attention runs query and key through a tiny network (8 hidden tanh units, fixed random weights here, learned in practice). It can score pairs in ways a dot product cannot, at the cost of more compute.'};
+function drawScore(){ const P=P0(), tau=Math.pow(10,+$('#sT').value); $('#sTOut').textContent=tau.toFixed(2);
+  const s=keys.map(scoreOf), a=NLP.softmax(s,tau), out=[0,1].map(d=>keys.reduce((t,k,i)=>t+a[i]*k[d],0));
+  sP.clear(); sP.grid(1,true); const c=sP.ctx;
+  keys.forEach((k,i)=>{ sP.line(q[0],q[1],k[0],k[1],{color:KCOL[i],width:0.5+9*a[i],alpha:0.25+0.75*a[i]});
+    c.save(); c.strokeStyle=KCOL[i]; c.globalAlpha=.35; c.lineWidth=2; c.beginPath(); c.arc(sP.X(k[0]),sP.Y(k[1]),8+34*a[i],0,7); c.stroke(); c.restore();
+    c.save(); c.fillStyle=KCOL[i]; c.beginPath(); c.arc(sP.X(k[0]),sP.Y(k[1]),8,0,7); c.fill(); c.restore(); sP.text('k'+(i+1),k[0],k[1],{dx:11,dy:-8,color:KCOL[i],halo:true}); });
+  c.save(); c.fillStyle=P.ink; c.font='700 26px Inter,system-ui'; c.textAlign='center'; c.fillText('★',sP.X(q[0]),sP.Y(q[1])+9); c.restore(); sP.text('query',q[0],q[1],{dx:14,dy:14,color:P.ink,halo:true});
+  const X=sP.X(out[0]),Y=sP.Y(out[1]); c.save(); c.fillStyle=P.c3; c.strokeStyle=P.ink; c.lineWidth=1.5; c.beginPath(); c.moveTo(X,Y-9); c.lineTo(X+9,Y); c.lineTo(X,Y+9); c.lineTo(X-9,Y); c.closePath(); c.fill(); c.stroke(); c.restore(); sP.text('output',out[0],out[1],{dx:12,dy:4,color:P.c3,halo:true});
+  $('#sFormula').innerHTML=ML.tex(FORM[smode],true);
+  const mx=Math.max(1e-9,...s.map(Math.abs));
+  $('#sScores').innerHTML=NLP.bars(s.map((v,i)=>({label:'k'+(i+1),value:v,color:KCOL[i]})),{max:mx,fmt:v=>v.toFixed(2),lw:'40px'});
+  $('#sWeights').innerHTML=NLP.bars(a.map((v,i)=>({label:'k'+(i+1),value:v,color:KCOL[i]})),{max:1,fmt:v=>(v*100).toFixed(1)+'%',lw:'40px'});
+  $('#sNote').innerHTML=NOTE[smode]+' Low temperature makes softmax pick one key (nearly "hard" attention); high temperature spreads the weight evenly.'; renderNote(); }
+function renderNote(){ if(window.renderMathInElement) renderMathInElement($('#sNote'),{delimiters:[{left:'\\(',right:'\\)',display:false}]}); }
+sP.pointer({down(x,y){ const pts=[...keys,q]; drag=sP.nearest(pts,sP.X(x),sP.Y(y),24); },
+  move(x,y){ if(drag<0) return; const p=[Math.max(-3,Math.min(3,x)),Math.max(-3,Math.min(3,y))]; if(drag===keys.length) q=p; else keys[drag]=p; drawScore(); },
+  up(){ drag=-1; }});
+sP.onResize=drawScore; $('#sT').addEventListener('input',drawScore);
+ML.bindSeg('sSeg',v=>{ smode=v; ML.setSeg('sSeg',v); drawScore(); });
+
+/* ---------- 3. alignment (illustrative) ---------- */
+const EN=['the','agreement','on','the','European','Economic','Area','was','signed','in','August','1992','<end>'];
+const FR=['l\u2019','accord','sur','la','zone','\u00e9conomique','europ\u00e9enne','a','\u00e9t\u00e9','sign\u00e9','en','ao\u00fbt','1992','<end>'];
+const MAP=[[0],[1],[2],[3],[6,4],[5],[4,6],[7],[7,8],[8],[9],[10],[11],[12]];
+const BASE=FR.map((f,i)=>{ const row=EN.map(()=>0.012); const m=MAP[i]; row[m[0]]+=m.length>1?0.62:0.8; if(m[1]!==undefined) row[m[1]]+=0.22;
+  [m[0]-1,m[0]+1].forEach(j=>{ if(j>=0&&j<EN.length) row[j]+=0.05; }); const s=row.reduce((a,b)=>a+b,0); return row.map(v=>v/s); });
+let aSel=5;
+function drawAlign(){ const P=P0(), pw=+$('#aS').value; $('#aSOut').textContent='\u00d7'+pw.toFixed(1);
+  const M=BASE.map(r=>{ const e=r.map(v=>Math.pow(v,pw)), s=e.reduce((a,b)=>a+b,0); return e.map(v=>v/s); });
+  NLP.heat('#aHeat',M,FR,EN,{max:1,fmt:v=>v>0.095?Math.round(v*100):'',selRow:aSel,onRow:i=>{ aSel=i; drawAlign(); },onCell:i=>{ aSel=i; drawAlign(); },rowW:'84px'});
+  $('#aWord').textContent=FR[aSel];
+  $('#aBars').innerHTML=NLP.bars(EN.map((w,j)=>({label:w,value:M[aSel][j],color:P.c1})).sort((x,y)=>y.value-x.value).slice(0,5),{max:1,fmt:v=>(v*100).toFixed(0)+'%'}); }
+$('#aS').addEventListener('input',drawAlign);
+
+/* ---------- 4. Q K V step by step ---------- */
+let qr=ML.rng(21), Qm, Km, Vm, qRow=0;
+const r2=x=>Math.round(x*10)/10;
+function qNew(){ Qm=NLP.randM(3,3,qr,1).map(r=>r.map(r2)); Km=NLP.randM(4,3,qr,1).map(r=>r.map(r2)); Vm=NLP.randM(4,2,qr,1).map(r=>r.map(r2)); drawQ(); }
+function drawQ(){ const S=Qm.map(q=>Km.map(k=>NLP.dot(q,k)/Math.sqrt(3))), A=S.map(r=>NLP.softmax(r)), O=A.map(a=>[0,1].map(d=>a.reduce((s,w,j)=>s+w*Vm[j][d],0)));
+  const f2=v=>v.toFixed(2), qs=['q1','q2','q3'], ks=['k1','k2','k3','k4'];
+  NLP.heat('#qQ',Qm,qs,['1','2','3'],{diverging:true,fmt:f2,selRow:qRow,max:2.5});
+  NLP.heat('#qK',Km,ks,['1','2','3'],{diverging:true,fmt:f2,max:2.5});
+  NLP.heat('#qV',Vm,ks.map(k=>'v'+k.slice(1)),['1','2'],{diverging:true,fmt:f2,max:2.5});
+  NLP.heat('#qS',S,qs,ks,{diverging:true,fmt:f2,selRow:qRow,onRow:i=>{ qRow=i; drawQ(); },onCell:i=>{ qRow=i; drawQ(); }});
+  NLP.heat('#qA',A,qs,ks,{max:1,fmt:f2,selRow:qRow,onRow:i=>{ qRow=i; drawQ(); },onCell:i=>{ qRow=i; drawQ(); }});
+  NLP.heat('#qO',O,qs,['1','2'],{diverging:true,fmt:f2,selRow:qRow,max:2.5});
+  const i=qRow, q=Qm[i];
+  $('#qCalc').innerHTML=ML.tex(`\\begin{aligned}s_{${i+1}j}&=\\tfrac{1}{\\sqrt3}\\,q_${i+1}\\cdot k_j:\\quad ${S[i].map(f2).join(',\\ ')}\\\\ a_{${i+1}j}&=\\frac{e^{s_{${i+1}j}}}{\\sum_{j'}e^{s_{${i+1}j'}}}:\\quad ${A[i].map(f2).join(',\\ ')}\\quad(\\text{sum}=1)\\\\ o_${i+1}&=\\textstyle\\sum_j a_{${i+1}j}\\,v_j=[${O[i].map(f2).join(',\\ ')}]\\end{aligned}`,true); }
+$('#qNew').addEventListener('click',qNew);
+
+buildCurve(); drawNeck(); drawScore(); drawAlign(); qNew();
+})();
+</script>
+<script>NLP.nav('nlp','attention'); ML.renderMath(document.body);</script>
+</body>
+</html>

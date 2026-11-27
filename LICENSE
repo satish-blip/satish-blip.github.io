@@ -1,0 +1,27 @@
+Copyright (c) 2026 Satish Thuwal. All rights reserved.
+
+This website and everything in this repository, including its source code,
+scripts, stylesheets, page text, explanations, diagrams, animations, datasets,
+generated sample data and design, is the property of Satish Thuwal.
+
+You may view and use the website in a web browser for your own personal,
+non-commercial learning.
+
+Without prior written permission from the copyright holder you may not:
+  - copy, reproduce or republish any part of this repository or website,
+    in whole or in part, including by cloning, forking or mirroring it;
+  - modify it or create derivative works based on it;
+  - distribute, sublicense, sell or host it, or any modified version of it;
+  - use it, or any part of it, in another website, app, product, course
+    or service, whether free or paid.
+
+The fact that this repository is publicly visible does not grant any licence.
+No licence is granted by implication, estoppel or otherwise, except as stated
+above.
+
+Third-party libraries loaded from public CDNs (for example Plotly, KaTeX and
+highlight.js) remain under their own licences and are not covered by this
+notice.
+
+For permission requests, contact the copyright holder through the contact
+details on https://satish-blip.github.io/about/.

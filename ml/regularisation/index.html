@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L1 and L2 Regularisation</title>
+<meta name="description" content="Interactive L1, L2 and elastic-net regularisation: the diamond-versus-circle geometry, regularisation paths, the Bayesian prior view, soft-thresholding, and how a penalty appears in every method from linear regression to neural networks.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml-traditional">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Algorithms"></nav></div></header>
+
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Applies to every method</p>
+  <h1>L1 and L2 <span class="grad">Regularisation</span></h1>
+  <p class="lede">A flexible model can fit the training data perfectly and still predict new data badly. Regularisation adds a price for complexity, usually the size of the weights, so the model only uses a large weight when the data really demands it. The two classic prices, L1 and L2, behave very differently: one shrinks everything smoothly, the other switches features off.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#geo">1 · Diamond vs circle</a><a href="#path">2 · Regularisation paths</a><a href="#prox">3 · Shrink or switch off</a><a href="#bayes">4 · The Bayesian view</a><a href="#methods">5 · In every method</a><a href="#nn">6 · Neural networks</a><a href="#code">7 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is regularisation, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3>
+      <p>Fit a degree-8 polynomial through 25 noisy points that really come from a gentle sine wave. With 9 coefficients to play with, the curve can bend through almost every point, and it does: it wiggles wildly between them and predicts nonsense for any new \(x\). Looking at the fitted coefficients you see huge numbers with alternating signs (+3000, −8000, +7000…) that nearly cancel. Large, finely balanced weights are the fingerprint of <a class="term" data-t="overfitting">overfitting</a>.</p>
+      <p>We could use a simpler model, but often we don't know in advance how simple. Regularisation keeps the flexible model and instead discourages it from using large weights unless the data really insists.</p>
+      <h3>The idea</h3>
+      <p>Training normally minimises the <a class="term" data-t="loss">loss</a> alone. Regularisation minimises the loss <i>plus</i> a penalty on the <a class="term" data-t="parameter">weights</a>:</p>
+      <div class="mathbox c1">$$\underbrace{L(w)}_{\text{fit the data}}\;+\;\lambda\,\underbrace{R(w)}_{\text{keep it simple}}$$</div>
+      <p>The knob \(\lambda\) sets the exchange rate. At \(\lambda=0\) you get the unregularised fit, which may <a class="term" data-t="overfitting">overfit</a>. As \(\lambda\) grows the weights are pulled towards zero and the model becomes smoother, until it <a class="term" data-t="underfitting">underfits</a>. The best \(\lambda\) is found with a <a class="term" data-t="test-set">validation set</a> or <a class="term" data-t="cross-validation">cross-validation</a>.</p>
+      <h3>How it works</h3>
+      <ol class="steps2">
+        <li><a class="term" data-t="standardise">Standardise</a> the features, so one penalty is fair to all of them.</li>
+        <li>Pick a penalty: <a class="term" data-t="l2">L2</a> \(\tfrac12\sum w_j^2\) (ridge), <a class="term" data-t="l1">L1</a> \(\sum|w_j|\) (lasso), or a mix (<a class="term" data-t="elastic-net">elastic net</a>).</li>
+        <li>Minimise loss + \(\lambda\times\)penalty. Leave the <a class="term" data-t="bias-term">intercept</a> unpenalised.</li>
+        <li>Try a range of \(\lambda\) values and keep the one with the lowest validation error.</li>
+      </ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3>
+      <p>Packing for a flight with a baggage fee. L2 is a fee that grows with the <i>square</i> of each bag’s weight: you bring everything, but lighter. L1 is a flat fee per kilo: it is cheapest to leave whole items at home, so some items go to exactly zero.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Cutting <a class="term" data-t="variance">variance</a> and overfitting</li><li>L1: automatic feature selection, <a class="term" data-t="sparse">sparse</a> models</li><li>L2: stable with correlated features, keeps problems well-conditioned</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Unscaled features get penalised unfairly</li><li>Too much \(\lambda\): underfitting</li><li>L1 picks one of a group of correlated features somewhat arbitrarily</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="regularisation">Regularisation</a><a class="term" data-t="l1">L1</a><a class="term" data-t="l2">L2</a><a class="term" data-t="ridge">Ridge</a><a class="term" data-t="lasso">Lasso</a><a class="term" data-t="elastic-net">Elastic net</a><a class="term" data-t="sparse">Sparse</a><a class="term" data-t="shrinkage">Shrinkage</a><a class="term" data-t="soft-threshold">Soft-thresholding</a><a class="term" data-t="regularisation-path">Regularisation path</a><a class="term" data-t="map">MAP estimate</a><a class="term" data-t="laplace">Laplace prior</a><a class="term" data-t="weight-decay">Weight decay</a><a class="term" data-t="bias-variance">Bias–variance</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="geo" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Diamond versus circle</h2>
+    <p class="sub">Two weights \(w_1,w_2\). The ellipses are contours of the data loss, centred on the unregularised solution \(\hat w\) (<b>drag it</b>). The shaded shape is every \(w\) with the same penalty as the regularised solution \(w^\star\) (dot). The curve is the path of \(w^\star\) as \(\lambda\) goes from 0 to large.</p>
+    <div class="plot sq" id="geoP"></div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="controls">
+        <div class="ctl"><span class="lbl">Penalty</span><div class="seg" id="gPen"><button data-v="l2">L2 (ridge)</button><button data-v="l1" class="on">L1 (lasso)</button><button data-v="en">Elastic net</button></div></div>
+        <div class="ctl"><label for="gLam"><span>Penalty strength \(\lambda\)</span><output id="gLamOut"></output></label><input type="range" id="gLam" min="0" max="3" step="0.01" value="0.8"></div>
+        <div class="ctl"><label for="gRho"><span>Correlation between the two features</span><output id="gRhoOut"></output></label><input type="range" id="gRho" min="-0.9" max="0.9" step="0.05" value="0.5"></div>
+      </div>
+      <div class="stats" id="gStats" style="margin-top:12px"></div>
+    </div>
+    <div class="card prose">
+      <p><b>Why L1 gives zeros.</b> The solution is where the smallest loss ellipse touches the penalty shape. A circle is smooth, so the touching point is almost never on an axis: both weights shrink but stay non-zero. The L1 diamond has <b>corners on the axes</b>, and an ellipse coming from most directions hits a corner first, which means one weight is exactly 0.</p>
+      <p>Drag \(\hat w\) around with L1 selected and watch \(w^\star\) snap onto an axis. Switch to L2 and it slides smoothly instead. Elastic net (half L1, half L2) has rounded corners: it still produces zeros, but behaves more stably when features are correlated.</p>
+      <p><b>Why "same penalty" shapes?</b> Minimising loss \(+\lambda R(w)\) is equivalent to minimising the loss alone inside a budget \(R(w)\le t\), for some \(t\) that depends on \(\lambda\). The shaded shape is that budget. So the picture asks: what is the lowest point of the loss bowl that still fits inside the budget?</p>
+      <details class="deeper"><summary>Going deeper: the zero condition for lasso (subgradients)</summary><div>
+        <p>\(|w|\) has no derivative at 0, but it has a <i>subgradient</i>: any number in \([-1,1]\). The optimality condition for \(\tfrac12\lVert y-Xw\rVert^2+\lambda\lVert w\rVert_1\) is that zero lies in the subdifferential, coordinate by coordinate: \(x_j^\top(y-Xw)=\lambda\,\mathrm{sign}(w_j)\) if \(w_j\ne0\), and \(|x_j^\top(y-Xw)|\le\lambda\) if \(w_j=0\). In words: a weight may stay at exactly zero as long as its feature's correlation with the residual is no bigger than \(\lambda\). A whole interval of situations gives \(w_j=0\), which is why zeros are common. For ridge the condition is \(x_j^\top(y-Xw)=\lambda w_j\), which gives \(w_j=0\) only when the correlation is exactly zero: a measure-zero event.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="path" class="card">
+  <h2><span class="num">2</span>Regularisation paths on a real fit</h2>
+  <p class="sub">A degree-8 polynomial fitted to 25 noisy points from a sine wave (the classic bias–variance example). Features are standardised powers \(x, x^2, \dots, x^8\). Move \(\lambda\) and compare ridge and lasso.</p>
+  <div class="grid2">
+    <div><div class="plot wide" id="fitP"></div>
+      <div class="legend"><span><i class="sw" style="background:#7c3aed"></i>ridge (L2)</span><span><i class="sw" style="background:#db2777"></i>lasso (L1)</span><span><i class="sw" style="background:#94a3b8"></i>true function</span></div>
+      <div class="ctl" style="margin-top:10px"><label for="pLam"><span>\(\lambda\) (log scale)</span><output id="pLamOut"></output></label><input type="range" id="pLam" min="-6" max="1" step="0.05" value="-2.5"></div>
+      <div class="stats" id="pStats" style="margin-top:8px"></div>
+    </div>
+    <div>
+      <div class="seg" id="pPen"><button data-v="ridge">Ridge path</button><button data-v="lasso" class="on">Lasso path</button></div>
+      <div class="plot wide" id="pathP" style="margin-top:8px"></div>
+      <p class="hint">Each line is one coefficient \(w_1\dots w_8\) as \(\lambda\) changes (log scale, small \(\lambda\) on the left). Dashed: the current \(\lambda\). Ridge curves glide smoothly to zero; lasso curves hit zero one by one and stay there.</p>
+      <div class="plot short" id="errP"></div>
+      <div class="legend"><span><i class="sw" style="background:#0891b2"></i>training error</span><span><i class="sw" style="background:#ea580c"></i>test error</span></div>
+      <p class="hint">The classic U: too little \(\lambda\) overfits (low train, high test error), too much underfits (both high).</p>
+    </div>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <h3>Choosing \(\lambda\) honestly</h3>
+      <p>The test curve above is a luxury: in real life we do not have the true function. We must estimate the test error from the training data itself, and the standard way is \(K\)-fold cross-validation. Note that the training error is useless for choosing \(\lambda\): it always prefers \(\lambda=0\).</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: choosing λ by K-fold cross-validation</h5><ol>
+        <li><span class="kw">input</span> data, a grid \(\lambda_1&gt;\lambda_2&gt;\dots&gt;\lambda_m\) on a log scale, folds \(K\) (often 5 or 10)</li>
+        <li>split the data at random into \(K\) equal folds</li>
+        <li><span class="kw">for</span> each \(\lambda\) in the grid <span class="kw">do</span></li>
+        <li class="i1"><span class="kw">for</span> \(k=1\) <span class="kw">to</span> \(K\) <span class="kw">do</span></li>
+        <li class="i2">fit the scaler and the model on all folds except \(k\) <span class="cm">never let fold k leak into scaling</span></li>
+        <li class="i2">\(e_k\leftarrow\) error on fold \(k\)</li>
+        <li class="i1">\(\mathrm{CV}(\lambda)\leftarrow\) mean of \(e_1..e_K\); \(\mathrm{SE}(\lambda)\leftarrow\) their standard error</li>
+        <li>\(\lambda^\star\leftarrow\arg\min\mathrm{CV}(\lambda)\) <span class="cm">or the largest λ within one SE: the "1-SE rule", simpler model</span></li>
+        <li>refit on all the data with \(\lambda^\star\); <span class="kw">return</span> the model</li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: ridge as shrinkage along principal directions</summary><div>
+        <p>Ridge has a closed form, \(\hat w_\lambda=(X^\top X+\lambda I)^{-1}X^\top y\), and the <a href="../../math/svd/">SVD</a> \(X=UDV^\top\) shows what it does. The fitted values are</p>
+        $$X\hat w_\lambda=\sum_j u_j\,\frac{d_j^2}{d_j^2+\lambda}\,u_j^\top y .$$
+        <p>Without the penalty every factor is 1 (plain least squares projects \(y\) onto the column space). With it, the component of \(y\) along each principal direction is multiplied by \(d_j^2/(d_j^2+\lambda)\): directions with large variance in the data (large \(d_j\)) are barely touched; directions with little variance, where the data say almost nothing and the estimate is noisy, are shrunk hard. That is the precise sense in which ridge reduces variance. Adding \(\lambda I\) also makes \(X^\top X+\lambda I\) invertible even when features are perfectly correlated, which is why ridge is "stable with correlated features". The effective number of parameters is \(\mathrm{df}(\lambda)=\sum_jd_j^2/(d_j^2+\lambda)\), sliding from \(d\) down to 0.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="prox" class="card">
+  <h2><span class="num">3</span>Shrink or switch off: what each penalty does to one weight</h2>
+  <div class="grid2">
+    <div><div class="plot wide" id="shP"></div>
+      <div class="legend"><span><i class="sw" style="background:#7c3aed"></i>ridge \(z/(1+\lambda)\)</span><span><i class="sw" style="background:#db2777"></i>lasso \(S_\lambda(z)\)</span><span><i class="sw" style="background:#16a34a"></i>best subset (L0) hard threshold</span><span class="mono">- - no penalty</span></div>
+      <div class="ctl" style="margin-top:10px"><label for="sLam"><span>\(\lambda\)</span><output id="sLamOut"></output></label><input type="range" id="sLam" min="0" max="2" step="0.01" value="0.7"></div></div>
+    <div class="prose">
+      <p>With uncorrelated, standardised features each weight can be solved on its own. If \(z\) is the unregularised weight, the regularised one is:</p>
+      <div class="mathbox c1">$$\text{L2: } w=\frac{z}{1+\lambda}\qquad\text{L1: } w=S_\lambda(z)=\operatorname{sign}(z)\max(0,|z|-\lambda)$$</div>
+      <p><b>Ridge</b> multiplies every weight by the same factor: big and small weights all shrink, none become zero. <b>Lasso</b> subtracts a fixed amount, and anything smaller than \(\lambda\) becomes exactly zero: this is the <a class="term" data-t="soft-threshold">soft-thresholding</a> operator. The L0 penalty (count of non-zero weights) keeps or kills each weight whole, but makes the problem combinatorial.</p>
+      <p>When features are correlated there is no per-weight formula, but the same operator is applied repeatedly: <a class="term" data-t="coordinate-descent">coordinate descent</a> (scikit-learn’s Lasso) or <a class="term" data-t="proximal">proximal gradient descent</a> (used on the <a href="../logistic-regression/">logistic regression page</a> for L1):</p>
+      <div class="mathbox c3">$$w\leftarrow S_{\eta\lambda}\big(w-\eta\nabla L(w)\big)$$</div>
+      <p>Read it as two moves: take an ordinary gradient step on the data loss, then apply the penalty's own "pull towards zero" exactly. For L2 the pull would be a multiplication by \(1/(1+\eta\lambda)\), which is precisely <a class="term" data-t="weight-decay">weight decay</a>.</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: proximal gradient descent (ISTA) for any loss + L1</h5><ol>
+        <li><span class="kw">input</span> differentiable loss \(L\), penalty \(\lambda\), step \(\eta\le1/\)(Lipschitz constant of \(\nabla L\))</li>
+        <li>\(w\leftarrow0\)</li>
+        <li><span class="kw">repeat</span></li>
+        <li class="i1">\(u\leftarrow w-\eta\nabla L(w)\) <span class="cm">gradient step ignoring the penalty</span></li>
+        <li class="i1"><span class="kw">for</span> each \(j\): \(w_j\leftarrow\operatorname{sign}(u_j)\max(|u_j|-\eta\lambda,0)\) <span class="cm">soft-threshold</span></li>
+        <li><span class="kw">until</span> \(w\) stops changing</li>
+        <li><span class="kw">return</span> \(w\)</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: deriving the soft-threshold</summary><div>
+        <p>For one standardised feature the problem is \(\min_w\tfrac12(w-z)^2+\lambda|w|\). If \(w&gt;0\), the derivative is \(w-z+\lambda=0\), so \(w=z-\lambda\), which is only consistent when \(z&gt;\lambda\). If \(w&lt;0\), \(w=z+\lambda\), consistent when \(z&lt;-\lambda\). Otherwise (\(|z|\le\lambda\)) neither side works and the minimum sits at the kink, \(w=0\): the subgradient \(\lambda\cdot[-1,1]\) is wide enough to absorb \(z\). Together these three cases are \(S_\lambda(z)\). For L2, \(\min\tfrac12(w-z)^2+\tfrac\lambda2w^2\) is smooth: \(w-z+\lambda w=0\Rightarrow w=z/(1+\lambda)\).</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="bayes" class="card">
+  <h2><span class="num">4</span>The Bayesian view: a penalty is a prior</h2>
+  <div class="grid2">
+    <div class="prose">
+      <p>Suppose before seeing any data you believe weights are probably small. That belief is a <a class="term" data-t="prior">prior</a> \(p(w)\). <a class="term" data-t="bayes-rule">Bayes’ rule</a> combines it with the <a class="term" data-t="likelihood">likelihood</a>, and the most probable weights (the <a class="term" data-t="map">MAP estimate</a>) are</p>
+      <div class="mathbox c1">$$\hat w_{\text{MAP}}=\arg\max_w\ p(\text{data}\mid w)\,p(w)=\arg\min_w\ \underbrace{-\log p(\text{data}\mid w)}_{\text{loss}}\ \underbrace{-\log p(w)}_{\text{penalty}}$$</div>
+      <ul>
+        <li>Gaussian prior \(p(w_j)\propto e^{-w_j^2/2\tau^2}\) gives \(-\log p(w)=\frac1{2\tau^2}\sum w_j^2\): <b>L2</b>, with \(\lambda=\sigma^2/\tau^2\).</li>
+        <li><a class="term" data-t="laplace">Laplace</a> prior \(p(w_j)\propto e^{-|w_j|/b}\) gives \(\frac1b\sum|w_j|\): <b>L1</b>.</li>
+      </ul>
+      <p>The Laplace prior has a sharp peak at exactly zero, a strong belief that many weights are <i>exactly</i> zero, which is where sparsity comes from. A wider prior (larger \(\tau\) or \(b\)) means weaker regularisation.</p>
+      <p>This view also explains why \(\lambda\) should shrink as data grows: the prior is fixed, but the likelihood term is a sum over \(n\) examples, so with more data the evidence outweighs the prior belief. See <a href="../../math/probability/#update">Bayesian updating</a> for the same effect with a coin.</p>
+      <details class="deeper"><summary>Going deeper: deriving ridge as MAP for linear regression</summary><div>
+        <p>Model \(y_i=x_i^\top w+\varepsilon_i\) with \(\varepsilon_i\sim\mathcal N(0,\sigma^2)\), and prior \(w_j\sim\mathcal N(0,\tau^2)\) independently. Then \(-\log p(y\mid w)=\frac{1}{2\sigma^2}\lVert y-Xw\rVert^2+\)const and \(-\log p(w)=\frac{1}{2\tau^2}\lVert w\rVert^2+\)const. Multiply the sum by \(2\sigma^2\) (which does not move the minimiser): \(\lVert y-Xw\rVert^2+\frac{\sigma^2}{\tau^2}\lVert w\rVert^2\). That is ridge with \(\lambda=\sigma^2/\tau^2\): noisy data (large \(\sigma\)) or a confident prior (small \(\tau\)) mean stronger shrinkage. In this Gaussian case the whole posterior is Gaussian, \(w\mid y\sim\mathcal N\big((X^\top X+\lambda I)^{-1}X^\top y,\ \sigma^2(X^\top X+\lambda I)^{-1}\big)\), so the MAP is also the posterior mean.</p>
+      </div></details>
+    </div>
+    <div><div class="plot wide" id="prP"></div>
+      <div class="legend"><span><i class="sw" style="background:#7c3aed"></i>Gaussian prior → L2</span><span><i class="sw" style="background:#db2777"></i>Laplace prior → L1</span></div>
+      <p class="hint">Both priors have variance 1. The Laplace puts more mass right at zero and in the tails: it prefers "mostly zero, a few large" weights.</p></div>
+  </div>
+</section>
+
+<section id="methods" class="card">
+  <h2><span class="num">5</span>The same idea in every method</h2>
+  <p class="sub">Almost every model on this site has a regularisation knob, sometimes under another name. Follow the links to try it on each page.</p>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Method</th><th>What is penalised</th><th>The knob</th><th>Try it</th></tr>
+    <tr><td><b>Linear regression</b></td><td>\(\lambda\lVert w\rVert_2^2\) (ridge) or \(\lambda\lVert w\rVert_1\) (lasso)</td><td><code>Ridge(alpha)</code>, <code>Lasso(alpha)</code>, <code>ElasticNet(alpha, l1_ratio)</code></td><td><a href="../linear-regression/#shrink">penalty switch + paths</a></td></tr>
+    <tr><td><b>Logistic regression</b></td><td>\(\tfrac\lambda2\lVert w\rVert_2^2\) or \(\lambda\lVert w\rVert_1\) added to the log-loss</td><td><code>LogisticRegression(penalty="l1"|"l2", C=1/λ)</code></td><td><a href="../logistic-regression/#lab">L1 / L2 switch, count of non-zero weights</a></td></tr>
+    <tr><td><b>SVM</b></td><td>Built in: \(\tfrac12\lVert w\rVert^2\) is the L2 term; \(C\) weights the hinge loss, so \(C\approx1/\lambda\)</td><td><code>SVC(C)</code>; <code>LinearSVC(penalty="l1")</code> for sparse</td><td><a href="../svm/#cg">C × γ grid</a></td></tr>
+    <tr><td><b>LDA / QDA</b></td><td>Covariance shrinkage \((1-\alpha)\hat\Sigma+\alpha\tfrac{\operatorname{tr}\hat\Sigma}{d}I\), the covariance version of ridge</td><td><code>LinearDiscriminantAnalysis(shrinkage=α)</code>, <code>QDA(reg_param)</code></td><td><a href="../lda-gda/#lab">shrinkage slider</a></td></tr>
+    <tr><td><b>Decision trees</b></td><td>No weights; the analogue is a price per leaf, \(\alpha\times\#\text{leaves}\) (an L0-style penalty), or limits on depth and leaf size</td><td><code>ccp_alpha</code>, <code>max_depth</code>, <code>min_samples_leaf</code></td><td><a href="../decision-trees/#depth">depth vs error</a></td></tr>
+    <tr><td><b>Random forest / boosting</b></td><td>Averaging is itself variance reduction; XGBoost adds L1/L2 on leaf values; the learning rate (shrinkage) and number of rounds regularise boosting</td><td><code>reg_alpha</code>, <code>reg_lambda</code>, <code>learning_rate</code></td><td><a href="../ensembles/">bagging & boosting</a></td></tr>
+    <tr><td><b>PCA</b></td><td>Keeping fewer components is a hard form of shrinkage; sparse PCA adds L1 on the loadings</td><td><code>n_components</code>, <code>SparsePCA(alpha)</code></td><td><a href="../pca/">PCA</a></td></tr>
+    <tr><td><b>Neural networks</b></td><td>L2 (weight decay), L1, plus dropout, early stopping, data augmentation, normalisation noise</td><td><code>AdamW(weight_decay)</code>, <code>nn.Dropout(p)</code></td><td><a href="#nn">below</a> and the <a href="../../dl/nn/neural-networks/#play">network playground</a></td></tr>
+  </table></div>
+</section>
+
+<section id="nn" class="card hl">
+  <h2><span class="num">6</span>Regularising a neural network</h2>
+  <p class="sub">Three identical networks (2 → 32 → 32 → 1, tanh, Adam) trained on only 60 noisy points, differing only in the penalty strength. Test accuracy is on 400 fresh points from the same distribution.</p>
+  <div class="row" style="justify-content:space-between"><div class="row"><div class="seg" id="nPen"><button data-v="l2" class="on">L2 / weight decay</button><button data-v="l1">L1</button></div></div><div class="player"><button class="btn primary" id="nRun">Train all</button><button class="btn" id="nReset">Reset</button><span class="pos" id="nEp"></span></div></div>
+  <div class="grid3 mini" id="nGrid" style="margin-top:12px"></div>
+  <div class="note"><b>What to look for:</b> with no penalty the boundary wraps tightly around individual noisy points (train accuracy near 100%, lower test accuracy). A moderate penalty gives a smoother boundary that generalises better. Too much and the network can barely bend. In Adam, adding \(\lambda w\) to the gradient (as here) is not quite the same as weight decay, because Adam rescales it; <b>AdamW</b> applies the decay \(w\leftarrow w-\eta\lambda w\) separately, which is what most transformer training uses.</div>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">7</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.linear_model <span class="k">import</span> Ridge, Lasso, ElasticNet, LogisticRegression
+<span class="k">from</span> sklearn.pipeline <span class="k">import</span> make_pipeline
+<span class="k">from</span> sklearn.preprocessing <span class="k">import</span> StandardScaler, PolynomialFeatures
+<span class="k">from</span> sklearn.model_selection <span class="k">import</span> GridSearchCV
+
+lasso = make_pipeline(PolynomialFeatures(<span class="s">8</span>, include_bias=<span class="k">False</span>), StandardScaler(), Lasso(alpha=<span class="s">0.01</span>))
+search = GridSearchCV(lasso, {<span class="s">"lasso__alpha"</span>: np.logspace(-<span class="s">5</span>, <span class="s">1</span>, <span class="s">30</span>)}, cv=<span class="s">5</span>).fit(X, y)   <span class="c"># pick λ by cross-validation</span>
+clf = LogisticRegression(penalty=<span class="s">"l1"</span>, C=<span class="s">1.0</span>, solver=<span class="s">"saga"</span>)        <span class="c"># C = 1/λ</span>
+
+<span class="c"># PyTorch: L2 as decoupled weight decay, L1 added to the loss by hand</span>
+opt = torch.optim.AdamW(model.parameters(), lr=<span class="s">1e-3</span>, weight_decay=<span class="s">0.01</span>)
+loss = bce(model(X), y) + lam_l1 * sum(p.abs().sum() <span class="k">for</span> n, p <span class="k">in</span> model.named_parameters() <span class="k">if</span> <span class="s">"weight"</span> <span class="k">in</span> n)</pre>
+</section>
+
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything is computed in your browser in plain JavaScript.</p>
+</main>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/gloss.js"></script>
+<script src="../assets/models.js"></script>
+<script src="../../dl/assets/nn.js"></script>
+<script>
+(function(){
+const {$, fmt} = ML; const PUR='#7c3aed', PINK='#db2777', GRN='#16a34a';
+const soft=(v,t)=>Math.sign(v)*Math.max(0,Math.abs(v)-t);
+
+/* ---------- 1. geometry ---------- */
+const gp=new ML.Plot('#geoP'); let C=[2.4,0.6], pen='l1';
+function A(){ const r=+$('#gRho').value; return [[1,r],[r,1]]; }
+function R(w,k){ k=k||pen; const a=Math.abs(w[0])+Math.abs(w[1]), q=(w[0]*w[0]+w[1]*w[1])/2; return k==='l1'?a:k==='l2'?q:0.5*a+0.5*q; }
+function solve(lam,k){ k=k||pen; const M=A(); const L=1+Math.abs(M[0][1]), t=1/L; let w=C.slice();
+  if(k==='l2'){ const B=[[M[0][0]+lam,M[0][1]],[M[1][0],M[1][1]+lam]], c=[M[0][0]*C[0]+M[0][1]*C[1], M[1][0]*C[0]+M[1][1]*C[1]], d=B[0][0]*B[1][1]-B[0][1]*B[1][0]; return [(B[1][1]*c[0]-B[0][1]*c[1])/d,(B[0][0]*c[1]-B[1][0]*c[0])/d]; }
+  const a1=k==='l1'?lam:0.5*lam, a2=k==='l1'?0:0.5*lam;
+  for(let it=0;it<3000;it++){ const g=[M[0][0]*(w[0]-C[0])+M[0][1]*(w[1]-C[1]), M[1][0]*(w[0]-C[0])+M[1][1]*(w[1]-C[1])]; const nw=w.map((v,j)=>soft(v-t*g[j],t*a1)/(1+t*a2)); const d=Math.abs(nw[0]-w[0])+Math.abs(nw[1]-w[1]); w=nw; if(d<1e-12) break; }
+  return w; }
+const f=w=>{ const M=A(), a=w[0]-C[0], b=w[1]-C[1]; return 0.5*(a*(M[0][0]*a+M[0][1]*b)+b*(M[1][0]*a+M[1][1]*b)); };
+function shape(r,k){ const pts=[]; for(let i=0;i<=240;i++){ const th=i/240*2*Math.PI, u=[Math.cos(th),Math.sin(th)], a=Math.abs(u[0])+Math.abs(u[1]);
+    let t; if(k==='l1') t=r/a; else if(k==='l2') t=Math.sqrt(2*r); else { const qa=0.25, qb=0.5*a; t=(-qb+Math.sqrt(qb*qb+4*qa*r))/(2*qa); } pts.push([t*u[0],t*u[1]]); } return pts; }
+function drawGeo(){ const P=ML.palette(), c=gp.ctx, lam=+$('#gLam').value; gp.setBounds({x0:-3.2,x1:3.2,y0:-3.2,y1:3.2}); gp.clear(); gp.grid(1,true);
+  gp.line(-3.2,0,3.2,0,{color:P.muted,width:1.2}); gp.line(0,-3.2,0,3.2,{color:P.muted,width:1.2});
+  const w=solve(lam), r=R(w), col=pen==='l1'?PINK:pen==='l2'?PUR:'#ea580c';
+  if(r>1e-9){ const sh=shape(r,pen); c.save(); c.beginPath(); sh.forEach((p,i)=>{ const X=gp.X(p[0]),Y=gp.Y(p[1]); i?c.lineTo(X,Y):c.moveTo(X,Y); }); c.closePath(); c.fillStyle=col; c.globalAlpha=.18; c.fill(); c.globalAlpha=1; c.strokeStyle=col; c.lineWidth=2.4; c.stroke(); c.restore(); }
+  const f0=f(w); [0.25,0.5,1,2,4].forEach(m=>gp.contour((x,y)=>f([x,y]),f0*m+1e-6,{color:P.c3,width:1,alpha:.55,res:4})); gp.contour((x,y)=>f([x,y]),f0+1e-6,{color:P.c3,width:2.4,res:3});
+  const path=[]; for(let i=0;i<=60;i++){ path.push(solve(3*Math.pow(i/60,2))); } c.save(); c.strokeStyle=P.ink; c.globalAlpha=.6; c.setLineDash([5,4]); c.lineWidth=1.6; c.beginPath(); path.forEach((p,i)=>{ const X=gp.X(p[0]),Y=gp.Y(p[1]); i?c.lineTo(X,Y):c.moveTo(X,Y); }); c.stroke(); c.restore();
+  const dot=(p,fill,rad)=>{ c.save(); c.fillStyle=fill; c.strokeStyle=P.bg; c.lineWidth=2.5; c.beginPath(); c.arc(gp.X(p[0]),gp.Y(p[1]),rad,0,7); c.fill(); c.stroke(); c.restore(); };
+  dot(C,P.c3,8); gp.text('ŵ (no penalty)',C[0],C[1],{dx:10,dy:-8,halo:true}); dot(w,col,7); gp.text('w*',w[0],w[1],{dx:10,dy:16,halo:true,color:col});
+  const z=w.filter(v=>Math.abs(v)<1e-6).length;
+  $('#gStats').innerHTML=[['c3',`(${fmt(C[0],2)}, ${fmt(C[1],2)})`,'ŵ, unregularised'],['c1',`(${fmt(w[0],2)}, ${fmt(w[1],2)})`,'w*, regularised'],['c4',z+' of 2','weights exactly zero'],['c5',fmt(f(w),3),'extra data loss paid']].map(([c,v,l])=>`<div class="stat ${c}"><b style="font-size:16px">${v}</b><span>${l}</span></div>`).join(''); }
+let drag=false; gp.pointer({down(x,y){ drag=true; C=[x,y]; drawGeo(); }, move(x,y){ if(drag){ C=[Math.max(-3,Math.min(3,x)),Math.max(-3,Math.min(3,y))]; drawGeo(); } }, up(){ drag=false; }});
+window.addEventListener('pointerup',()=>drag=false);
+ML.bindSeg('gPen',v=>{ pen=v; ML.setSeg('gPen',v); drawGeo(); }); ML.bindRange('gLam',drawGeo,v=>v.toFixed(2)); ML.bindRange('gRho',drawGeo,v=>v.toFixed(2)); gp.onResize=drawGeo;
+
+/* ---------- 2. paths ---------- */
+const fitP=new ML.Plot('#fitP',{equal:false}), pathP=new ML.Plot('#pathP',{equal:false}), errP=new ML.Plot('#errP',{equal:false});
+const TR=ML.regDataset('sine',25,0.45,4), TE=ML.regDataset('sine',300,0.45,91), DEG=8; let ppen='lasso';
+const COLS=['#7c3aed','#db2777','#0891b2','#ea580c','#16a34a','#ca8a04','#2563eb','#64748b'];
+const grid=[]; for(let l=-6;l<=1.0001;l+=0.1) grid.push(+l.toFixed(2));
+const mse=(m,D)=>D.x.reduce((s,x,i)=>s+(m.f(x)-D.y[i])**2,0)/D.x.length;
+const cache={ridge:grid.map(l=>ML.models.polyReg(TR.x,TR.y,{degree:DEG,penalty:'ridge',lambda:Math.pow(10,l)})),lasso:grid.map(l=>ML.models.polyReg(TR.x,TR.y,{degree:DEG,penalty:'lasso',lambda:Math.pow(10,l)}))};
+const errs={}; ['ridge','lasso'].forEach(k=>errs[k]={tr:cache[k].map((m,i)=>[grid[i],mse(m,TR)]),te:cache[k].map((m,i)=>[grid[i],mse(m,TE)])});
+function drawPath(){ const P=ML.palette(), l=+$('#pLam').value, lam=Math.pow(10,l), mr=ML.models.polyReg(TR.x,TR.y,{degree:DEG,penalty:'ridge',lambda:lam}), ml=ML.models.polyReg(TR.x,TR.y,{degree:DEG,penalty:'lasso',lambda:lam});
+  const xs=[]; for(let x=-3;x<=3.001;x+=0.04) xs.push(x);
+  ML.chart(fitP,[{pts:xs.map(x=>[x,TR.f(x)]),color:'#94a3b8',width:2,dash:[5,4]},{pts:TR.x.map((x,i)=>[x,TR.y[i]]),color:P.ink,dots:true,r:3.5,noline:true},{pts:xs.map(x=>[x,mr.f(x)]),color:PUR,width:2.6},{pts:xs.map(x=>[x,ml.f(x)]),color:PINK,width:2.6}],{x0:-3,x1:3,y0:-3.2,y1:3.2,xl:'x'});
+  const ms=cache[ppen]; ML.chart(pathP,Array.from({length:DEG},(_,j)=>({pts:ms.map((m,i)=>[grid[i],m.w[j]]),color:COLS[j],width:2.2})),{vline:l,xl:'log₁₀ λ'});
+  const E=errs[ppen]; ML.chart(errP,[{pts:E.tr,color:'#0891b2',width:2.4},{pts:E.te,color:'#ea580c',width:2.4}],{vline:l,y0:0,y1:Math.min(2.5,Math.max(...E.te.map(p=>p[1]))*1.05),xl:'log₁₀ λ'});
+  const nz=m=>m.w.filter(v=>Math.abs(v)>1e-9).length, best=E.te.reduce((a,b)=>b[1]<a[1]?b:a);
+  $('#pStats').innerHTML=[['c1',fmt(mse(mr,TE),3),'ridge test error'],['c2',fmt(mse(ml,TE),3),'lasso test error'],['c1',nz(mr)+' / '+DEG,'ridge non-zero weights'],['c2',nz(ml)+' / '+DEG,'lasso non-zero weights'],['c5','1e'+best[0].toFixed(1),'best λ for '+ppen+' (test)']].map(([c,v,lb])=>`<div class="stat ${c}"><b>${v}</b><span>${lb}</span></div>`).join(''); }
+ML.bindRange('pLam',drawPath,v=>Math.pow(10,v).toExponential(1)); ML.bindSeg('pPen',v=>{ ppen=v; ML.setSeg('pPen',v); drawPath(); });
+fitP.onResize=drawPath; pathP.onResize=drawPath; errP.onResize=drawPath;
+
+/* ---------- 3. shrinkage ---------- */
+const shP=new ML.Plot('#shP',{equal:false});
+function drawSh(){ const P=ML.palette(), l=+$('#sLam').value, xs=[]; for(let z=-3;z<=3.0001;z+=0.01) xs.push(+z.toFixed(2)); const th=Math.sqrt(2*l);
+  ML.chart(shP,[{pts:xs.map(z=>[z,z]),color:P.muted,width:1.4,dash:[5,4]},{pts:xs.map(z=>[z,Math.abs(z)>th?z:0]),color:GRN,width:2.2},{pts:xs.map(z=>[z,z/(1+l)]),color:PUR,width:2.6},{pts:xs.map(z=>[z,soft(z,l)]),color:PINK,width:2.6}],{x0:-3,x1:3,y0:-3,y1:3,xl:'z = weight without penalty'}); }
+ML.bindRange('sLam',drawSh,v=>v.toFixed(2)); shP.onResize=drawSh;
+
+/* ---------- 4. priors ---------- */
+const prP=new ML.Plot('#prP',{equal:false});
+function drawPr(){ const xs=[]; for(let x=-4;x<=4.001;x+=0.02) xs.push(x); const b=1/Math.SQRT2;
+  ML.chart(prP,[{pts:xs.map(x=>[x,Math.exp(-x*x/2)/Math.sqrt(2*Math.PI)]),color:PUR,width:2.6},{pts:xs.map(x=>[x,Math.exp(-Math.abs(x)/b)/(2*b)]),color:PINK,width:2.6}],{y0:0,xl:'w'}); }
+prP.onResize=drawPr;
+
+/* ---------- 6. neural nets ---------- */
+const NNS={pen:'l2',nets:[],plots:[],timer:null,ep:0}; const LAMS={l2:[0,3e-3,3e-2],l1:[0,3e-4,3e-3]};
+const tr=ML.dataset('moons',60,0.35,5), te=ML.dataset('moons',400,0.35,77);
+$('#nGrid').innerHTML=[0,1,2].map(i=>`<div><div class="plot sq"></div><div class="hint" style="text-align:center" data-i="${i}"></div></div>`).join('');
+NNS.plots=[...$('#nGrid').querySelectorAll('.plot')].map(h=>new ML.Plot(h));
+function nBuild(){ nStop(); NNS.ep=0; NNS.nets=[0,1,2].map(()=>NN.MLP([2,32,32,1],{act:'tanh',seed:3})); nDraw(); }
+function nDraw(){ NNS.nets.forEach((n,i)=>{ const p=NNS.plots[i]; p.clear(); p.regions((x,y)=>n.predict([x,y]),5); p.contour((x,y)=>n.predict([x,y])-0.5,0,{width:2}); p.points(tr.X,tr.y,{r:3.4});
+    const acc=D=>ML.accuracy({proba:x=>n.predict(x)},D.X,D.y), lam=LAMS[NNS.pen][i];
+    $('#nGrid').querySelector(`[data-i="${i}"]`).innerHTML=`<b style="color:var(--ink)">${NNS.pen==='l2'?'L2':'L1'} λ = ${lam}</b> · train ${ML.pct(acc(tr))} · <b>test ${ML.pct(acc(te))}</b>`; }); $('#nEp').textContent='epoch '+NNS.ep; }
+function nStop(){ if(NNS.timer){ clearInterval(NNS.timer); NNS.timer=null; $('#nRun').textContent='Train all'; } }
+$('#nRun').onclick=()=>{ if(NNS.timer){ nStop(); return; } $('#nRun').textContent='Pause'; NNS.timer=setInterval(()=>{ NNS.nets.forEach((n,i)=>{ const lam=LAMS[NNS.pen][i]; n.train(tr.X,tr.y,Object.assign({name:'adam',lr:0.01},NNS.pen==='l2'?{wd:lam}:{l1:lam}),5); }); NNS.ep+=5; nDraw(); if(NNS.ep>=1500) nStop(); },40); };
+$('#nReset').onclick=nBuild; ML.bindSeg('nPen',v=>{ NNS.pen=v; ML.setSeg('nPen',v); nBuild(); }); NNS.plots.forEach(p=>p.onResize=nDraw);
+
+ML.onTheme(()=>{ drawGeo(); drawPath(); drawSh(); drawPr(); nDraw(); });
+drawGeo(); drawPath(); drawSh(); drawPr(); nBuild();
+})();
+ML.nav('regularisation'); ML.renderMath(document.body);
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+---
+layout: page
+---
+<article class="post wrap">
+  <header class="post-head">
+    <a class="back" href="{{ '/blog/' | relative_url }}">&larr; All writing</a>
+    <h1>{{ page.title }}</h1>
+    <p class="post-meta">
+      <time datetime="{{ page.date | date_to_xmlschema }}">{{ page.date | date: '%-d %B %Y' }}</time>
+      {% assign words = content | number_of_words %} &middot; {{ words | divided_by: 200 | plus: 1 }} min read
+      {% if page.tags.size > 0 %} &middot; {{ page.tags | join: ' · ' }}{% endif %}
+    </p>
+  </header>
+  <div class="prose">
+{{ content }}
+  </div>
+  <footer class="post-foot">
+    <p>Thoughts or questions? Reach me on <a href="https://www.linkedin.com/in/satish-t-779729108/">LinkedIn</a> or by <a href="mailto:satishjnv2014@gmail.com">email</a>.</p>
+    <a class="back" href="{{ '/blog/' | relative_url }}">&larr; All writing</a>
+  </footer>
+</article>

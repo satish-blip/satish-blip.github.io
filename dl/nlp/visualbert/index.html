@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VisualBERT</title>
+<meta name="description" content="VisualBERT reads a caption and the object regions of an image as one sequence, so BERT's self-attention can link words to things in the picture. Interactive input builder, cross-modal attention map, masked-word and caption-matching pre-training, and how it compares with ViLBERT, CLIP and LLaVA.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP &middot; Multimodal (part 2 of 5)</p>
+  <h1>VisualBERT: <span class="grad">one transformer for words and pictures</span></h1>
+  <p class="lede">In <a href="../visual-tokenisation/">part 1</a> an image became a list of visual tokens. VisualBERT's idea is almost cheeky in its simplicity: put those visual tokens right after the words of a caption, and feed the whole thing to an ordinary BERT. Self-attention, which already links words to words, now links words to parts of the picture too. This page builds the input, shows the attention, and walks through how it is trained.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#input">1 · One sequence</a><a href="#attn">2 · Attention across modalities</a><a href="#pre">3 · Pre-training</a><a href="#tasks">4 · Fine-tuning tasks</a><a href="#family">5 · The family</a><a href="#py">6 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What is VisualBERT, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>"What is the dog playing with?" To answer, a model must find the word "dog" in the question, find the dog in the picture, look next to it, and name what it sees. A text model has no picture; an image classifier has no question. Training a separate model for every such task, from scratch, needs huge labelled datasets. We want one pre-trained model that already knows how words and image regions relate, and that can be adapted to many vision-and-language tasks with a small amount of extra training, the way BERT is for text.</p>
+      <h3>The idea</h3><p><a class="term" data-t="visualbert">VisualBERT</a> (Li et al., 2019) is a <a class="term" data-t="single-stream">single-stream</a> <a class="term" data-t="multimodal">multimodal</a> transformer. The input is the caption's word tokens followed by the image's <a class="term" data-t="region-features">region features</a>, each tagged with a <a class="term" data-t="segment-embedding">segment embedding</a> that says "text" or "image". One BERT processes them together, so every word can attend to every region. It is pre-trained on image captions with two jobs: fill in masked words using the picture, and decide whether a caption matches the picture.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Detect objects in the image; each box becomes a visual token.</li><li>Tokenise the caption as in BERT and add [CLS] and [SEP].</li><li>Add segment (and position) embeddings, concatenate, and run BERT.</li><li>Pre-train on captions, then fine-tune on a task such as <a class="term" data-t="vqa">VQA</a>.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A tour guide holding a photo and its caption side by side. As they read "the red ball", their eyes jump to the ball in the photo. Nobody told them which word goes with which part of the picture; they work it out from many captioned photos.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Very simple: reuses BERT unchanged</li><li>Words and regions interact in every layer</li><li>Learns <a class="term" data-t="grounding">grounding</a> without box-level labels</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Depends on a frozen object detector</li><li>Cannot generate text or images</li><li>Attention over words + regions costs \((n+m)^2\)</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="multimodal">Multimodal</a><a class="term" data-t="visualbert">VisualBERT</a><a class="term" data-t="region-features">Region features</a><a class="term" data-t="segment-embedding">Segment embedding</a><a class="term" data-t="single-stream">Single-stream</a><a class="term" data-t="mlm">Masked language modelling</a><a class="term" data-t="grounding">Grounding</a><a class="term" data-t="vqa">VQA</a><a class="term" data-t="clip">CLIP</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
+    </div>
+  </div>
+</section>
+
+<section id="input" class="card hl">
+  <h2><span class="num">1</span>One sequence for words and regions</h2>
+  <p class="sub">BERT's input embedding for each word is the sum of three vectors: the token's own embedding, a segment embedding, and a position embedding. VisualBERT gives each image region the same three-part treatment, so regions can sit in the same sequence as words. Pick a scene to see its input.</p>
+  <div class="grid2">
+    <div>
+      <div class="plot sq" id="iImg" style="max-width:380px"></div>
+      <div class="row" style="margin-top:8px"><div class="seg" id="iScene"><button data-v="park" class="on">Park</button><button data-v="kitchen">Kitchen</button><button data-v="street">Street</button></div></div>
+    </div>
+    <div class="prose">
+      <p><b>Text tokens</b> are exactly as in BERT: \(e_i=E_{\text{tok}}[w_i]+E_{\text{seg}}[A]+E_{\text{pos}}[i]\).</p>
+      <p><b>Visual tokens</b> are built from the detector's feature \(f_j\) (2,048 numbers for box \(j\)):</p>
+      <div class="mathbox c1">$$v_j=W_vf_j+E_{\text{seg}}[B]+E_{\text{pos}}[\text{aligned}(j)]$$</div>
+      <p>\(W_v\) is a learned matrix that maps the 2,048 detector numbers to BERT's width (768). The segment vector \(E_{\text{seg}}[B]\) marks "this is image". The position term is used only when a dataset says which words describe which box (Flickr30K Entities does); the region then gets the position embedding of its words, and otherwise none.</p>
+      <p>The input is then simply \(\big[\,[\text{CLS}],e_1,\dots,e_n,[\text{SEP}],v_1,\dots,v_m\,\big]\).</p>
+    </div>
+  </div>
+  <div class="tblwrap" style="margin-top:10px"><table class="tbl txt" id="iTbl"></table></div>
+  <p class="hint">Purple: segment A (text). Orange: segment B (image). "pos of …" marks a region whose box is aligned with a word in the caption.</p>
+</section>
+
+<section id="attn" class="card">
+  <h2><span class="num">2</span>Attention across modalities</h2>
+  <p class="sub">Because words and regions share one sequence, the attention matrix has four blocks: word to word (ordinary BERT), word to region, region to word, and region to region. Tap a word or region (a row label) to see where it looks, and its weights painted on the picture.</p>
+  <div class="grid2">
+    <div>
+      <div id="aHeat" style="overflow-x:auto"></div>
+      <div class="row" style="margin-top:8px"><div class="seg" id="aScene"><button data-v="park" class="on">Park</button><button data-v="kitchen">Kitchen</button><button data-v="street">Street</button></div></div>
+    </div>
+    <div>
+      <div class="plot sq" id="aImg" style="max-width:360px"></div>
+      <div class="note" id="aNote" style="margin-top:8px"></div>
+    </div>
+  </div>
+  <div class="prose" style="margin-top:8px">
+    <p>The weights here are set by hand from simple rules (a word attends to regions it names, function words attend to [CLS] and [SEP], neighbours attend to each other) so you can see the pattern a trained head converges to. The VisualBERT paper found that some heads in the trained model do exactly this: without ever being told which box goes with which word, they put most of their weight on the right box, and the accuracy of this implicit <a class="term" data-t="grounding">grounding</a> improves in later layers.</p>
+  </div>
+</section>
+
+<section id="pre" class="card hl">
+  <h2><span class="num">3</span>Pre-training: learning from captioned images</h2>
+  <p class="sub">VisualBERT is pre-trained on COCO, about 100,000 images with five captions each, using two self-supervised jobs. No answers, boxes-to-words links or any other labels are needed: just images and their captions.</p>
+  <div class="grid2">
+    <div>
+      <h3 style="margin-top:0">Job 1: masked words, with the image</h3>
+      <p class="hint" style="margin-top:0">Tap a word in the caption to mask it. The model predicts it from the other words and the image regions (the regions are never masked). The scene is the one picked on the right.</p>
+      <div id="mCap" style="margin:6px 0"></div>
+      <div class="grid2" style="gap:12px"><div><b style="font-size:13px">text only</b><div id="mText"></div></div><div><b style="font-size:13px">text + image</b><div id="mImg"></div></div></div>
+      <div class="note" id="mNote" style="margin-top:8px"></div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Job 2: does the caption match the image?</h3>
+      <div class="plot sq" id="sImg" style="max-width:300px"></div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px"><div class="seg" id="sScene"><button data-v="park" class="on">Park</button><button data-v="kitchen">Kitchen</button><button data-v="street">Street</button></div><div class="seg" id="sCap"><button data-v="true" class="on">Its own caption</button><button data-v="false">Another caption</button></div></div>
+      <div id="sOut" style="margin-top:8px"></div>
+    </div>
+  </div>
+  <div class="prose" style="margin-top:8px">
+    <p><b>Job 1</b> is BERT's <a class="term" data-t="mlm">masked language modelling</a> with one change: the image is visible. In "a dog plays with a red [MASK]", text alone suggests ball, car, apple; the image settles it. This pushes the model to use the regions. <b>Job 2</b> (sentence–image prediction) takes the output above [CLS] and predicts whether the caption describes this image; half the time it is swapped for a caption of a different image. Prediction scores in this demo come from a toy scoring rule, not from a trained network.</p>
+  </div>
+  <div class="grid2 prose" style="margin-top:14px">
+    <div>
+      <div class="algo"><h5 class="algo-h">Algorithm: VisualBERT pre-training step</h5><ol>
+        <li><span class="kw">input</span> image regions \(f_1..f_m\) (from the detector), a caption \(w_1..w_n\) that is the true one with probability \(\tfrac12\)</li>
+        <li>text tokens: \(e_i\leftarrow E_{\text{tok}}[w_i]+E_{\text{seg}}[A]+E_{\text{pos}}[i]\)</li>
+        <li>visual tokens: \(v_j\leftarrow W_vf_j+E_{\text{seg}}[B]\) <span class="cm">+ aligned position, if known</span></li>
+        <li>replace 15% of the words by [MASK] <span class="cm">regions are never masked</span></li>
+        <li>\(H\leftarrow\operatorname{BERT}([\text{CLS}],e_{1..n},[\text{SEP}],v_{1..m})\) <span class="cm">every token attends to every token</span></li>
+        <li>\(\mathcal L_{\text{MLM}}\leftarrow-\sum_{\text{masked }i}\log p(w_i\mid H_i)\) <span class="cm">the image can help</span></li>
+        <li>\(\mathcal L_{\text{SIP}}\leftarrow\) cross-entropy of \(\sigma(u^\top H_{\text{CLS}})\) against "caption is true"</li>
+        <li>update all weights to reduce \(\mathcal L_{\text{MLM}}+\mathcal L_{\text{SIP}}\)</li>
+      </ol></div>
+    </div>
+    <div>
+      <details class="deeper" open><summary>Going deeper: the three training stages, and the exact objectives</summary><div>
+        <p>VisualBERT is trained in three stages. <b>(1) Task-agnostic pre-training</b> on COCO captions with the two jobs above, starting from the text-only BERT weights (which matters: the paper reports a clear drop without them). <b>(2) Task-specific pre-training</b>: the same masked-word job on the target task's own images and text (for example VQA questions), to adapt to that domain. <b>(3) Fine-tuning</b> with a task head and the task's labels.</p>
+        <p>The masked-word loss is the usual cross-entropy over the vocabulary, but conditioned on the regions: \(-\log p(w_i\mid w_{\setminus i},f_{1..m})\). In the paper's sentence–image prediction the text segment holds two captions, one of which describes the image while the other does so only half the time, and the [CLS] output classifies which case it is; the single-caption version above is the same idea in its simplest form. Later models (UNITER, LXMERT) added a third job, <i>masked region modelling</i>: hide some regions and predict their detector class or feature from the words, so learning flows in both directions.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="tasks" class="card">
+  <h2><span class="num">4</span>Fine-tuning: one model, many tasks</h2>
+  <p class="sub">After pre-training, each task only changes what goes in the text segment and adds a small output head. The image side always stays the same: region tokens with segment B.</p>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Task</th><th>Text segment</th><th>Head on top</th><th>What it tests</th></tr>
+    <tr><td><a class="term" data-t="vqa">VQA</a> 2.0</td><td>the question</td><td>classifier over ~3,000 frequent answers, on [CLS]</td><td>"What colour is the bus?" → yellow</td></tr>
+    <tr><td>VCR (visual commonsense)</td><td>question + one candidate answer (repeated for each of 4)</td><td>score per candidate, softmax over the 4</td><td>why a person is doing something, not just what</td></tr>
+    <tr><td>NLVR²</td><td>a statement about a <i>pair</i> of images</td><td>true / false on [CLS]</td><td>"The left image has more dogs than the right"</td></tr>
+    <tr><td>Flickr30K Entities (grounding)</td><td>a caption with marked phrases</td><td>for each phrase, a score for every region</td><td>which box is "the man in a red hat"</td></tr>
+  </table></div>
+  <p class="hint">VisualBERT matched or beat the more complex models of its time on all four, which is why the paper's subtitle calls it "a simple and performant baseline".</p>
+</section>
+
+<section id="family" class="card">
+  <h2><span class="num">5</span>The family: how other models mix vision and language</h2>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Design</th><th>Examples</th><th>How the modalities meet</th><th>Visual tokens</th></tr>
+    <tr><td><b>Single-stream</b></td><td>VisualBERT, UNITER, VL-BERT</td><td>one transformer over [words; regions]</td><td>detector regions</td></tr>
+    <tr><td><b>Two-stream</b></td><td><a href="../vilbert/">ViLBERT</a>, LXMERT</td><td>a text transformer and an image transformer, linked by co-attention layers (text queries image, image queries text)</td><td>detector regions</td></tr>
+    <tr><td><b>Dual encoder, contrastive</b></td><td><a class="term" data-t="clip">CLIP</a> (<a href="../clip/">part 4</a>), ALIGN</td><td>never inside a model: two encoders produce one vector each, compared by cosine similarity</td><td>ViT patches</td></tr>
+    <tr><td><b>Visual tokens into an LLM</b></td><td>LLaVA, Flamingo, BLIP-2</td><td>image features projected into the language model's input (LLaVA) or read through cross-attention (Flamingo)</td><td>ViT patches (often from CLIP)</td></tr>
+  </table></div>
+  <div class="grid2 prose" style="margin-top:12px">
+    <div>
+      <p><b>Fusion versus matching.</b> VisualBERT is a <i>fusion</i> model: words and regions interact in every layer, which is good for reasoning ("what is left of the dog?") but means every image–text pair must go through the whole network together. CLIP is a <i>matching</i> model: each side is encoded once on its own, so you can embed a million images ahead of time and search them with a text query in milliseconds, but the two sides never look at each other's details.</p>
+      <p>Modern assistants combine both lessons: a CLIP-style ViT turns the image into patch tokens, and a large language model reads them as if they were extra words, which is VisualBERT's single-stream idea at a much larger scale.</p>
+      <p class="hint">Next: <a href="../vilbert/">part 3, ViLBERT</a>, keeps the two modalities in separate streams and joins them with co-attention layers.</p>
+    </div>
+    <div>
+      <details class="deeper"><summary>Going deeper: CLIP's contrastive loss in one line</summary><div>
+        <p>Take a batch of \(B\) image–caption pairs. Encode them to unit vectors \(u_i\) (image) and \(t_i\) (text), and form the \(B\times B\) matrix of similarities \(s_{ij}=u_i^\top t_j/\tau\) with a learned temperature \(\tau\). The diagonal holds the true pairs. The loss is a cross-entropy in both directions:</p>
+        <div class="mathbox c3">$$\mathcal L=-\frac1{2B}\sum_i\Big[\log\frac{e^{s_{ii}}}{\sum_je^{s_{ij}}}+\log\frac{e^{s_{ii}}}{\sum_je^{s_{ji}}}\Big]$$</div>
+        <p>Every other caption in the batch is a negative example, so large batches (32,768 in CLIP) make the task harder and the embedding sharper. The result is a <i>multimodal embedding space</i> where "a photo of a dog" lands next to photos of dogs, which is what makes zero-shot classification and text-to-image search possible.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">6</span>The same thing in Python</h2>
+<pre class="code"><span class="k">import</span> torch
+<span class="k">from</span> transformers <span class="k">import</span> BertTokenizer, VisualBertForQuestionAnswering
+tok   = BertTokenizer.from_pretrained(<span class="s">"bert-base-uncased"</span>)
+model = VisualBertForQuestionAnswering.from_pretrained(<span class="s">"uclanlp/visualbert-vqa"</span>)
+
+inputs = tok(<span class="s">"What is the dog playing with?"</span>, return_tensors=<span class="s">"pt"</span>)   <span class="c"># segment A: the question</span>
+regions = torch.randn(<span class="s">1</span>, <span class="s">36</span>, <span class="s">2048</span>)    <span class="c"># 36 boxes x 2048 numbers: in practice from a Faster R-CNN</span>
+inputs.update({
+    <span class="s">"visual_embeds"</span>: regions,
+    <span class="s">"visual_token_type_ids"</span>: torch.ones(<span class="s">1</span>, <span class="s">36</span>, dtype=torch.long),   <span class="c"># segment B</span>
+    <span class="s">"visual_attention_mask"</span>: torch.ones(<span class="s">1</span>, <span class="s">36</span>),
+})
+out = model(**inputs)
+answer_id = out.logits.argmax(-<span class="s">1</span>)     <span class="c"># one of the frequent VQA answers</span>
+
+<span class="c"># the contrastive alternative: CLIP embeds image and text separately</span>
+<span class="k">from</span> transformers <span class="k">import</span> CLIPModel, CLIPProcessor
+clip = CLIPModel.from_pretrained(<span class="s">"openai/clip-vit-base-patch32"</span>)
+proc = CLIPProcessor.from_pretrained(<span class="s">"openai/clip-vit-base-patch32"</span>)
+<span class="c"># x = proc(text=["a dog", "a cat"], images=pil_image, return_tensors="pt", padding=True)</span>
+<span class="c"># clip(**x).logits_per_image.softmax(-1)  -> which caption fits the image</span></pre>
+</section>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/vis.js"></script>
+<script>
+(function(){
+const {$} = ML; const P0=()=>ML.palette(); const N=192;
+const FUNC=new Set(['a','the','with','under','on','next','to','behind','waits','sits','plays']);
+const COLS=()=>{ const P=P0(); return [P.c1,P.c4,P.c3,P.c5,P.c2]; };
+function cv(host){ host=typeof host==='string'?$(host):host; let c=host.querySelector('canvas'); if(!c){ c=document.createElement('canvas'); c.style.width='100%'; c.style.height='100%'; c.style.display='block'; host.appendChild(c); }
+  const r=host.getBoundingClientRect(), dpr=Math.min(2,window.devicePixelRatio||1); const w=Math.max(10,r.width), h=Math.max(10,r.height); c.width=Math.round(w*dpr); c.height=Math.round(h*dpr); const x=c.getContext('2d'); x.setTransform(dpr,0,0,dpr,0,0); return {c,x,w,h}; }
+function scene(host,key,o={}){ const {x,w,h}=cv(host), s=Math.min(w,h), S=VIS.SCENES[key], C=COLS(); x.clearRect(0,0,w,h); x.drawImage(VIS.canvas(key,N),0,0,s,s);
+  if(o.weights){ x.fillStyle='rgba(0,0,0,.45)'; x.fillRect(0,0,s,s); S.objects.forEach((ob,j)=>{ const a=o.weights[j]; if(a<.02) return; x.save(); x.globalAlpha=Math.min(1,a*1.6+.15); x.drawImage(VIS.canvas(key,N),ob.box[0]*N,ob.box[1]*N,ob.box[2]*N,ob.box[3]*N,ob.box[0]*s,ob.box[1]*s,ob.box[2]*s,ob.box[3]*s); x.restore(); }); }
+  if(o.boxes!==false) S.objects.forEach((ob,j)=>{ const col=C[j%5], b=ob.box; x.strokeStyle=col; x.lineWidth=o.weights?1+o.weights[j]*6:2.2; x.strokeRect(b[0]*s,b[1]*s,b[2]*s,b[3]*s); x.font='600 12px Inter,system-ui'; const t='r'+(j+1)+' '+ob.label+(o.weights?' '+Math.round(o.weights[j]*100)+'%':''), tw=x.measureText(t).width+8, ty=Math.max(0,b[1]*s-16); x.fillStyle=col; x.fillRect(b[0]*s,ty,tw,16); x.fillStyle='#fff'; x.fillText(t,b[0]*s+4,ty+12); }); }
+const words=k=>VIS.SCENES[k].caption.split(' ');
+const names=(k,o)=>o.tags.concat([o.label]);
+/* ---------- 1. input builder ---------- */
+let iS='park';
+function drawInput(){ scene('#iImg',iS); const S=VIS.SCENES[iS], W=words(iS), C=COLS();
+  const cols=[['[CLS]','A','0','t'],...W.map((w,i)=>[w,'A',String(i+1),'t']),['[SEP]','A',String(W.length+1),'t'],...S.objects.map((o,j)=>{ const k=W.indexOf(o.label); return ['r'+(j+1)+' '+o.label,'B',k>=0?'pos of “'+o.label+'”':'–','v',j]; })];
+  const cell=(c,txt)=>`<td style="background:${c};text-align:center;white-space:nowrap">${txt}</td>`, P=P0();
+  const seg=s=>s==='A'?'color-mix(in srgb,var(--c1) 20%,transparent)':'color-mix(in srgb,var(--c4) 22%,transparent)';
+  $('#iTbl').innerHTML=`<tr><th>input token</th>${cols.map(c=>cell(seg(c[1]),c[3]==='v'?`<b style="color:${C[c[4]%5]}">${NLP.esc(c[0])}</b>`:`<b>${NLP.esc(c[0])}</b>`)).join('')}</tr>`
+   +`<tr><th>content vector</th>${cols.map(c=>cell('transparent',c[3]==='v'?'W<sub>v</sub>f':'E<sub>tok</sub>')).join('')}</tr>`
+   +`<tr><th>+ segment</th>${cols.map(c=>cell(seg(c[1]),c[1]==='A'?'A (text)':'B (image)')).join('')}</tr>`
+   +`<tr><th>+ position</th>${cols.map(c=>cell('transparent',NLP.esc(c[2]))).join('')}</tr>`; }
+ML.bindSeg('iScene',v=>{ iS=v; drawInput(); });
+/* ---------- 2. attention ---------- */
+let aS='park', aSel=null;
+function attn(k){ const W=words(k), S=VIS.SCENES[k], toks=['[CLS]',...W,'[SEP]',...S.objects.map((o,j)=>'r'+(j+1)+' '+o.label)], n=W.length, m=S.objects.length, T=toks.length;
+  const isW=i=>i>=1&&i<=n, isR=i=>i>=n+2, wd=i=>W[i-1], ob=i=>S.objects[i-n-2];
+  const M=[]; for(let i=0;i<T;i++){ const sc=[]; for(let j=0;j<T;j++){ let s=0;
+      if(i===j) s+=1.6;
+      if(i===0) s+=1;                                     /* [CLS] looks everywhere */
+      if(isW(i)&&isW(j)&&Math.abs(i-j)===1) s+=1.2;
+      if(isW(i)&&FUNC.has(wd(i))&&(j===0||j===n+1)) s+=2.2;
+      if(isW(i)&&isR(j)&&names(k,ob(j)).includes(wd(i))) s+=3.6;
+      if(isR(i)&&isW(j)&&names(k,ob(i)).includes(wd(j))) s+=3.2;
+      if(isW(i)&&!FUNC.has(wd(i))&&isW(j)&&i+1===j&&['red','blue','yellow'].includes(wd(i))) s+=1.5;
+      if(isR(i)&&isR(j)&&i!==j) s+=.4;
+      if(i===n+1&&isR(j)) s+=1.2;
+      sc.push(s); } M.push(NLP.softmax(sc)); }
+  return {toks,M,n,m}; }
+function drawAttn(){ const A=attn(aS); if(aSel==null||aSel>=A.toks.length) aSel=A.toks.indexOf(words(aS).find(w=>!FUNC.has(w))||'[CLS]');
+  NLP.heat('#aHeat',A.M,A.toks,A.toks.map(t=>t.replace(/^r(\d) .*/,'r$1')),{max:1,fmt:v=>v>=.1?Math.round(v*100):'',rowW:'86px',selRow:aSel,onRow:i=>{ aSel=i; drawAttn(); }});
+  const wts=A.M[aSel].slice(A.n+2); scene('#aImg',aS,{weights:wts});
+  const tw=A.M[aSel].slice(0,A.n+2).reduce((a,b)=>a+b,0), best=wts.indexOf(Math.max(...wts)), S=VIS.SCENES[aS];
+  const kind=aSel===0?'[CLS]':aSel===A.n+1?'[SEP]':aSel<=A.n?'word':'region';
+  $('#aNote').innerHTML=`<b>${NLP.esc(A.toks[aSel])}</b> (${kind}) puts ${Math.round(tw*100)}% of its attention on text tokens and ${Math.round((1-tw)*100)}% on image regions`+(1-tw>.15?`, most on <b>${NLP.esc(S.objects[best].label)}</b> (${Math.round(wts[best]*100)}%).`:'.')+` Rows sum to 100%.`; }
+ML.bindSeg('aScene',v=>{ aS=v; aSel=null; drawAttn(); });
+/* ---------- 3a. masked words ---------- */
+const VOC=['dog','cat','ball','tree','sun','cup','apple','table','car','bus','grass','road','light','red','blue','yellow','green'];
+const COLR=new Set(['red','blue','yellow','green']);
+const AFTER={red:{ball:1.2,car:1.2,apple:1.2},blue:{cup:1.2,car:1},yellow:{bus:1.2,ball:.8,sun:1},the:{table:.8,road:.6,tree:.6}};
+let mS='park', mIdx=null;
+function predict(k,i,useImg){ const W=words(k), prev=W[i-1], target=W[i], isCol=COLR.has(target), S=VIS.SCENES[k];
+  const present=new Set(S.objects.flatMap(o=>names(k,o)));
+  const sc=VOC.map(v=>{ let s=0; if(COLR.has(v)===isCol) s+=2.5; if(prev&&AFTER[prev]&&AFTER[prev][v]) s+=AFTER[prev][v];
+    if(isCol){ const nxt=W[i+1]; if(nxt&&S.objects.some(o=>o.label===nxt&&o.tags.includes(v))&&useImg) s+=3; }
+    else if(useImg&&present.has(v)) s+=2.2;
+    W.forEach((w,j)=>{ if(j!==i&&w===v) s-=2; }); return s; });
+  return NLP.softmax(sc).map((p,j)=>({label:VOC[j],value:p})).sort((a,b)=>b.value-a.value).slice(0,5); }
+function drawMask(){ const W=words(mS); if(mIdx==null||FUNC.has(W[mIdx])) mIdx=W.findIndex((w,i)=>i>1&&VOC.includes(w)&&!COLR.has(w));
+  $('#mCap').innerHTML='<div class="chips2">'+W.map((w,i)=>`<button class="tok" data-i="${i}" style="cursor:${FUNC.has(w)?'default':'pointer'};border:0;background:${i===mIdx?'var(--c2)':NLP.tokColor(i)};color:${i===mIdx?'#fff':'var(--ink)'};font:inherit">${i===mIdx?'[MASK]':NLP.esc(w)}</button>`).join('')+'</div>';
+  $('#mCap').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const i=+b.dataset.i; if(FUNC.has(W[i])) return; mIdx=i; drawMask(); });
+  const a=predict(mS,mIdx,false), b=predict(mS,mIdx,true), P=P0();
+  $('#mText').innerHTML=NLP.bars(a.map(x=>({...x,color:x.label===W[mIdx]?P.c5:P.c3})),{lw:'56px',max:1,fmt:v=>Math.round(v*100)+'%'});
+  $('#mImg').innerHTML=NLP.bars(b.map(x=>({...x,color:x.label===W[mIdx]?P.c5:P.c1})),{lw:'56px',max:1,fmt:v=>Math.round(v*100)+'%'});
+  const pa=(a.find(x=>x.label===W[mIdx])||{value:0}).value, pb=(b.find(x=>x.label===W[mIdx])||{value:0}).value;
+  $('#mNote').innerHTML=`The hidden word is <b>${NLP.esc(W[mIdx])}</b>. Text alone gives it ${Math.round(pa*100)}%; with the image regions it gets ${Math.round(pb*100)}%. The loss \\(-\\log p\\) drops from ${(-Math.log(Math.max(pa,1e-3))).toFixed(2)} to ${(-Math.log(Math.max(pb,1e-3))).toFixed(2)}, and that drop is what teaches the model to look at the picture.`; ML.renderMath($('#mNote')); }
+/* ---------- 3b. sentence-image prediction ---------- */
+let sS='park', sTrue=true;
+function drawSip(){ scene('#sImg',sS); const keys=Object.keys(VIS.SCENES), other=keys[(keys.indexOf(sS)+1)%keys.length], cap=sTrue?VIS.SCENES[sS].caption:VIS.SCENES[other].caption;
+  const S=VIS.SCENES[sS], present=new Set(S.objects.flatMap(o=>names(sS,o))), content=cap.split(' ').filter(w=>!FUNC.has(w)), hit=content.filter(w=>present.has(w)), p=ML.sigmoid(6*hit.length/content.length-2.5), P=P0();
+  $('#sOut').innerHTML=`<div class="mono" style="font-size:13px;margin-bottom:6px">[CLS] ${NLP.esc(cap)} [SEP] r1 … r${S.objects.length}</div>`
+   +NLP.bars([{label:'matches',value:p,color:P.c5},{label:'does not',value:1-p,color:P.c4}],{lw:'70px',max:1,fmt:v=>Math.round(v*100)+'%'})
+   +`<p class="hint">${hit.length} of ${content.length} content words (${content.map(w=>present.has(w)?'<b>'+w+'</b>':w).join(', ')}) find a matching region. ${sTrue?'This is the true caption: the label is "matches".':'This caption belongs to the '+VIS.SCENES[other].name.toLowerCase()+' scene: the label is "does not match".'}</p>`; }
+ML.bindSeg('sScene',v=>{ sS=v; mS=v; mIdx=null; drawSip(); drawMask(); }); ML.bindSeg('sCap',v=>{ sTrue=v==='true'; drawSip(); });
+function all(){ drawInput(); drawAttn(); drawMask(); drawSip(); }
+all(); let rw=0; window.addEventListener('resize',()=>{ if(Math.abs(innerWidth-rw)>4){ rw=innerWidth; all(); } }); ML.onTheme(all);
+})();
+</script>
+<script>NLP.nav('nlp','visualbert'); ML.renderMath(document.body);</script>
+</body>
+</html>

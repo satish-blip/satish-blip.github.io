@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LDA and GDA Lab</title>
+<meta name="description" content="Interactive Gaussian discriminant analysis in the browser: LDA, QDA and Gaussian naive Bayes with live means, covariance ellipses, priors, decision boundaries, Fisher's projection and generative sampling.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../learn/#ml">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Algorithms"></nav></div></header>
+
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Traditional ML &middot; Generative classifiers</p>
+  <h1>LDA &amp; <span class="grad">GDA</span></h1>
+  <p class="lede">Logistic regression asks "where is the boundary?" directly. Gaussian discriminant analysis takes the opposite route: it first learns what each class looks like, as a bell-shaped cloud, and only then asks which cloud a new point most likely came from. Share one cloud shape across classes and the boundary is a straight line (LDA); give each class its own shape and it bends (QDA). Drag the class means, change the priors, and see Fisher's projection that LDA secretly finds.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#lab">1 · Fit Gaussians live</a><a href="#maths">2 · The maths</a><a href="#fisher">3 · Fisher's projection</a><a href="#gen">4 · It's generative</a><a href="#code">5 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>What are LDA and GDA, in plain words?</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The problem</h3><p>A fish factory sorts its catch into salmon and sea bass using two measurements: length and brightness. We have a few hundred labelled fish. When a new fish comes down the belt, which is it?</p>
+      <h3>Two ways to answer</h3><p>A <b>discriminative</b> method (logistic regression, an SVM) looks only for the line that best separates the labelled fish. A <a class="term" data-t="generative">generative</a> method first builds a description of each species: "a typical salmon is about this long and this bright, and they vary like this". It then asks which description makes the new fish more plausible. That is GDA.</p>
+      <h3>The idea</h3><p>Describe each class as a <a class="term" data-t="gaussian">bell-shaped cloud</a> with a centre (<a class="term" data-t="mean">mean</a>) and a shape (<a class="term" data-t="covariance">covariance matrix</a>, which says how spread out the cloud is in each direction and how tilted). A new point is given to the class whose cloud makes it most likely, adjusted by how common each class is (the <a class="term" data-t="prior">prior</a>), using <a class="term" data-t="bayes-rule">Bayes’ rule</a>.</p><p><a class="term" data-t="lda">LDA</a> assumes every class cloud has the same shape, which gives a straight boundary. <a class="term" data-t="qda">QDA</a> lets each class have its own shape, giving curved boundaries. <a class="term" data-t="naive-bayes">Naive Bayes</a> assumes the features are independent within a class, so the clouds are never tilted.</p>
+      <h3>How it works</h3><ol class="steps2"><li>Estimate each class’s mean and covariance from the training data.</li><li>Estimate how common each class is (the prior).</li><li>For a new point, compute a <a class="term" data-t="discriminant">score</a> per class: how likely the point is under that class’s Gaussian, times the prior.</li><li>Pick the class with the highest score.</li></ol>
+    </div>
+    <div>
+      <h3>An everyday picture</h3><p>A doctor who has seen thousands of patients has a mental picture of what "typical flu" and "typical cold" look like across temperature and fatigue. Faced with a new patient, they don't draw a line; they ask which picture fits better, and they also know flu is rarer in summer. That last part is the prior.</p>
+      <div class="pc"><div class="pro"><b>Good at</b><ul><li>Very fast, no iterations: fitting is just averaging</li><li>Works well with little data when the Gaussian assumption is roughly right</li><li>Gives probabilities and a projection (Fisher LDA) for visualisation</li><li>Can generate new, realistic-looking data</li></ul></div><div class="con"><b>Watch out for</b><ul><li>Wrong shape assumptions hurt (moons, spirals)</li><li>QDA needs many points per class to estimate covariances</li><li>Sensitive to outliers, which drag means and covariances</li></ul></div></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="generative">Generative model</a><a class="term" data-t="gaussian">Gaussian</a><a class="term" data-t="mean">Mean</a><a class="term" data-t="covariance">Covariance matrix</a><a class="term" data-t="prior">Prior</a><a class="term" data-t="posterior">Posterior</a><a class="term" data-t="bayes-rule">Bayes’ rule</a><a class="term" data-t="likelihood">Likelihood</a><a class="term" data-t="lda">LDA</a><a class="term" data-t="qda">QDA</a><a class="term" data-t="naive-bayes">Naive Bayes</a><a class="term" data-t="discriminant">Discriminant</a><a class="term" data-t="projection">Projection</a><a class="term" data-t="shrinkage">Shrinkage</a></div>
+      <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. Background maths: <a href="../../math/probability/#bayes">Bayes’ theorem</a>, <a href="../../math/inference/#mle">maximum likelihood</a>, <a href="../../math/decompositions/#chol">Cholesky</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="lab" class="lab">
+  <div class="card hl">
+    <h2><span class="num">1</span>Fit Gaussians live</h2>
+    <p class="sub">Ellipses are the 1σ and 2σ contours of each fitted Gaussian: roughly 39% and 86% of a class's points fall inside them. The crosses are the class means. Drag a point to move it, or drag a mean (★) to shift its whole class and watch the boundary follow.</p>
+    <div class="plot sq" id="mainPlot"></div>
+    <div class="legend"><span><i class="sw k0"></i>class 0</span><span><i class="sw k1"></i>class 1</span><span>bold line: \(P(y=1\mid x)=0.5\)</span><span>dashed: 0.1 / 0.9</span></div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="controls">
+        <div class="ctl"><span class="lbl">Dataset</span><div class="dsrow" id="dsPick"></div></div>
+        <div class="ctl"><span class="lbl">Model</span><div class="seg" id="mSeg"><button data-v="lda" class="on">LDA (shared Σ)</button><button data-v="qda">QDA (Σ per class)</button><button data-v="nb">Gaussian naive Bayes</button></div></div>
+        <div class="ctl"><label for="shrink"><span>Covariance shrinkage \(\alpha\) (<a href="../regularisation/">L2-style regularisation</a>)</span><output id="shrinkOut"></output></label><input type="range" id="shrink" min="0" max="1" step="0.01" value="0"></div>
+        <div class="ctl"><label for="prior"><span>Prior \(\pi_1=P(y=1)\)</span><output id="priorOut"></output></label><input type="range" id="prior" min="0.02" max="0.98" step="0.01" value="0.5"><label class="toggle"><input type="checkbox" id="estPrior" checked>Estimate from data (class frequency)</label></div>
+        <div class="grid2" style="gap:12px">
+          <div class="ctl"><label for="nPts">Points <output id="nPtsOut"></output></label><input type="range" id="nPts" min="20" max="400" step="10" value="200"></div>
+          <div class="ctl"><label for="noise">Noise <output id="noiseOut"></output></label><input type="range" id="noise" min="0" max="1" step="0.05" value="0.3"></div>
+        </div>
+        <div class="row"><label class="toggle"><input type="checkbox" id="showE" checked>Covariance ellipses</label><label class="toggle"><input type="checkbox" id="showOther">Show the other model's boundary</label></div>
+      </div>
+    </div>
+    <div class="card"><div class="stats" id="stats"></div><div id="params" style="margin-top:10px"></div><p class="hint">Untick "Estimate from data" and slide the prior: the boundary moves towards the rarer class, because a point must look much more like it to overcome the low base rate. The clouds themselves do not change.</p></div>
+  </div>
+</section>
+
+<section id="maths" class="card">
+  <h2><span class="num">2</span>The maths</h2>
+  <p class="sub">Three steps again: write down the story of how the data was generated, estimate its pieces from the data, then turn it around with Bayes' rule to classify.</p>
+  <div class="grid2 prose">
+    <div>
+      <h3>Step 1: a story for how the data appears</h3>
+      <p>Imagine nature producing a fish: first it flips a biased coin to choose the species (\(y=1\) with probability \(\pi_1\)), then it draws the measurements from that species' Gaussian. To classify, we run the story backwards with <a href="../../math/probability/#bayes">Bayes' rule</a>: given the measurements, how likely is each species?</p>
+      <div class="mathbox c1">$$y\sim\mathrm{Bernoulli}(\pi_1),\qquad x\mid y=k\ \sim\ \mathcal N(\mu_k,\Sigma_k),\qquad P(y=k\mid x)=\frac{\pi_k\,\mathcal N(x;\mu_k,\Sigma_k)}{\sum_j\pi_j\,\mathcal N(x;\mu_j,\Sigma_j)}$$</div>
+      <p>The denominator is the same for every class, so to pick the winner we only compare the numerators. Taking logs (which keeps the order) gives each class a <b>discriminant</b> \(\delta_k(x)=\log\pi_k+\log\mathcal N(x;\mu_k,\Sigma_k)\):</p>
+      <div class="mathbox c2">$$\delta_k(x)=-\tfrac12\log|\Sigma_k|-\tfrac12(x-\mu_k)^\top\Sigma_k^{-1}(x-\mu_k)+\log\pi_k$$</div>
+      <p>Read the three terms: the middle one is (minus half) the squared <b>Mahalanobis distance</b> from \(x\) to the class centre, a distance that accounts for the cloud's shape, so being far along a cloud's long axis costs less than being far along its short axis. The first penalises big, spread-out clouds (they spread their probability thinly). The last favours common classes.</p>
+      <h3>Step 2: estimate the pieces (closed form)</h3>
+      <p>Maximising the joint likelihood \(\prod_i P(x_i,y_i)\) gives the answers you would guess: the fraction of each class, the class average, and the class spread.</p>
+      <div class="mathbox c5">$$\hat\pi_k=\frac{n_k}{n},\qquad \hat\mu_k=\frac1{n_k}\sum_{y_i=k}x_i,\qquad \hat\Sigma_k=\frac1{n_k}\sum_{y_i=k}(x_i-\hat\mu_k)(x_i-\hat\mu_k)^\top$$</div>
+      <p>No iterations, no learning rate: fitting is just counting, averaging and computing covariances. LDA pools the two: \(\hat\Sigma=\tfrac{n_0}{n}\hat\Sigma_0+\tfrac{n_1}{n}\hat\Sigma_1\).</p>
+      <div class="algo"><h5 class="algo-h">Algorithm: fitting and predicting with GDA</h5><ol>
+        <li><span class="kw">input</span> training points \(x_i\in\mathbb R^d\) with labels \(y_i\in\{0,\dots,K-1\}\), model ∈ {LDA, QDA, NB}, shrinkage \(\alpha\)</li>
+        <li><span class="kw">for</span> each class \(k\) <span class="kw">do</span></li>
+        <li class="i1">\(\pi_k\leftarrow n_k/n\); \(\mu_k\leftarrow\) mean of the class's points</li>
+        <li class="i1">\(\Sigma_k\leftarrow\) covariance of the class's points</li>
+        <li><span class="kw">if</span> LDA <span class="kw">then</span> \(\Sigma_k\leftarrow\sum_j\pi_j\Sigma_j\) for all \(k\) <span class="cm">one shared shape</span></li>
+        <li><span class="kw">if</span> NB <span class="kw">then</span> zero every off-diagonal entry of \(\Sigma_k\) <span class="cm">no tilt</span></li>
+        <li>\(\Sigma_k\leftarrow(1-\alpha)\Sigma_k+\alpha\frac{\operatorname{tr}\Sigma_k}{d}I\) <span class="cm">shrinkage</span></li>
+        <li><span class="kw">to predict</span> \(x\):</li>
+        <li class="i1"><span class="kw">for</span> each \(k\): \(\delta_k\leftarrow\log\pi_k-\tfrac12\log|\Sigma_k|-\tfrac12(x-\mu_k)^\top\Sigma_k^{-1}(x-\mu_k)\)</li>
+        <li class="i1">\(P(y=k\mid x)\leftarrow e^{\delta_k}/\sum_je^{\delta_j}\) <span class="cm">softmax of the discriminants</span></li>
+        <li class="i1"><span class="kw">return</span> \(\arg\max_k\delta_k\) and the probabilities</li>
+      </ol></div>
+      <details class="deeper"><summary>Going deeper: deriving the maximum-likelihood estimates</summary><div>
+        <p>The joint log-likelihood splits into a part for the priors and a part for each class: \(\ell=\sum_i\log\pi_{y_i}+\sum_k\sum_{y_i=k}\log\mathcal N(x_i;\mu_k,\Sigma_k)\). The prior part is maximised subject to \(\sum_k\pi_k=1\) with a Lagrange multiplier: \(\partial/\partial\pi_k\big(n_k\log\pi_k-\lambda\pi_k\big)=0\Rightarrow\pi_k=n_k/\lambda\), and the constraint gives \(\lambda=n\).</p>
+        <p>For one class, \(\log\mathcal N=-\tfrac d2\log2\pi-\tfrac12\log|\Sigma|-\tfrac12(x-\mu)^\top\Sigma^{-1}(x-\mu)\). Setting the gradient in \(\mu\) to zero gives \(\Sigma^{-1}\sum(x_i-\mu)=0\), so \(\mu\) is the average. For \(\Sigma\), work with the precision \(\Lambda=\Sigma^{-1}\) and use \(\nabla_\Lambda\log|\Lambda|=\Lambda^{-1}\) and \(\nabla_\Lambda\,v^\top\Lambda v=vv^\top\): the condition \(\tfrac{n_k}{2}\Lambda^{-1}-\tfrac12\sum(x_i-\mu)(x_i-\mu)^\top=0\) gives the sample covariance with divisor \(n_k\). (The unbiased estimator divides by \(n_k-1\); it is not the MLE.)</p>
+        <p>Because the joint likelihood factorises, everything has a closed form. Logistic regression maximises only the conditional likelihood \(\prod P(y_i\mid x_i)\), which does not factorise, hence it needs iteration.</p>
+      </div></details>
+    </div>
+    <div>
+      <h3>Step 3: LDA, where the quadratic terms cancel</h3>
+      <p>With a shared \(\Sigma\), the \(x^\top\Sigma^{-1}x\) and \(\log|\Sigma|\) terms are identical in \(\delta_0\) and \(\delta_1\). Subtract the two discriminants and they vanish, leaving log-odds that are linear in \(x\):</p>
+      <div class="mathbox c3">$$\begin{aligned}\log\frac{P(y=1\mid x)}{P(y=0\mid x)}&amp;=w^\top x+c,\qquad w=\Sigma^{-1}(\mu_1-\mu_0),\\ c&amp;=-\tfrac12\mu_1^\top\Sigma^{-1}\mu_1+\tfrac12\mu_0^\top\Sigma^{-1}\mu_0+\log\tfrac{\pi_1}{\pi_0}\end{aligned}$$</div>
+      <p>That is exactly the form of <a href="../logistic-regression/">logistic regression</a>: \(P(y=1\mid x)=\sigma(w^\top x+c)\). The difference is how \(w\) is found: LDA from the Gaussian estimates, logistic regression by maximising the conditional likelihood directly. Interpret \(w\): it points from one mean to the other, then gets "unstretched" by \(\Sigma^{-1}\) so that directions in which the clouds are wide count for less.</p>
+      <h3>QDA and naive Bayes</h3>
+      <p>QDA keeps \(\Sigma_0\neq\Sigma_1\), so the quadratic terms no longer cancel and the boundary \(\delta_1=\delta_0\) is a conic: ellipse, parabola or hyperbola. It needs more parameters (\(2\times3\) covariance entries here instead of 3; with \(d\) features, about \(Kd^2/2\)), so it can overfit with few points. <b>Gaussian naive Bayes</b> forces each \(\Sigma_k\) to be diagonal (features independent given the class), which gives axis-aligned ellipses and only \(Kd\) variances to estimate.</p>
+      <div class="note">Try <b>Unequal covariance</b>: LDA must use one straight line, QDA wraps a curve around the tight class. Then try <b>Circles</b>: QDA's ellipse works, LDA fails. On <b>XOR</b> and <b>Spirals</b> neither Gaussian story fits.</div>
+      <details class="deeper"><summary>Going deeper: generative vs discriminative, who wins when?</summary><div>
+        <p>Every GDA model implies a logistic posterior, but not every logistic posterior comes from Gaussians (Poisson or exponential class-conditionals also give one). So GDA makes a <i>stronger</i> assumption. When that assumption holds, GDA is asymptotically efficient: no consistent estimator does better with lots of data, and with little data it needs fewer examples to reach good accuracy (Ng and Jordan, 2002, showed logistic regression needs \(O(d)\) examples where naive Bayes needs \(O(\log d)\) to approach its own limit). When the assumption is wrong, GDA converges to the wrong boundary however much data you have, while logistic regression keeps improving. Rule of thumb: little data and roughly Gaussian features, use LDA; lots of data or clearly non-Gaussian features, use logistic regression.</p>
+      </div></details>
+    </div>
+  </div>
+  <div class="note"><b>Regularised discriminant analysis.</b> With few points or many features the sample covariance is noisy and can be nearly singular, so \(\Sigma^{-1}\) explodes. The shrinkage slider replaces it by \(\hat\Sigma_\alpha=(1-\alpha)\hat\Sigma+\alpha\,\tfrac{\operatorname{tr}\hat\Sigma}{d}I\) (Ledoit and Wolf; scikit-learn's <code>LinearDiscriminantAnalysis(solver="lsqr", shrinkage=α)</code>). This is the covariance version of an L2 / ridge penalty: at \(\alpha=1\) LDA ignores correlations and becomes a nearest-mean classifier (after scaling). Try QDA with 20 points and raise \(\alpha\). See the <a href="../regularisation/">L1 and L2 regularisation page</a>.</div>
+</section>
+
+<section id="fisher" class="card">
+  <h2><span class="num">3</span>Fisher's view: the best 1-D projection</h2>
+  <p class="sub">Fisher arrived at the same answer from a completely different question, with no Gaussians at all: if we must squash the data onto a single line, which direction \(u\) makes the two classes as separated as possible relative to their spread? Rotate \(u\) and watch the histograms and the criterion \(J(u)\).</p>
+  <div class="grid3">
+    <div><div class="plot sq" id="fPlot"></div></div>
+    <div><div class="plot sq" id="fHist"></div></div>
+    <div>
+      <div class="mathbox c1">$$J(u)=\frac{\big(u^\top(\mu_1-\mu_0)\big)^2}{u^\top S_W\,u}$$$$u^\star\propto S_W^{-1}(\mu_1-\mu_0)$$</div>
+      <p class="hint">The top is the squared distance between the projected means (we want it large); the bottom is the projected within-class spread \(S_W\) (we want it small). The optimum is the LDA direction \(w\) from section 2: two different derivations, one answer.</p>
+      <div class="ctl"><label for="theta"><span>Direction angle θ</span><output id="thetaOut"></output></label><input type="range" id="theta" min="0" max="180" step="0.5" value="20"></div>
+      <div class="row"><button class="btn primary" id="snap">Snap to Fisher optimum</button><button class="btn" id="snapMean">Use μ₁ − μ₀ instead</button></div>
+      <div class="plot short" id="jPlot" style="margin-top:10px"></div>
+      <div class="stats" id="fStats" style="margin-top:8px"></div>
+    </div>
+  </div>
+  <p class="hint">Projecting onto \(\mu_1-\mu_0\) (the line joining the means) ignores the shape of the clouds. On elongated, tilted classes (try <b>Linear blobs</b> with noise, or <b>Overlapping</b>) the Fisher direction is noticeably better because it also divides by the spread.</p>
+  <details class="deeper"><summary>Going deeper: maximising the Fisher criterion</summary><div>
+    <p>\(J\) does not change if \(u\) is scaled, so fix the denominator, \(u^\top S_Wu=1\), and maximise the numerator \(u^\top S_Bu\) with \(S_B=(\mu_1-\mu_0)(\mu_1-\mu_0)^\top\). The Lagrangian \(u^\top S_Bu-\lambda(u^\top S_Wu-1)\) gives \(S_Bu=\lambda S_Wu\), a generalised eigenvalue problem. Here \(S_Bu=(\mu_1-\mu_0)\,[(\mu_1-\mu_0)^\top u]\) always points along \(\mu_1-\mu_0\), so \(S_Wu\propto\mu_1-\mu_0\) and \(u\propto S_W^{-1}(\mu_1-\mu_0)\). With \(K\) classes, \(S_B\) has rank \(K-1\), so LDA can give at most \(K-1\) useful projection directions: the top generalised eigenvectors. That is LDA as supervised dimensionality reduction, the labelled cousin of <a href="../pca/">PCA</a>.</p>
+  </div></details>
+</section>
+
+<section id="gen" class="card">
+  <h2><span class="num">4</span>It's generative: sample new data from the model</h2>
+  <div class="grid2">
+    <div><div class="plot sq" id="gPlot"></div></div>
+    <div class="prose">
+      <p>A discriminative model (logistic regression, SVM) only learns \(P(y\mid x)\). A generative model learns \(P(x,y)=P(y)P(x\mid y)\), so it can <b>invent new data</b> by running its story forwards. Press the button to draw fresh points from the fitted Gaussians (hollow) next to the real data (filled).</p>
+      <p>This is also a quick health check. If the fake points look like the real ones, the Gaussian assumption is reasonable and GDA will do well. If they look nothing alike (moons, spirals), the model is mis-specified, and a discriminative method will usually win.</p>
+      <div class="row"><button class="btn primary" id="sample">Sample 200 points from the model</button></div>
+      <div class="mathbox c4">$$x_{\text{new}}=\hat\mu_k+L_k z,\quad z\sim\mathcal N(0,I),\quad L_kL_k^\top=\hat\Sigma_k\ (\text{Cholesky})$$</div>
+      <div class="algo"><h5 class="algo-h">Algorithm: sampling from the fitted model</h5><ol>
+        <li><span class="kw">for</span> \(s=1\) <span class="kw">to</span> \(m\) <span class="kw">do</span></li>
+        <li class="i1">draw class \(k\) with probability \(\pi_k\) <span class="cm">flip the biased coin</span></li>
+        <li class="i1">draw \(z\) with \(d\) independent standard normal entries</li>
+        <li class="i1">\(x\leftarrow\mu_k+L_kz\) <span class="cm">\(L_k\) stretches and tilts the round cloud into the class shape</span></li>
+        <li class="i1">emit \((x,k)\)</li>
+      </ol></div>
+      <p class="hint">Why does this work? \(z\) has covariance \(I\), and a linear map \(L\) turns covariance \(C\) into \(LCL^\top\), so \(Lz\) has covariance \(LL^\top=\hat\Sigma_k\). See <a href="../../math/decompositions/#chol">Cholesky</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="code" class="card">
+  <h2><span class="num">5</span>The same thing in Python</h2>
+<pre class="code"><span class="k">from</span> sklearn.discriminant_analysis <span class="k">import</span> LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
+<span class="k">from</span> sklearn.naive_bayes <span class="k">import</span> GaussianNB
+
+lda = LinearDiscriminantAnalysis(store_covariance=<span class="k">True</span>).<span class="f">fit</span>(X, y)
+lda.means_, lda.covariance_, lda.priors_, lda.coef_, lda.intercept_   <span class="c"># mu_k, Sigma, pi_k, w, c</span>
+qda = QuadraticDiscriminantAnalysis(store_covariance=<span class="k">True</span>).<span class="f">fit</span>(X, y)   <span class="c"># qda.covariance_ is a list, one per class</span>
+nb  = GaussianNB().<span class="f">fit</span>(X, y)
+
+<span class="c"># by hand, two classes</span>
+mu0, mu1 = X[y == <span class="s">0</span>].mean(<span class="s">0</span>), X[y == <span class="s">1</span>].mean(<span class="s">0</span>)
+Sw = np.cov(X[y == <span class="s">0</span>].T, bias=<span class="k">True</span>) * (y == <span class="s">0</span>).mean() + np.cov(X[y == <span class="s">1</span>].T, bias=<span class="k">True</span>) * (y == <span class="s">1</span>).mean()
+w = np.linalg.solve(Sw, mu1 - mu0)        <span class="c"># Fisher / LDA direction</span>
+LinearDiscriminantAnalysis(n_components=<span class="s">1</span>).<span class="f">fit_transform</span>(X, y)  <span class="c"># LDA as supervised dimensionality reduction</span></pre>
+</section>
+
+<p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything is computed in your browser in plain JavaScript.</p>
+</main>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/gloss.js"></script>
+<script src="../assets/models.js"></script>
+<script>
+(function(){
+const {$, fmt, LA} = ML, Mo=ML.models;
+ML.nav('lda-gda'); ML.renderMath(document.body);
+const S={ds:'aniso', n:200, noise:0.3, seed:7, type:'lda', X:[], y:[], m:null, theta:20, fake:null};
+const main=new ML.Plot('#mainPlot');
+function load(){ const d=ML.dataset(S.ds,S.n,S.noise,S.seed); S.X=d.X.map(p=>p.slice()); S.y=d.y.slice(); S.fake=null; }
+function fitM(type){ const m=Mo.GDA(S.X,S.y,{type:type||S.type,shrink:+$('#shrink').value}); if(!$('#estPrior').checked){ const p1=+$('#prior').value; return withPrior(m,p1); } return m; }
+function withPrior(m,p1){ const shift=Math.log(p1/(1-p1))-Math.log(m.pi1/m.pi0); const sc=m.score; const o=Object.assign({},m); o.score=x=>sc(x)+shift; o.proba=x=>ML.sigmoid(o.score(x)); o.pi1=p1; o.pi0=1-p1; if(m.c!==undefined) o.c=m.c+shift; return o; }
+
+let drag=null, hover=-1;
+function draw(){ const P=ML.palette(); S.m=fitM(); const m=S.m; main.clear(); main.regions((x,y)=>m.proba([x,y]),5); main.grid(1);
+  const f=(x,y)=>m.score([x,y]);
+  main.contour(f,Math.log(9),{color:P.k1,width:1.2,dash:[4,4],alpha:.8}); main.contour(f,-Math.log(9),{color:P.k0,width:1.2,dash:[4,4],alpha:.8});
+  if($('#showOther').checked){ const o=fitM(S.type==='lda'?'qda':'lda'); main.contour((x,y)=>o.score([x,y]),0,{color:P.c4,width:2,dash:[8,5]}); }
+  main.contour(f,0,{color:P.ink,width:2.8});
+  main.points(S.X,S.y,{r:4.2, ring:i=>i===hover?P.c1:false});
+  if($('#showE').checked){ [[m.mu0,m.C0,P.k0],[m.mu1,m.C1,P.k1]].forEach(([mu,C,col])=>{ main.ellipse(mu,C,1,{color:col,width:2.4,fill:col,fillAlpha:.10}); main.ellipse(mu,C,2,{color:col,width:1.5,dash:[5,4]}); }); }
+  [[m.mu0,P.k0],[m.mu1,P.k1]].forEach(([mu,col])=>star(main,mu,col));
+  if(m.w){ const wn=Math.hypot(m.w[0],m.w[1]); main.arrow(m.mu0[0],m.mu0[1],m.mu0[0]+m.w[0]/wn*1.2,m.mu0[1]+m.w[1]/wn*1.2,{color:P.c1,width:2.4}); main.text('w = Σ⁻¹(μ₁−μ₀)',m.mu0[0]+m.w[0]/wn*1.25,m.mu0[1]+m.w[1]/wn*1.25,{color:P.c1,halo:true,dx:4}); }
+  stats(); drawFisher(); drawGen(); }
+function star(pl,mu,col){ const c=pl.ctx, X=pl.X(mu[0]), Y=pl.Y(mu[1]); c.save(); c.fillStyle=col; c.strokeStyle=ML.palette().ink; c.lineWidth=1.5; c.beginPath(); for(let k=0;k<10;k++){ const r=k%2?5:12, a=-Math.PI/2+k*Math.PI/5; c.lineTo(X+r*Math.cos(a),Y+r*Math.sin(a)); } c.closePath(); c.fill(); c.stroke(); c.restore(); }
+function stats(){ const m=S.m; let ok=0; S.X.forEach((x,i)=>{ if((m.proba(x)>=0.5?1:0)===S.y[i]) ok++; });
+  const np = S.type==='lda'? 2*2+3+1 : S.type==='qda'? 2*2+2*3+1 : 2*2+2*2+1;
+  $('#stats').innerHTML=[['c5',ML.pct(ok/S.X.length),'training accuracy'],['c1',np,'parameters'],['c3',fmt(m.pi1,2),'prior π₁'],['c4',S.X.length,'points']].map(([c,v,l])=>`<div class="stat ${c}"><b>${v}</b><span>${l}</span></div>`).join('');
+  const M=(S2)=>`\\begin{bmatrix}${fmt(S2[0][0],2)}&${fmt(S2[0][1],2)}\\\\${fmt(S2[1][0],2)}&${fmt(S2[1][1],2)}\\end{bmatrix}`, V=v=>`\\begin{bmatrix}${fmt(v[0],2)}\\\\${fmt(v[1],2)}\\end{bmatrix}`;
+  let t=`\\hat\\mu_0=${V(m.mu0)},\\ \\hat\\mu_1=${V(m.mu1)}`; t+= S.type==='lda' ? `,\\ \\hat\\Sigma=${M(m.C0)}` : `,\\ \\hat\\Sigma_0=${M(m.C0)},\\ \\hat\\Sigma_1=${M(m.C1)}`;
+  let t2 = m.w ? `w=${V(m.w)},\\quad c=${fmt(m.c,3)}\\quad\\Rightarrow\\quad \\text{boundary: } ${fmt(m.w[0],2)}x_1${m.w[1]<0?'-':'+'}${fmt(Math.abs(m.w[1]),2)}x_2${m.c<0?'-':'+'}${fmt(Math.abs(m.c),2)}=0` : `\\text{boundary: }\\delta_1(x)=\\delta_0(x)\\ \\text{(a conic)}`;
+  $('#params').innerHTML='<div class="mathbox c1">'+ML.tex(t,true)+ML.tex(t2,true)+'</div>'; }
+
+main.pointer({
+  down(x,y,px,py){ const m=S.m; const dm=[m.mu0,m.mu1].map(mu=>Math.hypot(main.X(mu[0])-px,main.Y(mu[1])-py)); if(Math.min(...dm)<16){ drag={mean:dm[0]<dm[1]?0:1,last:[x,y]}; return; } const i=main.nearest(S.X,px,py,10); if(i>=0) drag={pt:i}; },
+  move(x,y){ if(!drag) return; if(drag.pt!==undefined) S.X[drag.pt]=[x,y]; else { const dx=x-drag.last[0], dy=y-drag.last[1]; S.X.forEach((p,i)=>{ if(S.y[i]===drag.mean){ p[0]+=dx; p[1]+=dy; } }); drag.last=[x,y]; } sched(); },
+  up(){ drag=null; }, hover(x,y,px,py){ const i=main.nearest(S.X,px,py,10); const m=S.m; const nearMean=[m.mu0,m.mu1].some(mu=>Math.hypot(main.X(mu[0])-px,main.Y(mu[1])-py)<16); main.cv.style.cursor=(i>=0||nearMean)?'grab':'default'; if(i!==hover){ hover=i; sched(); } } });
+let raf=0; function sched(){ if(raf) return; raf=requestAnimationFrame(()=>{ raf=0; draw(); }); }
+
+/* Fisher */
+const fP=new ML.Plot('#fPlot'), fH=new ML.Plot('#fHist',{equal:false}), jP=new ML.Plot('#jPlot',{equal:false});
+function fisherParts(){ const m=Mo.GDA(S.X,S.y,{type:'lda'}); return {m, Sw:m.Sw, dm:[m.mu1[0]-m.mu0[0], m.mu1[1]-m.mu0[1]]}; }
+const Jof=(th,F)=>{ const u=[Math.cos(th),Math.sin(th)], a=u[0]*F.dm[0]+u[1]*F.dm[1], b=u[0]*(F.Sw[0][0]*u[0]+F.Sw[0][1]*u[1])+u[1]*(F.Sw[1][0]*u[0]+F.Sw[1][1]*u[1]); return a*a/b; };
+function optTheta(F){ const w=LA.mv(LA.inv2(F.Sw),F.dm); let t=Math.atan2(w[1],w[0])*180/Math.PI; if(t<0)t+=180; if(t>=180)t-=180; return t; }
+function drawFisher(){ const P=ML.palette(), F=fisherParts(), th=S.theta*Math.PI/180, u=[Math.cos(th),Math.sin(th)]; fP.clear(); fP.grid(1);
+  const c=fP.ctx; fP.line(-4*u[0],-4*u[1],4*u[0],4*u[1],{color:P.c1,width:2.5});
+  const proj=S.X.map(x=>x[0]*u[0]+x[1]*u[1]);
+  S.X.forEach((x,i)=>{ const p=proj[i]; fP.line(x[0],x[1],p*u[0],p*u[1],{color:S.y[i]?P.k1:P.k0,width:1,alpha:.25}); });
+  fP.points(S.X,S.y,{r:3.4}); fP.points(proj.map(p=>[p*u[0],p*u[1]]),S.y,{r:2.6});
+  // histograms of projections
+  const lo=Math.min(...proj), hi=Math.max(...proj), bins=26, h=[new Array(bins).fill(0),new Array(bins).fill(0)]; proj.forEach((p,i)=>{ h[S.y[i]][Math.min(bins-1,Math.floor((p-lo)/(hi-lo+1e-9)*bins))]++; });
+  fH.clear(); const hc=fH.ctx, L=12,R=12,T=24,B=26,W=fH.w-L-R,H=fH.h-T-B, mx=Math.max(...h[0],...h[1]); hc.save();
+  [0,1].forEach(k=>{ hc.fillStyle=k?P.k1:P.k0; hc.globalAlpha=.55; for(let b=0;b<bins;b++){ const v=h[k][b]/mx*H; hc.fillRect(L+b/bins*W+1,T+H-v,W/bins-2,v); } });
+  // gaussian fits on the line
+  [0,1].forEach(k=>{ const ps=proj.filter((_,i)=>S.y[i]===k), mu=ps.reduce((a,b)=>a+b,0)/ps.length, sd=Math.sqrt(ps.reduce((a,b)=>a+(b-mu)**2,0)/ps.length)||1e-3; hc.globalAlpha=1; hc.strokeStyle=k?P.k1:P.k0; hc.lineWidth=2.5; hc.beginPath();
+    for(let t=0;t<=120;t++){ const v=lo+(hi-lo)*t/120, g=Math.exp(-0.5*((v-mu)/sd)**2)/(sd*Math.sqrt(2*Math.PI))*ps.length*(hi-lo)/bins; const Y=T+H-g/mx*H; t?hc.lineTo(L+t/120*W,Y):hc.moveTo(L+t/120*W,Y); } hc.stroke(); });
+  hc.fillStyle=P.ink; hc.font='600 12px Inter,system-ui,sans-serif'; hc.fillText('projections onto u',L,16); hc.restore();
+  // J curve
+  const pts=[]; for(let t=0;t<=180;t+=1) pts.push([t,Jof(t*Math.PI/180,F)]); const ot=optTheta(F);
+  const r=ML.chart(jP,[{pts,color:P.c1,width:2.5}],{x0:0,x1:180,y0:0,vline:S.theta,xl:'θ (degrees)'}); const jc=jP.ctx; jc.save(); jc.fillStyle=P.star; jc.beginPath(); jc.arc(r.fx(ot),r.fy(Jof(ot*Math.PI/180,F)),6,0,7); jc.fill(); jc.restore();
+  // overlap / accuracy along the line using midpoint threshold
+  $('#fStats').innerHTML=[['c1',fmt(Jof(th,F),3),'J(u) now'],['c5',fmt(Jof(ot*Math.PI/180,F),3),'J max'],['c4',fmt(ot,1)+'°','optimal θ']].map(([c2,v,l])=>`<div class="stat ${c2}"><b>${v}</b><span>${l}</span></div>`).join(''); }
+ML.bindRange('theta',v=>{ S.theta=v; drawFisher(); },v=>v.toFixed(1)+'°');
+$('#snap').onclick=()=>{ const F=fisherParts(); S.theta=optTheta(F); $('#theta').value=S.theta; $('#thetaOut').textContent=S.theta.toFixed(1)+'°'; drawFisher(); };
+$('#snapMean').onclick=()=>{ const F=fisherParts(); let t=Math.atan2(F.dm[1],F.dm[0])*180/Math.PI; if(t<0)t+=180; if(t>=180)t-=180; S.theta=t; $('#theta').value=t; $('#thetaOut').textContent=t.toFixed(1)+'°'; drawFisher(); };
+
+/* generative sampling */
+const gP=new ML.Plot('#gPlot');
+function chol(S2){ const a=Math.sqrt(Math.max(1e-12,S2[0][0])), b=S2[1][0]/a, c=Math.sqrt(Math.max(1e-12,S2[1][1]-b*b)); return [[a,0],[b,c]]; }
+function drawGen(){ const P=ML.palette(), m=S.m; gP.clear(); gP.grid(1); gP.points(S.X,S.y,{r:3.6,alpha:()=>.85});
+  if(S.fake){ const c=gP.ctx; c.save(); S.fake.forEach(f=>{ c.beginPath(); c.arc(gP.X(f[0]),gP.Y(f[1]),4,0,7); c.strokeStyle=f[2]?P.k1:P.k0; c.lineWidth=1.8; c.stroke(); }); c.restore(); }
+  [[m.mu0,m.C0,P.k0],[m.mu1,m.C1,P.k1]].forEach(([mu,C,col])=>gP.ellipse(mu,C,2,{color:col,width:1.5,dash:[5,4]})); }
+$('#sample').onclick=()=>{ const m=S.m, r=ML.rng(Math.floor(Math.random()*1e9)), L0=chol(m.C0), L1=chol(m.C1); S.fake=[]; for(let i=0;i<200;i++){ const k=r()<m.pi1?1:0, L=k?L1:L0, mu=k?m.mu1:m.mu0, z1=r.gauss(), z2=r.gauss(); S.fake.push([mu[0]+L[0][0]*z1, mu[1]+L[1][0]*z1+L[1][1]*z2, k]); } drawGen(); };
+
+/* controls */
+ML.datasetPicker('dsPick',S.ds,id=>{ S.ds=id; load(); draw(); });
+ML.bindSeg('mSeg',v=>{ S.type=v; draw(); });
+ML.bindRange('shrink',()=>draw(),v=>v.toFixed(2));
+ML.bindRange('prior',()=>{ $('#estPrior').checked=false; draw(); },v=>v.toFixed(2));
+$('#estPrior').onchange=draw; $('#showE').onchange=$('#showOther').onchange=draw;
+ML.bindRange('nPts',v=>{ S.n=v; load(); draw(); }); ML.bindRange('noise',v=>{ S.noise=v; load(); draw(); },v=>v.toFixed(2));
+main.onResize=draw; fP.onResize=fH.onResize=jP.onResize=drawFisher; gP.onResize=drawGen; ML.onTheme(draw);
+load(); draw();
+})();
+</script>
+</body>
+</html>
