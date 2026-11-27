@@ -171,7 +171,10 @@
 
 <section id="code" class="card">
   <h2><span class="num">7</span>The same thing in Python (PyTorch)</h2>
-<pre class="code">bn  = nn.BatchNorm1d(<span class="s">64</span>)      <span class="c"># over the batch, per feature; uses running stats in eval()</span>
+<pre class="code"><span class="k">import</span> torch
+<span class="k">import</span> torch.nn <span class="k">as</span> nn
+
+bn  = nn.BatchNorm1d(<span class="s">64</span>)      <span class="c"># over the batch, per feature; uses running stats in eval()</span>
 ln  = nn.LayerNorm(<span class="s">64</span>)        <span class="c"># over the last dimension of each example</span>
 rms = nn.RMSNorm(<span class="s">64</span>)          <span class="c"># PyTorch 2.4+; LLaMA-style</span>
 

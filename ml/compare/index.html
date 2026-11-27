@@ -140,6 +140,46 @@
   </div>
 </section>
 
+<section id="code" class="card">
+  <h2>The same comparison in Python (scikit-learn)</h2>
+  <p class="sub">One shared split per dataset, hyperparameters tuned by 5-fold cross-validation on the training rows only, and the test rows used once for the final score.</p>
+<pre class="code"><span class="k">from</span> sklearn.datasets <span class="k">import</span> make_moons, make_circles, make_classification
+<span class="k">from</span> sklearn.model_selection <span class="k">import</span> train_test_split, GridSearchCV
+<span class="k">from</span> sklearn.pipeline <span class="k">import</span> make_pipeline
+<span class="k">from</span> sklearn.preprocessing <span class="k">import</span> StandardScaler
+<span class="k">from</span> sklearn.linear_model <span class="k">import</span> LogisticRegression
+<span class="k">from</span> sklearn.discriminant_analysis <span class="k">import</span> LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
+<span class="k">from</span> sklearn.svm <span class="k">import</span> SVC
+<span class="k">from</span> sklearn.neighbors <span class="k">import</span> KNeighborsClassifier
+<span class="k">from</span> sklearn.tree <span class="k">import</span> DecisionTreeClassifier
+<span class="k">from</span> sklearn.ensemble <span class="k">import</span> RandomForestClassifier, AdaBoostClassifier
+
+datasets = {
+    <span class="s">"moons"</span>:   make_moons(n_samples=<span class="s">400</span>, noise=<span class="s">0.25</span>, random_state=<span class="s">0</span>),
+    <span class="s">"circles"</span>: make_circles(n_samples=<span class="s">400</span>, noise=<span class="s">0.1</span>, factor=<span class="s">0.5</span>, random_state=<span class="s">0</span>),
+    <span class="s">"linear"</span>:  make_classification(n_samples=<span class="s">400</span>, n_features=<span class="s">2</span>, n_redundant=<span class="s">0</span>, n_informative=<span class="s">2</span>,
+                                   n_clusters_per_class=<span class="s">1</span>, random_state=<span class="s">0</span>),
+}
+models = {   <span class="c"># estimator, hyperparameter grid (names are &lt;step&gt;__&lt;parameter&gt;)</span>
+    <span class="s">"logistic"</span>: (LogisticRegression(), {<span class="s">"logisticregression__C"</span>: [<span class="s">0.1</span>, <span class="s">1</span>, <span class="s">10</span>]}),
+    <span class="s">"LDA"</span>:      (LinearDiscriminantAnalysis(), {}),
+    <span class="s">"QDA"</span>:      (QuadraticDiscriminantAnalysis(), {}),
+    <span class="s">"RBF SVM"</span>:  (SVC(), {<span class="s">"svc__C"</span>: [<span class="s">0.1</span>, <span class="s">1</span>, <span class="s">10</span>], <span class="s">"svc__gamma"</span>: [<span class="s">0.1</span>, <span class="s">1</span>, <span class="s">10</span>]}),
+    <span class="s">"k-NN"</span>:     (KNeighborsClassifier(), {<span class="s">"kneighborsclassifier__n_neighbors"</span>: [<span class="s">3</span>, <span class="s">7</span>, <span class="s">15</span>]}),
+    <span class="s">"tree"</span>:     (DecisionTreeClassifier(random_state=<span class="s">0</span>), {<span class="s">"decisiontreeclassifier__max_depth"</span>: [<span class="s">3</span>, <span class="s">5</span>, <span class="k">None</span>]}),
+    <span class="s">"forest"</span>:   (RandomForestClassifier(random_state=<span class="s">0</span>), {}),
+    <span class="s">"AdaBoost"</span>: (AdaBoostClassifier(random_state=<span class="s">0</span>), {}),
+}
+<span class="k">for</span> dname, (X, y) <span class="k">in</span> datasets.items():
+    <span class="c"># one split, shared by every model; the test rows are only used for the final score</span>
+    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=<span class="s">0.3</span>, stratify=y, random_state=<span class="s">0</span>)
+    <span class="k">for</span> mname, (est, grid) <span class="k">in</span> models.items():
+        pipe = make_pipeline(StandardScaler(), est)
+        model = GridSearchCV(pipe, grid, cv=<span class="s">5</span>) <span class="k">if</span> grid <span class="k">else</span> pipe   <span class="c"># tune on the training rows only</span>
+        model.fit(X_tr, y_tr)
+        print(f<span class="s">"{dname:8s} {mname:9s} test accuracy {model.score(X_te, y_te):.3f}"</span>)</pre>
+</section>
+
 <p class="foot">Part of the <a href="../">Traditional ML</a> lab. Everything is computed in your browser in plain JavaScript; every model on this page is implemented from scratch in <a href="../assets/models.js">models.js</a>.</p>
 </main>
 

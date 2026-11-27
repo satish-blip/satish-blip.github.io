@@ -43,7 +43,7 @@
     <p id="exprHelp" class="help">Use <kbd>+</kbd> and <kbd>−</kbd> between words. One word on its own shows its nearest neighbours. Words are matched without regard to case.</p>
     <div class="chips" id="chips" aria-live="polite"></div>
 
-    <div class="presets" id="presets" aria-label="Try an example"></div>
+    <div class="presets" id="presets" aria-label="Try an example"><span class="plbl">Try</span><span id="presetTop" class="ptop"></span><details class="morepre" id="moreDD"><summary>More examples ▾</summary><div class="prepop" id="presetMore"></div></details></div>
 
     <div class="controls">
       <label class="toggle"><input type="checkbox" id="exclude" checked><span>Hide the input words</span></label>
@@ -80,15 +80,6 @@
     </section>
   </div>
 
-  <!-- VECTOR BARCODES -->
-  <section class="card" aria-labelledby="bcH">
-    <div class="cardhead">
-      <h2 id="bcH">Look inside the vectors</h2>
-      <p class="sub">Each strip is one word's 300 numbers, coloured <span class="neg">negative</span> to <span class="posc">positive</span>. The result strip is the sum of the strips above it, and the best answer's strip should look a lot like it.</p>
-    </div>
-    <div id="barcodes" class="barcodes"></div>
-  </section>
-
   <!-- GALAXY -->
   <section class="card" aria-labelledby="galH">
     <div class="cardhead row">
@@ -97,6 +88,9 @@
         <p class="sub">219 hand-picked words squeezed from 300 dimensions to 2. Similar words cluster. Click a word to use it in the calculator.</p>
       </div>
       <div class="galctl">
+        <details class="catdd" id="catDD"><summary><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>Filter categories <span id="catCount"></span> ▾</summary>
+          <div class="catpop"><div class="catall"><button type="button" class="linkbtn" data-all="1">Show all</button><button type="button" class="linkbtn" data-all="0">Hide all</button></div><div class="catlegend" id="catLegend"></div></div>
+        </details>
         <div class="seg" role="radiogroup" aria-label="Projection">
           <button type="button" role="radio" aria-checked="true" data-p="tsne" class="on">t-SNE</button>
           <button type="button" role="radio" aria-checked="false" data-p="pca">PCA</button>
@@ -108,21 +102,29 @@
         </div>
       </div>
     </div>
-    <div class="catlegend" id="catLegend"></div>
     <div class="mapbox gal"><svg id="galaxy" role="img" aria-label="Map of 219 words grouped by meaning"></svg><div class="tip" id="galTip" hidden></div></div>
     <p class="note" id="galNote">t-SNE keeps neighbours together but bends distances, so only trust who is near whom. PCA is a straight projection, so distances are more honest, but most of the 300 dimensions are flattened away. In both views points are nudged apart slightly so the labels fit.</p>
   </section>
 
-  <!-- HOW IT WORKS -->
-  <section class="card how" aria-labelledby="howH">
-    <h2 id="howH">How it works</h2>
-    <div class="steps">
-      <div class="step c1"><span>1</span><h3>Look up the vectors</h3><p>Each word maps to a unit-length vector <b>v</b> with 300 numbers. Words used in similar contexts get similar vectors.</p></div>
-      <div class="step c2"><span>2</span><h3>Add and subtract</h3><p><b>t</b> = v<sub>king</sub> − v<sub>man</sub> + v<sub>woman</sub>. The step from <i>man</i> to <i>king</i> acts like a "royalty" direction, and we apply it to <i>woman</i>.</p></div>
-      <div class="step c3"><span>3</span><h3>Find the closest word</h3><p>Score every one of the 100,000 words by cosine similarity, cos(<b>t</b>, <b>v</b>) = <b>t</b>·<b>v</b> / (‖<b>t</b>‖‖<b>v</b>‖), and rank them.</p></div>
-      <div class="step c4"><span>4</span><h3>Skip the inputs</h3><p>The input words are usually closest to the result (here <i>king</i> itself), so by convention they are hidden. Untick the box above to see this.</p></div>
+  <!-- GO DEEPER: the maths, the raw vectors and how it works, folded behind tabs -->
+  <section class="card how deep" aria-labelledby="deepH">
+    <div class="cardhead row">
+      <div>
+        <h2 id="deepH">Go deeper</h2>
+        <p class="sub">The maths behind the answer, the raw 300 numbers of each word, and how the calculator works. Open a tab; open it again to fold it away.</p>
+      </div>
+      <div class="seg deeptabs" role="tablist" aria-label="Go deeper">
+        <button type="button" role="tab" aria-selected="false" aria-controls="dpVec" data-d="vec">300-D vectors</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="dpMath" data-d="math">Math</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="dpHow" data-d="how">How it works</button>
+      </div>
     </div>
-    <div class="explain">
+    <div class="deep-p" id="dpVec" role="tabpanel" data-p="vec" hidden>
+      <p class="sub">Each strip is one word's 300 numbers, coloured <span class="neg">negative</span> to <span class="posc">positive</span>. The result strip is the sum of the strips above it, and the best answer's strip should look a lot like it.</p>
+      <div id="barcodes" class="barcodes"></div>
+    </div>
+    <div class="deep-p" id="dpMath" role="tabpanel" data-p="math" hidden>
+      <div class="explain">
       <h3>Why the score splits into bars</h3>
       <p>For unit vectors, cos(<b>t</b>, <b>v</b>) = [cos(v, king) − cos(v, man) + cos(v, woman)] / ‖<b>t</b>‖. So a candidate wins by being like the words you added and unlike the words you subtracted. The coloured bars in "Nearby options" are exactly those three terms, which is why <i>queen</i> beats <i>monarch</i>: both are very like <i>king</i>, but <i>queen</i> is much more like <i>woman</i>.</p>
       <h3>3CosAdd and 3CosMul</h3>
@@ -136,11 +138,20 @@
       <h3>About the data</h3>
       <p>The vectors are the 100,000 most frequent single words (letters only) from Google's pretrained word2vec model (GoogleNews-vectors-negative300, skip-gram with negative sampling). To fit a static web page each number is stored in 4 bits with one scale per word, which shrinks 120&nbsp;MB to 15&nbsp;MB. On the standard Google analogy test this scores 76.6% versus 76.8% for the full-precision vectors. Everything runs in your browser; nothing you type is sent anywhere.</p>
     </div>
+    </div>
+    <div class="deep-p" id="dpHow" role="tabpanel" data-p="how" hidden>
+      <div class="steps">
+      <div class="step c1"><span>1</span><h3>Look up the vectors</h3><p>Each word maps to a unit-length vector <b>v</b> with 300 numbers. Words used in similar contexts get similar vectors.</p></div>
+      <div class="step c2"><span>2</span><h3>Add and subtract</h3><p><b>t</b> = v<sub>king</sub> − v<sub>man</sub> + v<sub>woman</sub>. The step from <i>man</i> to <i>king</i> acts like a "royalty" direction, and we apply it to <i>woman</i>.</p></div>
+      <div class="step c3"><span>3</span><h3>Find the closest word</h3><p>Score every one of the 100,000 words by cosine similarity, cos(<b>t</b>, <b>v</b>) = <b>t</b>·<b>v</b> / (‖<b>t</b>‖‖<b>v</b>‖), and rank them.</p></div>
+      <div class="step c4"><span>4</span><h3>Skip the inputs</h3><p>The input words are usually closest to the result (here <i>king</i> itself), so by convention they are hidden. Untick the box above to see this.</p></div>
+    </div>
+    </div>
   </section>
 </main>
 
 <footer class="foot wrap">
-  <p>Built by <a href="../">Satish Thuwal</a> while studying ML at IIT Bombay. Vectors: Mikolov et al., "Distributed Representations of Words and Phrases and their Compositionality" (2013).</p>
+  <p>Built by <a href="../">Satish Thuwal</a>. Vectors: Mikolov et al., "Distributed Representations of Words and Phrases and their Compositionality" (2013).</p>
 </footer>
 <script src="w2v.js"></script>
 <script src="../site.js"></script>

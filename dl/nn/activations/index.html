@@ -20,7 +20,7 @@
   <p class="kicker">Deep Learning &middot; Foundations</p>
   <h1>Activation functions: the <span class="grad">non-linearity</span></h1>
   <p class="lede">Without an activation function, a 100-layer network is just one matrix: a straight line. The activation is what lets networks bend. But its shape also decides how well gradients survive the trip back through many layers. Compare them, train with each one, and watch gradients vanish.</p>
-  <div class="toc"><a href="#intro">0 · Start here</a><a href="#gallery">1 · The functions</a><a href="#why">2 · Why non-linearity</a><a href="#vanish">3 · Vanishing gradients</a><a href="#dead">4 · Dead ReLUs</a><a href="#guide">5 · Which to use</a></div>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#gallery">1 · The functions</a><a href="#why">2 · Why non-linearity</a><a href="#vanish">3 · Vanishing gradients</a><a href="#dead">4 · Dead ReLUs</a><a href="#guide">5 · Which to use</a><a href="#code">6 · Python</a></div>
 </section>
 
 <section id="intro" class="card intro">
@@ -122,6 +122,31 @@
     <tr><td>Softmax</td><td style="text-align:left">\(e^{z_k}/\sum_je^{z_j}\)</td><td>simplex</td><td>–</td><td>–</td><td style="text-align:left;white-space:normal">Output layer for multi-class; inside <a href="../../nlp/attention/">attention</a></td></tr>
   </table></div>
 </section>
+<section id="code" class="card">
+  <h2><span class="num">6</span>The same thing in Python (PyTorch)</h2>
+  <p class="sub">Each activation and its slope with autograd, then the vanishing-gradient experiment from section 3 on a 10-layer network.</p>
+<pre class="code"><span class="k">import</span> torch
+<span class="k">import</span> torch.nn <span class="k">as</span> nn
+<span class="k">import</span> torch.nn.functional <span class="k">as</span> F
+
+x = torch.linspace(-<span class="s">4</span>, <span class="s">4</span>, <span class="s">81</span>, requires_grad=<span class="k">True</span>)
+acts = {<span class="s">"sigmoid"</span>: torch.sigmoid, <span class="s">"tanh"</span>: torch.tanh, <span class="s">"relu"</span>: F.relu,
+        <span class="s">"leaky relu"</span>: <span class="k">lambda</span> t: F.leaky_relu(t, <span class="s">0.01</span>), <span class="s">"elu"</span>: F.elu, <span class="s">"gelu"</span>: F.gelu, <span class="s">"silu"</span>: F.silu}
+<span class="k">for</span> name, f <span class="k">in</span> acts.items():
+    (g,) = torch.autograd.grad(f(x).sum(), x)       <span class="c"># the derivative at every x</span>
+    print(f<span class="s">"{name:10s} largest slope {g.max().item():.2f}"</span>)   <span class="c"># sigmoid 0.25, tanh 1.00, relu 1.00</span>
+
+<span class="c"># vanishing gradients: the same 10-layer network with sigmoid and with ReLU</span>
+<span class="k">for</span> act <span class="k">in</span> (nn.Sigmoid(), nn.ReLU()):
+    torch.manual_seed(<span class="s">0</span>)
+    layers = []
+    <span class="k">for</span> _ <span class="k">in</span> range(<span class="s">10</span>):
+        layers += [nn.Linear(<span class="s">64</span>, <span class="s">64</span>), act]
+    net = nn.Sequential(*layers, nn.Linear(<span class="s">64</span>, <span class="s">1</span>))
+    net(torch.randn(<span class="s">32</span>, <span class="s">64</span>)).sum().backward()
+    print(type(act).__name__, <span class="s">"first-layer gradient norm"</span>, net[<span class="s">0</span>].weight.grad.norm().item())   <span class="c"># tiny for sigmoid</span></pre>
+</section>
+
 <p class="foot">Part of the <a href="../">neural network foundations</a> series. Everything runs in your browser.</p>
 </main>
 <script src="../../../ml/assets/core.js"></script>
