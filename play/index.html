@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head><meta name="robots" content="noai, noimageai"><meta name="copyright" content="(c) Satish Thuwal. All rights reserved.">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Play: hands-on machine learning tools | Satish Thuwal</title>
+<meta name="description" content="Start here for the Play section: a quick-start guide and a tour of every feature of the ML Playground, GLM Pricing Studio, Reserving Playground, Word2vec and the DL lab. Everything runs in your browser.">
+<link rel="canonical" href="https://satish-blip.github.io/play/">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../ml/assets/ml.css">
+<link rel="stylesheet" href="../ml/playground/pg.css">
+<link rel="stylesheet" href="play.css">
+<script defer src="../ml/assets/core.js"></script>
+<script defer src="play.js"></script>
+</head>
+<body class="playhome">
+<header class="top"><div class="wrap top-in"><a class="home" href="../">&larr; Home</a><a class="sect" href="./" aria-current="page">Play</a><nav class="algnav playnav" aria-label="Play"><a class="on" href="./" aria-current="page">Start here</a><a href="../ml/playground/">ML Playground</a><a href="../ml/glm-studio/">GLM pricing</a><a href="../ml/reserving/">Reserving</a><a href="../word2vec/">Word2vec</a><a href="../dl/lab/">DL lab</a><a href="../learn/start/">Learn ML &rarr;</a></nav></div></header>
+
+<main class="wrap ph-main" id="main">
+<section class="ph-hero">
+  <p class="ph-kicker">Play · start here</p>
+  <h1><span class="grad">Machine learning you can touch.</span></h1>
+  <p class="ph-lede">Five hands-on tools that run entirely in your browser: build and explain models without writing code, price insurance with a GLM, set claims reserves, do arithmetic with word meanings and watch a neural network learn. Nothing you load ever leaves your computer.</p>
+  <div class="ph-cta"><a class="btn primary" href="#quick">Quick start (2 minutes)</a><a class="btn" href="../ml/playground/">Open the ML Playground &rarr;</a><a class="btn" href="#features">See every feature</a></div>
+</section>
+
+<section class="ph-sec" id="quick" data-n="1">
+  <div class="ph-head"><span class="ph-num">1</span><div><h2>Quick start</h2><p>Your first model in four steps. Each step names the button to press.</p></div></div>
+  <ol class="ph-steps">
+    <li><b>Pick a tool.</b> New to machine learning? Start with the <a href="../ml/playground/">ML Playground</a>. Working in insurance pricing? Start with <a href="../ml/glm-studio/">GLM pricing</a>. The tools are described one by one <a href="#tools">below</a>.</li>
+    <li><b>Load data.</b> Every tool opens with a ready-made sample, so you can press on straight away. In the Playground, choose another sample from the <i>Sample datasets</i> drop-down, or drop in your own CSV under <i>Your own data</i> and pick the column to predict (the <i>target</i>).</li>
+    <li><b>Run it.</b> Follow the numbered stages in the left sidebar from top to bottom. In the Playground press <b>Train &amp; evaluate</b> at the <i>Model training</i> stage; in GLM pricing press <b>Fit GLM</b>. Defaults are sensible, so you can change settings later.</li>
+    <li><b>Read and explore.</b> Check the scores, then switch the view at the top to <b>Dependency</b> to see how every input travels to the prediction and how much the prediction moves when you change one input. Every panel has a <b>Learn</b> link to the lesson behind it and a <b>&lt;/&gt; Code</b> button with the matching Python.</li>
+  </ol>
+  <p class="ph-note">Stuck at any point? Press <b>? Help</b> in the tool’s header, or the small <b>?</b> beside any setting: it says what the setting does, what turning it up or down changes, and why.</p>
+</section>
+
+<section class="ph-sec" id="tools" data-n="2">
+  <div class="ph-head"><span class="ph-num">2</span><div><h2>Pick a tool</h2><p>Slide sideways or use the arrows. Each card says what the tool is for and what to try first.</p></div></div>
+  <div class="ph-tilewrap"><button class="ph-arrow l" type="button" aria-label="Previous tools" data-tiles="-1">&lsaquo;</button>
+  <div class="ph-tiles" id="phTiles">
+    <article class="ph-tile t1"><p class="ph-tag">No-code ML</p><h3>ML Playground</h3><p>A complete modelling workflow: import, check the data, build a preprocessing pipeline, train any of 24 models, tune, evaluate, explain and export the Python.</p><p class="ph-try"><b>Try first:</b> the Rice grains sample, Random forest, then the Dependency view.</p><a class="btn primary" href="../ml/playground/">Open the Playground</a></article>
+    <article class="ph-tile t2"><p class="ph-tag">Insurance pricing</p><h3>GLM Pricing Studio</h3><p>Fit a pricing GLM the way pricing actuaries do: exposure offsets, Poisson, gamma and Tweedie families, bands, base levels, relativities, lift and Gini, then the statsmodels code.</p><p class="ph-try"><b>Try first:</b> the motor portfolio, Claim frequency, Fit GLM, then the Relativities stage.</p><a class="btn primary" href="../ml/glm-studio/">Open GLM pricing</a></article>
+    <article class="ph-tile t3"><p class="ph-tag">Claims reserving</p><h3>Reserving Playground</h3><p>From a claims triangle to reserves: link ratios, chain ladder, Bornhuetter–Ferguson, Cape Cod, Mack, the over-dispersed Poisson GLM, bootstraps and one-year risk.</p><p class="ph-try"><b>Try first:</b> the Taylor &amp; Ashe triangle, then Mack for the prediction error.</p><a class="btn primary" href="../ml/reserving/">Open Reserving</a></article>
+    <article class="ph-tile t4"><p class="ph-tag">Word meanings</p><h3>Word2vec</h3><p>Arithmetic with word vectors trained on Google News: king − man + woman ≈ queen, the nearest words to any answer, 2-D maps and a look inside the vectors.</p><p class="ph-try"><b>Try first:</b> one of the ready-made analogies, then type your own.</p><a class="btn primary" href="../word2vec/">Open Word2vec</a></article>
+    <article class="ph-tile t5"><p class="ph-tag">Deep learning</p><h3>DL lab</h3><p>Three sandboxes: a convolution sandbox with your own images and kernels, a backpropagation and gradient-flow visualiser, and a self-attention explorer for your own sentences.</p><p class="ph-try"><b>Try first:</b> the edge-detection kernel in the convolution sandbox.</p><a class="btn primary" href="../dl/lab/">Open the DL lab</a></article>
+  </div>
+  <button class="ph-arrow r" type="button" aria-label="Next tools" data-tiles="1">&rsaquo;</button></div>
+</section>
+
+<section class="ph-sec" id="how" data-n="3">
+  <div class="ph-head"><span class="ph-num">3</span><div><h2>How every tool is laid out</h2><p>The Playground, GLM pricing and Reserving share one layout, so once you know one you know them all.</p></div></div>
+  <div class="ph-grid">
+    <div class="ph-card"><h3>Header</h3><p>Status pills show the loaded data, target and model. On the right: <b>? Help</b>, the light/dark switch, <b>Verbose / Clean</b> (Clean folds long descriptions behind an ⓘ) and <b>Details</b>, a side panel with a summary of your session and an outline of the current screen.</p></div>
+    <div class="ph-card"><h3>Sidebar of stages</h3><p>The numbered stages on the left are the workflow in order. Click any stage to jump to it; a tick shows what is done. The ‹ button folds the sidebar to icons to give the workspace more room.</p></div>
+    <div class="ph-card"><h3>Four views of the same model</h3><p><b>Tabs</b>: the stages one at a time. <b>Workflow</b>: drag-and-drop boxes on a canvas. <b>Statistical</b>: the fitted model written as equations with your numbers. <b>Dependency</b>: a column-by-column graph from each input to the prediction, plus what-if controls.</p></div>
+    <div class="ph-card"><h3>Panels</h3><p>Each panel has <b>⌃</b> to fold it away and <b>⛶</b> to open it full screen (Esc closes). <b>&lt;/&gt; Code</b> opens a drawer with the Python for that panel and the JavaScript that runs on the page. <b>Learn</b> opens the matching lesson in a new tab.</p></div>
+    <div class="ph-card"><h3>The “?” explainers</h3><p>Every setting has a <b>?</b>. It explains what the setting is, what a higher or lower value does to the result, what each option means and the rule of thumb behind the default.</p></div>
+    <div class="ph-card"><h3>Your data stays with you</h3><p>Files are read by your browser and never uploaded. Settings, theme and folded panels are remembered on this device only. Export the settings to pick up later or on another computer.</p></div>
+  </div>
+</section>
+
+<section class="ph-sec" id="features" data-n="4">
+  <div class="ph-head"><span class="ph-num">4</span><div><h2>Every feature, tool by tool</h2><p>Choose a tool to see everything it can do, stage by stage.</p></div></div>
+  <div class="ph-pick"><label for="phTool">Tool</label><select id="phTool"><option value="pg">ML Playground</option><option value="glm">GLM Pricing Studio</option><option value="res">Reserving Playground</option><option value="w2v">Word2vec</option><option value="dl">DL lab</option></select></div>
+  <div class="ph-panels">
+    <div class="ph-panel on" data-tool="pg">
+      <div class="ph-flist">
+        <details open><summary><span>1</span>Import data</summary><p>Nine samples (rice grains, iris, wine, breast cancer, diabetes, customer churn with messy values, house prices, two moons, sparse regression), or your own CSV by upload, paste or URL. Set each column’s type and role (feature, target or ignore) and the task (classification or regression).</p></details>
+        <details><summary><span>2</span>EDA: data checks and visuals</summary><p>Health checks with one-click fixes (missing values, duplicates, constant columns, skew, outliers, leakage hints), column profiles, the target’s distribution, an interactive chart explorer, transforms and feature scales, correlation with VIF, and t-SNE / PCA maps of the rows.</p></details>
+        <details><summary><span>3</span>Preprocessing</summary><p>Train / test split (random or stratified) and cross-validation, missing-value imputation, outlier clipping or removal, category encoding (one-hot or ordinal), scaling (standard, min–max, robust, max-abs) and class balancing (class weights, over-sampling, SMOTE). Every step is fitted on the training rows only, so nothing leaks.</p></details>
+        <details><summary><span>4</span>Feature engineering</summary><p>Skew transforms (log, square root, Yeo–Johnson), polynomial and interaction features, feature selection (variance, best-k, L1, tree importance, RFE or manual) and dimensionality reduction with PCA.</p></details>
+        <details><summary><span>5</span>Model training</summary><p>24 models written from scratch and checked against scikit-learn: linear and logistic regression, ridge, lasso, elastic net, ridge classifier, k-nearest neighbours, naive Bayes, LDA, QDA, decision trees, random forests, extra trees, AdaBoost, gradient boosting, support vector machines and regression, and kernel ridge. Every hyperparameter has a “?” explainer.</p></details>
+        <details><summary><span>6</span>Hyperparameter tuning</summary><p>Cross-validated grid search over one or two hyperparameters with a heat map of the scores and the best setting applied in one click.</p></details>
+        <details><summary><span>7</span>Evaluation</summary><p>Train, cross-validation and test scores; the pipeline graph (what each stage did to the data); diagnostics (confusion matrix, ROC and PR curves, calibration, threshold, residual plots); statistics (statsmodels-style OLS and logit tables); model comparison on the same pipeline; and predictions for new rows, test-set rows or a whole CSV.</p></details>
+        <details><summary><span>8</span>Explainability</summary><p>Feature importance, permutation importance, the decision surface and learning curves. For one row at a time, use the <b>Dependency</b> view.</p></details>
+        <details><summary><span>9</span>Export</summary><p>The full Python script or a Jupyter notebook, the predictions as CSV, your settings as JSON, a printable report, the experiment history, and a button that runs the exported Python in your browser (Pyodide).</p></details>
+        <details><summary><span>V</span>Views: Workflow, Statistical, Dependency</summary><p><b>Workflow</b> rebuilds the pipeline as drag-and-drop boxes with a properties panel. <b>Statistical</b> writes the trained model as equations: its objective, the fitted weights, tree diagrams and one test row worked through. <b>Dependency</b> draws a column-by-column graph (inputs → preparation → model columns → inside the model → prediction) for any row, shows what each input added (Shapley values), the swing of the prediction when only one input changes, and a what-if slider with the curve for this row and the average over many rows.</p></details>
+      </div>
+    </div>
+    <div class="ph-panel" data-tool="glm">
+      <div class="ph-flist">
+        <details open><summary><span>1</span>Data</summary><p>A synthetic motor portfolio with known true relativities, plus real data sets loaded on demand: medical insurance charges, health-to-motor cross-sell, the CoIL 2000 caravan set and a French motor (freMTPL2) sample. Or your own CSV. Map the exposure, claim count and claim amount columns.</p></details>
+        <details><summary><span>2</span>One-way analysis</summary><p>Actual experience by factor with exposure bars, two-way tables and consistency over time, so you can see each factor before modelling.</p></details>
+        <details><summary><span>3</span>Model</summary><p>Task (frequency, severity, pure premium, claim probability or a custom response), family (Poisson, quasi-Poisson, negative binomial, gamma, inverse Gaussian, log-normal, Tweedie, binomial) and link, offset and weights, factor types (categorical, banded, linear, log, quadratic, piecewise linear), base levels, level merging, interactions and ridge / lasso / elastic-net penalties.</p></details>
+        <details><summary><span>4</span>Relativities</summary><p>Fitted relativities with 95% intervals, the coefficient table, fit statistics and “change a relativity and see what moves” (lock a level, refit the rest).</p></details>
+        <details><summary><span>5</span>Validation</summary><p>Actual versus predicted, quantile plots, lift and double lift, Gini and ROC, residual checks, Cook’s distance and k-fold cross-validation (some marked Advanced).</p></details>
+        <details><summary><span>6</span>Predict</summary><p>Type a policy’s details and watch its price build up from the base rate, factor by factor; compare saved models on one policy; score a CSV.</p></details>
+        <details><summary><span>7</span>Compare &amp; export</summary><p>Saved models side by side, F-tests and likelihood-ratio tests, checks against the CAS GLM monograph, and the statsmodels code for the whole model.</p></details>
+        <details><summary><span>V</span>Views and modes</summary><p><b>Basic / Advanced</b> switches the niche actuarial checks on and off. <b>Workflow</b>, <b>Statistical</b> and <b>Dependency</b> views work as in the Playground; in the Dependency view each factor’s contribution is exact (its relativity for this policy), and the what-if control shows how the price moves when one factor changes.</p></details>
+      </div>
+    </div>
+    <div class="ph-panel" data-tool="res">
+      <div class="ph-flist">
+        <details open><summary><span>1</span>Triangle</summary><p>Load a claims triangle: the Taylor &amp; Ashe sample, other published triangles, or paste or upload your own, cumulative or incremental.</p></details>
+        <details><summary><span>2</span>Development factors</summary><p>Link ratios, a choice of averages for the development factors, and tail factors.</p></details>
+        <details><summary><span>3</span>Deterministic methods</summary><p>Chain ladder, Bornhuetter–Ferguson and Cape Cod with the reserve by origin year.</p></details>
+        <details><summary><span>4</span>Mack</summary><p>The prediction error of the chain-ladder reserve, by origin year and in total.</p></details>
+        <details><summary><span>5</span>ODP &amp; bootstrap</summary><p>The over-dispersed Poisson GLM and bootstrap simulations of the reserve distribution.</p></details>
+        <details><summary><span>6</span>One-year risk</summary><p>Merz–Wüthrich: how much the reserve estimate can move over the next year.</p></details>
+        <details><summary><span>7</span>Compare &amp; export</summary><p>Every method side by side with its error and percentiles, checks against the textbook, a CSV of the results and the full Python script.</p></details>
+      </div>
+    </div>
+    <div class="ph-panel" data-tool="w2v">
+      <div class="ph-flist">
+        <details open><summary><span>1</span>Word calculator</summary><p>Add and subtract words (king − man + woman) using 100,000 real word2vec vectors.</p></details>
+        <details><summary><span>2</span>Nearby options</summary><p>The closest words to the answer, with their similarity scores.</p></details>
+        <details><summary><span>3</span>The calculation in 2D</summary><p>The vectors of your sum drawn on a flat map so you can see the arithmetic.</p></details>
+        <details><summary><span>4</span>Look inside the vectors</summary><p>The numbers that make up each word, side by side.</p></details>
+        <details><summary><span>5</span>Word galaxy</summary><p>Thousands of words on one map, where similar words sit together.</p></details>
+        <details><summary><span>6</span>How it works</summary><p>The idea behind word2vec in plain words, with a link to the lesson.</p></details>
+      </div>
+    </div>
+    <div class="ph-panel" data-tool="dl">
+      <div class="ph-flist">
+        <details open><summary><span>1</span>Convolution sandbox</summary><p>Slide a kernel over a picture (a sample or your own), choose a preset kernel or edit its numbers, set the stride and pooling, see the resulting feature map, and compare every preset on the same picture.</p></details>
+        <details><summary><span>2</span>Backprop visualiser</summary><p>A small network learning live on a 2-D data set you choose: set the layers, width, learning rate and initialisation, follow one example step by step, and watch the loss and the gradient flow layer by layer.</p></details>
+        <details><summary><span>3</span>Attention explorer</summary><p>Type a sentence and see the self-attention matrix as a heat map (which word looks at which), one query in detail, and all heads at once for multi-head attention.</p></details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ph-sec" id="faq" data-n="5">
+  <div class="ph-head"><span class="ph-num">5</span><div><h2>Questions</h2><p>Short answers to what people ask most.</p></div></div>
+  <div class="ph-flist faq">
+    <details><summary>Do I need to install anything or write code?</summary><p>No. Everything runs in the browser. Code is there when you want it: every panel’s <b>&lt;/&gt; Code</b> button shows the matching Python.</p></details>
+    <details><summary>Is my data uploaded anywhere?</summary><p>No. Your file is read on your own computer and never sent to a server.</p></details>
+    <details><summary>Why do my numbers differ slightly from Python?</summary><p>The models match scikit-learn and statsmodels, but random splits use a different random-number generator, so the exact rows in each split can differ. With the same split the numbers agree.</p></details>
+    <details><summary>Where do I learn the theory?</summary><p>Every panel has a <b>Learn</b> link to the lesson behind it, and the <a href="../learn/start/">Learn section</a> has the full path from the maths up to transformers.</p></details>
+    <details><summary>The page looks out of date after an update.</summary><p>Hard-refresh: Ctrl + Shift + R on Windows and Linux, Cmd + Shift + R on a Mac.</p></details>
+  </div>
+</section>
+</main>
+</body>
+</html>

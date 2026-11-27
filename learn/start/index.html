@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head><meta name="robots" content="noai, noimageai"><meta name="copyright" content="(c) Satish Thuwal. All rights reserved.">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learn: start here | Satish Thuwal</title>
+<meta name="description" content="Start here for the Learn section: how the ten-step learning path is organised, where to begin, a quick-start guide and a tour of every feature of the interactive lessons.">
+<meta name="theme-color" content="#0f0c29">
+<link rel="canonical" href="https://satish-blip.github.io/learn/start/">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../style.css">
+<link rel="stylesheet" href="start.css">
+</head>
+<body class="subpage p-learn lstart">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="../../" aria-label="Satish Thuwal, home">Satish Thuwal<span class="brand-tag">FIAI</span></a>
+    <nav aria-label="Site"><a href="../../about/"><span class="dot d-about" aria-hidden="true"></span>About</a><a href="../../projects/"><span class="dot d-projects" aria-hidden="true"></span>Projects</a><a href="../../learn/start/" aria-current="page"><span class="dot d-learn" aria-hidden="true"></span>Learn</a><a href="../../play/"><span class="dot d-ml" aria-hidden="true"></span>Play</a></nav>
+  </div>
+</header>
+<main id="main" class="ls-main">
+  <section class="ls-hero wrap">
+    <p class="ls-kicker">Learn · start here</p>
+    <h1>Machine learning and deep learning, one step at a time.</h1>
+    <p class="ls-lede">Ten steps from the maths you need to transformers, reinforcement learning and putting models into production. Every lesson explains the idea in plain words first, then lets you play with it: drag points, move sliders, step through algorithms line by line and train small models live in your browser.</p>
+    <div class="ls-cta"><a class="ls-btn primary" href="../#ml-math">Begin at Step 1: Maths</a><a class="ls-btn" href="../">See the whole learning path &rarr;</a><a class="ls-btn" href="#lesson">How a lesson works</a></div>
+  </section>
+
+  <section class="ls-sec wrap" id="quick" data-n="1">
+    <div class="ls-head"><span class="ls-num">1</span><div><h2>Quick start</h2><p>Four steps to get the most out of the lessons.</p></div></div>
+    <ol class="ls-steps">
+      <li><b>Choose where to begin.</b> New to the subject: start at Step 1 (maths). Comfortable with probability and matrices: start at Step 2 (traditional ML). Know the classic algorithms: start at Step 3 (neural networks). Each card <a href="#where">below</a> says who it suits.</li>
+      <li><b>Read the plain-words opening.</b> Each lesson starts with what the method does and why, before any formula. A dotted word is a glossary term: click it for a short definition and a link to its full explanation.</li>
+      <li><b>Play with every lab.</b> Change the data, drag the points and move the sliders; the plot and the numbers beside it update at once. Use <b>Watch it run</b> to step through an algorithm line by line.</li>
+      <li><b>Practise in Play.</b> When a lesson clicks, try the method on real data in the <a href="../../ml/playground/">ML Playground</a>: its panels link back to the lessons, so the two work together.</li>
+    </ol>
+  </section>
+
+  <section class="ls-sec wrap" id="where" data-n="2">
+    <div class="ls-head"><span class="ls-num">2</span><div><h2>The learning path</h2><p>The steps are in learning order: each builds on the ones before. Slide sideways to see all ten; each card opens that step.</p></div></div>
+    <div class="ls-tilewrap"><button class="ls-arrow" type="button" aria-label="Previous steps" data-tiles="-1">&lsaquo;</button>
+    <div class="ls-tiles" id="lsTiles">
+      <a class="ls-tile" href="../#ml-math" style="--sc:#7dd3fc"><span class="ls-step">Step 1</span><h3>Maths foundations</h3><p>Probability and statistics (Bayes, maximum likelihood, inference), linear algebra (vectors, matrices, decompositions) and calculus and optimisation.</p><span class="ls-for">Start here if the formulas in ML papers look unfamiliar.</span></a>
+      <a class="ls-tile" href="../#ml-traditional" style="--sc:#fdba74"><span class="ls-step">Step 2</span><h3>Traditional ML</h3><p>Linear and logistic regression, trees, ensembles, SVMs, PCA; then unsupervised learning, time series, evaluating models, explaining models and applied ML.</p><span class="ls-for">Start here if you know the maths but not the algorithms.</span></a>
+      <a class="ls-tile" href="../#ml-nn" style="--sc:#f9a8d4"><span class="ls-step">Step 3</span><h3>Neural networks</h3><p>The multilayer perceptron, activations, optimisers, residual connections and normalisation: how networks learn and go deep.</p><span class="ls-for">Start here if you know classic ML.</span></a>
+      <a class="ls-tile" href="../#ml-rnn" style="--sc:#5eead4"><span class="ls-step">Step 4</span><h3>Recurrent networks</h3><p>Networks with memory for sequences: the RNN through time, and the LSTM and GRU gates.</p><span class="ls-for">Needs Step 3.</span></a>
+      <a class="ls-tile" href="../#ml-nlp" style="--sc:#fdba74"><span class="ls-step">Step 5</span><h3>NLP &amp; transformers</h3><p>Tokens and embeddings, attention in all its forms, the transformer, retrieval-augmented generation, prompting, LLM pre-training and post-training, and AI agents.</p><span class="ls-for">Needs Steps 3 and 4.</span></a>
+      <a class="ls-tile" href="../#ml-mm" style="--sc:#a5b4fc"><span class="ls-step">Step 6</span><h3>Vision &amp; multimodal</h3><p>Convolutions and CNNs, detection and segmentation, images as tokens and models that read images and text together, then generative models, self-supervised learning and audio.</p><span class="ls-for">Needs Steps 3 and 5.</span></a>
+      <a class="ls-tile" href="../#ml-eff" style="--sc:#fde047"><span class="ls-step">Step 7</span><h3>Efficient deep learning</h3><p>Making trained models small and fast: quantisation, pruning, distillation and efficient architectures.</p><span class="ls-for">Needs Steps 3 to 6.</span></a>
+      <a class="ls-tile" href="../#ml-rl" style="--sc:#86efac"><span class="ls-step">Step 8</span><h3>Reinforcement learning</h3><p>Learning to act from rewards: Markov decision processes, Bellman equations and bandits, then Q-learning, DQN, policy gradients and PPO.</p><span class="ls-for">Needs Steps 1 and 3.</span></a>
+      <a class="ls-tile" href="../#ml-gnn" style="--sc:#c4b5fd"><span class="ls-step">Step 9</span><h3>Graph neural networks</h3><p>Learning from connections: graphs as matrices, message passing, graph convolution and attention.</p><span class="ls-for">Needs Steps 1 and 3.</span></a>
+      <a class="ls-tile" href="../#ml-ops" style="--sc:#67e8f9"><span class="ls-step">Step 10</span><h3>MLOps &amp; responsible AI</h3><p>Serving, feature stores, drift monitoring and safe releases; then fairness, robustness, security and privacy.</p><span class="ls-for">For anyone shipping a model.</span></a>
+    </div>
+    <button class="ls-arrow" type="button" aria-label="Next steps" data-tiles="1">&rsaquo;</button></div>
+  </section>
+
+  <section class="ls-sec wrap" id="lesson" data-n="3">
+    <div class="ls-head"><span class="ls-num">3</span><div><h2>How a lesson works</h2><p>Every lesson page has the same parts, in the same order. Open one to see the details.</p></div></div>
+    <div class="ls-flist">
+      <details open><summary><span>1</span>Plain-words opening</summary><p>What the method does, when to use it and the intuition, with no jargon taken for granted. The maths comes after, and every plot sits beside the explanation it illustrates.</p></details>
+      <details><summary><span>2</span>Glossary pop-ups</summary><p>Technical words are links with a dotted underline. Click one for a short definition and a link to the section that explains it fully, so you can fill a gap without losing your place.</p></details>
+      <details><summary><span>3</span>Interactive labs</summary><p>Plots you can change: pick a data set, drag points, move sliders. Controls sit under the plot and the numbers update live. On a wide screen the plot stays in view while you read the text beside it.</p></details>
+      <details><summary><span>4</span>“Watch it run” animations</summary><p>Algorithms step by step next to their pseudocode: play, pause, step forward or back, drag the slider, change the speed (0.25× to 2×) or click a line of pseudocode to jump to it.</p></details>
+      <details><summary><span>5</span>Evolution timelines</summary><p>Each step opens with a timeline from the first idea to today’s state of the art, so you see why each method was invented.</p></details>
+      <details><summary><span>6</span>Python and credits</summary><p>Most lessons end with the Python to do the same thing with standard libraries, and credit the books and guides they draw on.</p></details>
+      <details><summary><span>7</span>Check yourself</summary><p>Some lessons have short quizzes with the answer explained, so you can test what stuck before moving on.</p></details>
+      <details><summary><span>8</span>The sidebar and “On this page”</summary><p>On a wide screen the left sidebar is the whole learning path with a <b>Find a topic</b> box; the right panel lists the sections of the current page with previous and next lessons. Both fold away to give the lesson more room.</p></details>
+      <details><summary><span>9</span>Text level, theme and your place</summary><p>The <b>Text</b> setting in the sidebar switches between Verbose and Clean (Clean folds the long hints). Pages remember where you were, so coming back puts you at the same spot.</p></details>
+    </div>
+  </section>
+
+  <section class="ls-sec wrap" id="faq" data-n="4">
+    <div class="ls-head"><span class="ls-num">4</span><div><h2>Questions</h2><p>Short answers to what people ask most.</p></div></div>
+    <div class="ls-flist faq">
+      <details><summary>How much maths do I need?</summary><p>Step 1 covers everything the later steps use, from scratch. If a later page uses a term you do not know, its glossary pop-up links back to the maths section that explains it.</p></details>
+      <details><summary>Do I need to install anything?</summary><p>No. Every lab and model runs in your browser. The Python at the end of a lesson is for when you want to repeat it on your own computer.</p></details>
+      <details><summary>In what order should I read?</summary><p>The steps are in order, and so are the lessons inside each step. Skipping ahead is fine: each card above says what it needs.</p></details>
+      <details><summary>The page looks out of date after an update.</summary><p>Hard-refresh: Ctrl + Shift + R on Windows and Linux, Cmd + Shift + R on a Mac.</p></details>
+    </div>
+    <p class="ls-end"><a class="ls-btn primary" href="../">Open the learning path &rarr;</a><a class="ls-btn" href="../../play/">Go to Play</a></p>
+  </section>
+</main>
+<footer class="footer">
+  <div class="wrap colophon">
+    <p class="colo-name">Satish Thuwal, FIAI <span>Pricing actuary &middot; Gurugram</span></p>
+    <p class="colo-set"><a href="../../">Home</a> &middot; <a href="../../about/">About</a> &middot; <a href="../../projects/">Projects</a> &middot; <a href="../../learn/start/">Learn</a> &middot; <a href="../../play/">Play</a></p>
+    <p class="colo-yr">&copy; <span id="yr">2026</span> Satish Thuwal. All rights reserved. <a href="https://github.com/satish-blip/satish-blip.github.io/blob/main/LICENSE">Licence</a></p>
+  </div>
+</footer>
+<script>document.getElementById('yr').textContent=new Date().getFullYear();</script>
+<script src="start.js"></script>
+<script src="../../site.js"></script>
+</body>
+</html>

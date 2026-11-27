@@ -5,8 +5,8 @@
     <nav aria-label="Site">
       <a href="{{ '/about/' | relative_url }}"><span class="dot d-about" aria-hidden="true"></span>About</a>
       <a href="{{ '/projects/' | relative_url }}"><span class="dot d-projects" aria-hidden="true"></span>Projects</a>
-      <a href="{{ '/learn/' | relative_url }}"><span class="dot d-learn" aria-hidden="true"></span>Learn</a>
-      <a href="{{ '/ml/playground/' | relative_url }}"><span class="dot d-ml" aria-hidden="true"></span>Play</a>
+      <a href="{{ '/learn/start/' | relative_url }}"><span class="dot d-learn" aria-hidden="true"></span>Learn</a>
+      <a href="{{ '/play/' | relative_url }}"><span class="dot d-ml" aria-hidden="true"></span>Play</a>
       {% if site.posts.size > 0 %}<a href="{{ '/blog/' | relative_url }}"{% if page.url contains '/blog/' %} aria-current="page"{% endif %}><span class="dot d-blog" aria-hidden="true"></span>Writing</a>{% endif %}
     </nav>
   </div>

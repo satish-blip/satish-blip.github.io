@@ -1,0 +1,3 @@
+/*! (c) 2026 Satish Thuwal. All rights reserved. Not open source: copying, modifying or reusing this file without written permission is not allowed. See https://github.com/satish-blip/satish-blip.github.io/blob/main/LICENSE */
+!function(){"use strict";const e=document.getElementById("lsTiles");document.querySelectorAll("[data-tiles]").forEach((t=>t.addEventListener("click",(()=>{if(!e)return;const l=e.querySelector(".ls-tile"),c=l?l.getBoundingClientRect().width+14:300;e.scrollBy({left:c*+t.dataset.tiles,behavior:"smooth"})}))))}();
+;(self.__stfp=self.__stfp||{})["learn/start/start.js"]="cddc3a3d948257287178d9ce";

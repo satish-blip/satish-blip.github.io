@@ -28,14 +28,16 @@
 <script defer src="stat.js"></script>
 <script defer src="wfdock.js"></script>
 <script defer src="explain.js"></script>
+<script defer src="depview.js"></script>
+<script defer src="dep-pg.js"></script>
 <script defer src="shell.js"></script>
 </head>
 <body>
-<header class="top"><div class="wrap top-in"><a class="home" href="../../">&larr; Home</a><span class="sect">Play</span><nav class="algnav playnav" aria-label="Play"><a class="on" href="./" aria-current="page">ML Playground</a><a href="../glm-studio/">GLM pricing</a><a href="../reserving/">Reserving</a><a href="../../word2vec/">Word2vec</a><a href="../../dl/lab/">DL lab</a><a href="../../learn/">Learn ML &rarr;</a></nav></div></header>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../">&larr; Home</a><a class="sect" href="../../play/">Play</a><nav class="algnav playnav" aria-label="Play"><a href="../../play/">Start here</a><a class="on" href="./" aria-current="page">ML Playground</a><a href="../glm-studio/">GLM pricing</a><a href="../reserving/">Reserving</a><a href="../../word2vec/">Word2vec</a><a href="../../dl/lab/">DL lab</a><a href="../../learn/start/">Learn ML &rarr;</a></nav></div></header>
 
 <main class="wrap">
 <section class="pg-hero">
-  <div class="hero-l"><h1><span class="grad">ML Playground</span></h1><div class="viewseg" role="group" aria-label="View"><button type="button" data-view="tabs" class="on">Tabs</button><button type="button" data-view="flow">Workflow</button><button type="button" data-view="stat">Statistical</button></div></div>
+  <div class="hero-l"><h1><span class="grad">ML Playground</span></h1><div class="viewseg" role="group" aria-label="View"><button type="button" data-view="tabs" class="on">Tabs</button><button type="button" data-view="flow">Workflow</button><button type="button" data-view="stat">Statistical</button><button type="button" data-view="dep">Dependency</button></div></div>
   <div class="status" id="status"></div>
 </section>
 
@@ -56,6 +58,7 @@
 <section class="pane" id="pane-more"></section>
 <section class="wf" id="wf" aria-label="Workflow"></section>
 <section class="stv" id="stv" aria-label="Statistical view"></section>
+<section class="dep" id="dep" aria-label="Dependency view"></section>
 
 <p class="footnote">Models are written from scratch in JavaScript and checked against scikit-learn. Random splits use a different generator from NumPy, so exact numbers can differ slightly from the exported Python.</p>
 </main>
