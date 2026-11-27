@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DL Lab</title>
-<meta name="description" content="A hands-on deep-learning lab in your browser: a 2-D convolution sandbox with your own images and kernels, a live backpropagation and gradient-flow visualiser, and a self-attention heatmap explorer for your own sentences.">
+<meta name="description" content="A hands-on deep-learning lab in your browser: a 2-D convolution sandbox with your own images and kernels, a live backpropagation and gradient-flow visualiser, and a self-attention heatmap explorer, and a word2vec music recommender trained on radio playlists.">
 <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -21,6 +21,7 @@
 <script defer src="../assets/cv.js"></script>
 <script defer src="lab.js"></script>
 <script defer src="lab-x.js"></script>
+<script defer src="music.js"></script>
 </head>
 <body class="shell dllab">
 <div class="app-head" id="appHead">
@@ -37,6 +38,7 @@
     <li><a class="sitem" href="#conv" data-stage="conv"><span class="n">1</span><span class="t">Convolution sandbox<span class="sub">kernels on images</span></span></a></li>
     <li><a class="sitem" href="#backprop" data-stage="backprop"><span class="n">2</span><span class="t">Backprop visualiser<span class="sub">activations &amp; gradients</span></span></a></li>
     <li><a class="sitem" href="#attention" data-stage="attention"><span class="n">3</span><span class="t">Attention explorer<span class="sub">heatmaps for sentences</span></span></a></li>
+    <li><a class="sitem" href="#music" data-stage="music"><span class="n">4</span><span class="t">Music recommender<span class="sub">word2vec on playlists</span></span></a></li>
   </ol>
 </nav>
 
@@ -148,6 +150,77 @@
     <div class="att-multi" id="atMulti"></div>
   </div>
 </section>
+
+<!-- ================= 4. Music recommender (music.js) ================= -->
+<section class="stage" id="st-music" data-stage="music" hidden>
+  <div class="ws-head"><div class="ws-t"><span class="ws-n">4</span><div><h2>Music recommender with word2vec</h2><p>Treat each playlist as a sentence and each song as a word. Word2vec learns a vector per song so that songs sharing playlists sit close together; the nearest vectors become recommendations. Everything trains in your browser in a few seconds.</p></div></div><div class="ws-act"><a class="btn sm" href="../../word2vec/">Play: word2vec on words →</a><a class="btn sm" href="../../ml/recommender/">Learn: recommender systems →</a></div></div>
+  <div class="pg2">
+    <div class="tool">
+      <div class="tool-h"><div class="grow"><h3>1 · Playlists and training</h3><p id="muInfo">Loading…</p></div></div>
+      <div class="ctl"><label for="muSrc"><span>Playlists</span></label><select id="muSrc"><option value="yes">US radio playlists (yes.com, 13,000 playlists)</option><option value="own">My own playlists (paste or upload)</option></select></div>
+      <div id="muOwn" class="mu-own" hidden>
+        <p class="hint">One playlist per line. Separate songs with <code>|</code>, <code>;</code>, a tab or a comma. Write songs as <code>Artist - Title</code> to show the artist. Stays in your browser.</p>
+        <textarea id="muOwnText" rows="5" class="txt" placeholder="Adele - Hello | Sam Smith - Stay With Me | Ed Sheeran - Photograph&#10;Metallica - One | Iron Maiden - The Trooper | Slayer - Raining Blood"></textarea>
+        <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:6px"><input type="file" id="muOwnFile" accept=".txt,.csv,.tsv"><button type="button" class="btn sm primary" id="muOwnUse">Use these playlists</button><span class="hint" id="muOwnMsg"></span></div>
+      </div>
+      <div class="ctl"><label><span>Architecture</span></label><div class="seg" id="muArch"><button data-v="sg" class="on">Skip-gram</button><button data-v="cbow">CBOW</button></div></div>
+      <div class="lab-ctl2">
+        <div class="ctl"><label for="muDim"><span>Vector size</span><output id="muDimOut"></output></label><input type="range" id="muDim" min="0" max="4" value="2"></div>
+        <div class="ctl"><label for="muWin"><span>Context window</span><output id="muWinOut"></output></label><input type="range" id="muWin" min="0" max="9" value="4"></div>
+        <div class="ctl"><label for="muNeg"><span>Negative samples</span><output id="muNegOut"></output></label><input type="range" id="muNeg" min="1" max="15" value="5"></div>
+        <div class="ctl"><label for="muEp"><span>Epochs</span><output id="muEpOut"></output></label><input type="range" id="muEp" min="1" max="15" value="5"></div>
+        <div class="ctl"><label for="muMin"><span>Minimum plays</span><output id="muMinOut"></output></label><input type="range" id="muMin" min="1" max="10" value="2"></div>
+        <div class="ctl"><label for="muLr"><span>Learning rate</span></label><select id="muLr"><option>0.01</option><option selected>0.025</option><option>0.05</option><option>0.1</option></select></div>
+        <div class="ctl"><label for="muSub"><span>Down-sample hits</span></label><select id="muSub"><option value="0">Off</option><option value="0.001" selected>t = 1e-3 (default)</option><option value="0.0001">t = 1e-4 (strong)</option></select></div>
+      </div>
+      <div class="player" style="margin-top:8px"><button class="btn primary" id="muTrain" type="button">Train word2vec</button><span class="pos" id="muStat"></span></div>
+      <div class="mu-bar"><i id="muProg"></i></div>
+      <canvas id="muLoss" class="mu-loss" aria-label="Training loss"></canvas>
+      <p class="hint">Average negative-sampling loss per training pair. 10% of playlists keep their last song hidden for the evaluation below.</p>
+    </div>
+    <div class="tool">
+      <div class="tool-h"><div class="grow"><h3>2 · Recommend</h3><p>Pick one or more songs you like; the model suggests what to play next.</p></div></div>
+      <div class="mu-find"><input type="search" id="muFind" class="txt" placeholder="Search a song or artist (for example: beatles, adele, eminem)" autocomplete="off" aria-label="Search songs"><div id="muHits" class="mu-hits" hidden></div></div>
+      <div class="row" style="gap:6px;margin:8px 0;flex-wrap:wrap"><button type="button" class="btn sm" id="muRand">Random song</button><button type="button" class="btn sm" id="muClear">Clear seeds</button></div>
+      <div class="ctl"><label><span>Recommend</span></label><div class="seg" id="muRec"><button data-v="cos" class="on">Similar songs</button><button data-v="io">Next song</button></div></div>
+      <div id="muSeeds" class="mu-seeds"></div>
+      <div id="muRecs"></div>
+    </div>
+  </div>
+  <div class="pg2">
+    <div class="tool">
+      <div class="tool-h"><div class="grow"><h3>3 · Song map</h3><p>The 1,500 most played songs, squeezed from their vectors to 2-D with PCA and coloured by Last.fm genre tags (the model never saw the tags). Hover for the song; click one to recommend from it.</p></div></div>
+      <div class="mu-mapw"><canvas id="muMap" class="mu-map" aria-label="Song map"></canvas><div id="muTip" class="mu-tip" hidden></div></div>
+      <div id="muLegend" class="mu-legend"></div>
+    </div>
+    <div class="tool">
+      <div class="tool-h"><div class="grow"><h3>4 · Does it predict the next song?</h3><p>Hide the last song of held-out playlists and see how often the model ranks it near the top, against simple baselines.</p></div></div>
+      <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap"><div class="ctl" style="min-width:200px"><label for="muQ"><span>Guess from</span></label><select id="muQ"><option value="last1">Last song</option><option value="last3" selected>Last 3 songs</option><option value="all">Whole playlist</option></select></div><button type="button" class="btn primary" id="muEvalBtn" style="margin-bottom:8px">Evaluate</button></div>
+      <div id="muEval"></div>
+    </div>
+  </div>
+  <div class="tool">
+    <div class="tool-h"><div class="grow"><h3>The same thing in Python</h3><p>gensim trains the same skip-gram model; the radio playlist files are linked in the credits below.</p></div></div>
+<pre class="code"><span class="c"># pip install gensim numpy</span>
+<span class="k">from</span> gensim.models <span class="k">import</span> Word2Vec
+
+<span class="c"># train.txt: two header lines, then one playlist per line as song ids</span>
+playlists = [line.split() <span class="k">for</span> line <span class="k">in</span> open(<span class="s">"yes_big/train.txt"</span>).read().split(<span class="s">"\n"</span>)[2:] <span class="k">if</span> len(line.split()) &gt;= 2]
+songs = {i: line.split(<span class="s">"\t"</span>)[1:] <span class="k">for</span> i, line <span class="k">in</span> enumerate(open(<span class="s">"yes_big/song_hash.txt"</span>, encoding=<span class="s">"utf8"</span>).read().splitlines())}
+
+model = Word2Vec(playlists, vector_size=32, window=5, negative=5, sg=1,   <span class="c"># sg=1 skip-gram, sg=0 CBOW</span>
+                 min_count=2, sample=1e-3, alpha=0.025, epochs=5, workers=4, seed=11)
+
+seed = <span class="s">"1"</span>                      <span class="c"># a song id</span>
+<span class="k">for</span> sid, cos <span class="k">in</span> model.wv.most_similar(seed, topn=10):
+    print(f<span class="s">"{cos:.3f}  {songs[int(sid)]}"</span>)
+
+<span class="c"># several seeds: average their unit vectors (what this page does)</span>
+print(model.wv.most_similar(positive=[<span class="s">"1"</span>, <span class="s">"5"</span>, <span class="s">"9"</span>], topn=10))</pre>
+    <p class="hint mu-credit">Data: Shuo Chen, Josh L. Moore, Douglas Turnbull and Thorsten Joachims, “Playlist Prediction via Metric Embedding”, KDD 2012 (Cornell yes.com playlist dataset, <code>yes_big</code>; radio playlists collected from yes.com, tags from Last.fm). Used here for teaching; subjective tags such as “favourites” removed and genres grouped into seven colours. Method: Mikolov et al., 2013; applied to playlists as “item2vec” / “prod2vec”.</p>
+  </div>
+</section>
+
 </main>
 </body>
 </html>
