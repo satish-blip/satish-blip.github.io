@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head><meta name="robots" content="noai, noimageai"><meta name="copyright" content="(c) Satish Thuwal. All rights reserved.">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Play for actuaries: GLM pricing, reserving, distributions and capital | Satish Thuwal</title>
+<meta name="description" content="The Actuaries section of Play: GLM pricing, stochastic reserving, loss distributions and capital modelling playgrounds that run in your browser, each built from the CAS monographs, with a map of which monograph lives where.">
+<link rel="canonical" href="https://satish-blip.github.io/play/actuaries/">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../ml/assets/ml.css">
+<link rel="stylesheet" href="../../ml/playground/pg.css">
+<link rel="stylesheet" href="../play.css">
+<script defer src="../../ml/assets/core.js"></script>
+<script defer src="acth.js"></script>
+</head>
+<body class="playhome acthome">
+<header class="top"><div class="wrap top-in"><a class="home" href="../../">&larr; Home</a><a class="sect" href="../">Play</a><nav class="algnav playnav" aria-label="Play"><a href="../../play/">Start here</a><span class="pn-g ml"><a class="pn-l" href="../../play/#tools">ML &amp; DL</a><a href="../../ml/playground/">Playground</a><a href="../../word2vec/">Word2vec</a><a href="../../dl/lab/">DL lab</a></span><span class="pn-g act"><a class="pn-l on" href="./" aria-current="page">Actuaries</a><a href="../../ml/glm-studio/">GLM pricing</a><a href="../../ml/reserving/">Reserving</a><a href="../../ml/distributions/">Distributions</a><a href="../../ml/capital/">Capital</a></span><a href="../../learn/start/">Learn ML &rarr;</a></nav></div></header>
+
+<main class="wrap ph-main" id="main">
+<section class="ph-hero">
+  <p class="ph-kicker">Play · Actuaries</p>
+  <h1><span class="grad">Actuarial models you can touch.</span></h1>
+  <p class="ph-lede">Four playgrounds for insurance work, each built from the Casualty Actuarial Society’s monograph series and checked against its worked examples or against Python: price with a GLM, set reserves, fit loss distributions and build a capital model. They share one layout and one set of views, and they run entirely in your browser.</p>
+  <div class="ph-cta"><a class="btn primary" href="#tools">Pick a tool</a><a class="btn" href="#monographs">Which monograph lives where</a><a class="btn" href="../">All of Play &rarr;</a></div>
+</section>
+
+<section class="ph-sec" id="tools" data-n="2">
+  <div class="ph-head"><span class="ph-num">1</span><div><h2>The four tools, in the order the work flows</h2><p>Distributions feed pricing and capital; reserves become a line in the capital model.</p></div></div>
+  <div class="ph-tiles">
+    <article class="ph-tile t6"><p class="ph-tag">Step 1 · Monograph 2</p><h3>Loss Distributions</h3><p>How big and how many claims: severity fits with deductibles and limits, layers and increased limits factors, claim counts, the aggregate loss by FFT, extreme-value tails and credibility.</p><p class="ph-try"><b>Try first:</b> the Danish fire losses, then the Q–Q plot of the fits.</p><a class="btn primary" href="../../ml/distributions/">Open Distributions</a></article>
+    <article class="ph-tile t2"><p class="ph-tag">Step 2 · Monograph 5</p><h3>GLM Pricing Studio</h3><p>The rating model: Poisson, gamma and Tweedie GLMs with exposure, relativities with intervals, lift, double lift and Gini, and the statsmodels code.</p><p class="ph-try"><b>Try first:</b> the motor portfolio, Claim frequency, Fit GLM.</p><a class="btn primary" href="../../ml/glm-studio/">Open GLM pricing</a></article>
+    <article class="ph-tile t3"><p class="ph-tag">Step 3 · Monographs 3, 4</p><h3>Reserving Playground</h3><p>What is still to pay: chain ladder, Bornhuetter–Ferguson, Cape Cod, Mack, the ODP GLM and bootstrap, and one-year risk.</p><p class="ph-try"><b>Try first:</b> the Taylor &amp; Ashe triangle, then Mack.</p><a class="btn primary" href="../../ml/reserving/">Open Reserving</a></article>
+    <article class="ph-tile t7"><p class="ph-tag">Step 4 · Monographs 15, 12</p><h3>Capital Modelling</h3><p>The whole company: lines and reserve risk joined by copulas, reinsurance, VaR and TVaR capital, Euler allocation and distortion pricing.</p><p class="ph-try"><b>Try first:</b> switch the copula to Clayton and watch the allocation.</p><a class="btn primary" href="../../ml/capital/">Open Capital</a></article>
+  </div>
+</section>
+
+<section class="ph-sec" id="views" data-n="3">
+  <div class="ph-head"><span class="ph-num">2</span><div><h2>Four views of every tool</h2><p>Switch at the top of any tool. The same views exist in the ML &amp; DL tools.</p></div></div>
+  <div class="ph-grid">
+    <div class="ph-card"><h3>Tabs</h3><p>The numbered stages one at a time, each panel with a <b>?</b> for every setting, a <b>Learn</b> link and <b>&lt;/&gt; Code</b> with the Python.</p></div>
+    <div class="ph-card"><h3>Workflow</h3><p>The stages as boxes on a canvas. Click a box to change its settings; optional steps (Mack, reinsurance, allocation) can be dropped in or taken out.</p></div>
+    <div class="ph-card"><h3>Statistical</h3><p>Every formula behind the result, written out with your numbers: the likelihood with truncation and censoring, the GLM, Mack’s variance, VaR, TVaR, Euler and distortion pricing.</p></div>
+    <div class="ph-card"><h3>Dependency</h3><p>How each input drives the answer: factors to the price, development factors to the reserve, frequency and severity to the aggregate, dependence and retention to the capital. With what-if controls.</p></div>
+  </div>
+</section>
+
+<section class="ph-sec" id="monographs" data-n="4">
+  <div class="ph-head"><span class="ph-num">3</span><div><h2>The CAS monographs, one at a time</h2><p>Choose a monograph to see what it covers and where it lives on this site. Summaries are in my own words.</p></div></div>
+  <div class="ph-pick"><label for="mgSel">Monograph</label><select id="mgSel"><optgroup label="Built here"><option value="m2">No. 2: Distributions for Actuaries</option><option value="m3">No. 3: Stochastic Loss Reserving Using Generalized Linear Models</option><option value="m4">No. 4: Using the ODP Bootstrap Model: A Practitioner’s Guide</option><option value="m5">No. 5: Generalized Linear Models for Insurance Rating (2nd edition)</option><option value="m12">No. 12: The Actuary and Enterprise Risk Management: Integrating Reserve Variability</option><option value="m13">No. 13: Penalized Regression and Lasso Credibility</option><option value="m14">No. 14: Practical Mixed Models for Actuaries</option><option value="m15">No. 15: Introduction to Capital Modeling and Portfolio Management</option></optgroup><optgroup label="Partly / related"><option value="m16">No. 16: From GLMs to Comprehensive Insurance Pricing: Techniques and Challenges</option><option value="m6">No. 6: A Machine-Learning Approach to Parameter Estimation</option><option value="m9">No. 9: Data Quality Management in the P&amp;C Insurance Sector</option></optgroup><optgroup label="Planned"><option value="m8">No. 8: Stochastic Loss Reserving Using Bayesian MCMC Models (2nd edition)</option><option value="m10">No. 10: Using the Hayne MLE Models: A Practitioner’s Guide</option></optgroup><optgroup label="Not a modelling topic"><option value="m11">No. 11: Federal Income Taxes: Provisions Affecting Property and Casualty Insurers</option><option value="m17">No. 17: Professionalism</option></optgroup></select></div>
+  <div class="ph-panels">
+    <div class="ph-panel on" data-tool="m2"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 2</span><span class="mg-st b">Built here</span></div>
+      <h3>Distributions for Actuaries</h3><p class="mg-au">David Bahnemann</p>
+      <p><b>What it covers.</b> Parametric severity and frequency distributions fitted to claim data: limited expected values, increased limits factors, deductibles and layers, trend leveraging, truncation and censoring, and the aggregate distribution.</p>
+      <p><b>On this site.</b> <a href="../../ml/distributions/">Loss Distributions</a>: every stage follows its notation, with section numbers beside the panels.</p></div></div>
+    <div class="ph-panel" data-tool="m3"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 3</span><span class="mg-st b">Built here</span></div>
+      <h3>Stochastic Loss Reserving Using Generalized Linear Models</h3><p class="mg-au">Greg Taylor and Gráinne McGuire</p>
+      <p><b>What it covers.</b> The chain ladder written as a GLM (the over-dispersed Poisson model), and the GLM extensions that let a reserving model handle what the chain ladder cannot.</p>
+      <p><b>On this site.</b> <a href="../../ml/reserving/">Reserving</a>: the ODP GLM stage, and the gamma, Gaussian and inverse Gaussian GLMs under Advanced.</p></div></div>
+    <div class="ph-panel" data-tool="m4"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 4</span><span class="mg-st b">Built here</span></div>
+      <h3>Using the ODP Bootstrap Model: A Practitioner’s Guide</h3><p class="mg-au">Mark Shapland</p>
+      <p><b>What it covers.</b> How to bootstrap the over-dispersed Poisson model in practice: residuals, the degrees-of-freedom adjustment, non-constant scale, diagnostics and the distribution of the reserve.</p>
+      <p><b>On this site.</b> <a href="../../ml/reserving/">Reserving</a>: the ODP &amp; bootstrap stage, with residual plots by origin, development and calendar year.</p></div></div>
+    <div class="ph-panel" data-tool="m5"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 5</span><span class="mg-st b">Built here</span></div>
+      <h3>Generalized Linear Models for Insurance Rating (2nd edition)</h3><p class="mg-au">Mark Goldburd, Anand Khare, Dan Tevet and Dmitriy Guller</p>
+      <p><b>What it covers.</b> The end-to-end guide to rating with GLMs: families and links, offsets and weights, factor types, base levels, validation by lift, double lift and Gini, and model refinement.</p>
+      <p><b>On this site.</b> <a href="../../ml/glm-studio/">GLM Pricing Studio</a>: its charts and checks, with section numbers beside each panel.</p></div></div>
+    <div class="ph-panel" data-tool="m12"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 12</span><span class="mg-st b">Built here</span></div>
+      <h3>The Actuary and Enterprise Risk Management: Integrating Reserve Variability</h3><p class="mg-au">Mark R. Shapland and Jeffrey A. Courchene</p>
+      <p><b>What it covers.</b> How reserve-variability results feed into enterprise risk management, worked through a case study.</p>
+      <p><b>On this site.</b> <a href="../../ml/capital/">Capital Modelling</a>: reserve risk is one of the lines of business, correlated with the others; the distribution comes from the <a href="../../ml/reserving/">Reserving</a> methods.</p></div></div>
+    <div class="ph-panel" data-tool="m13"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 13</span><span class="mg-st b">Built here</span></div>
+      <h3>Penalized Regression and Lasso Credibility</h3>
+      <p><b>What it covers.</b> Using lasso and other penalties so that a GLM-style model shrinks thin segments towards the overall level, which is credibility in another form.</p>
+      <p><b>On this site.</b> <a href="../../ml/distributions/">Loss Distributions</a>, Credibility models stage (credibility as a ridge or lasso penalty), and the penalties in the <a href="../../ml/glm-studio/">GLM Pricing Studio</a>.</p></div></div>
+    <div class="ph-panel" data-tool="m14"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 14</span><span class="mg-st b">Built here</span></div>
+      <h3>Practical Mixed Models for Actuaries</h3><p class="mg-au">Ernesto Schirmacher</p>
+      <p><b>What it covers.</b> Linear and generalised linear mixed models and how their random effects reproduce Bühlmann–Straub credibility.</p>
+      <p><b>On this site.</b> <a href="../../ml/distributions/">Loss Distributions</a>, Credibility models stage: the same shrinkage as a mixed model.</p></div></div>
+    <div class="ph-panel" data-tool="m15"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 15</span><span class="mg-st b">Built here</span></div>
+      <h3>Introduction to Capital Modeling and Portfolio Management</h3><p class="mg-au">John A. Major and Stephen J. Mildenhall</p>
+      <p><b>What it covers.</b> Building a property-casualty capital model and using it: risk measures, capital adequacy, reinsurance, capital allocation, and pricing by distortion with its natural allocation.</p>
+      <p><b>On this site.</b> <a href="../../ml/capital/">Capital Modelling</a>: every stage, with chapter references beside the panels.</p></div></div>
+    <div class="ph-panel" data-tool="m16"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 16</span><span class="mg-st r">Partly / related</span></div>
+      <h3>From GLMs to Comprehensive Insurance Pricing: Techniques and Challenges</h3><p class="mg-au">Alan Chalk, David Deacon, Montserrat Guillen and Max Martinelli</p>
+      <p><b>What it covers.</b> The challenges of turning models into a rating plan, with a framework for pricing that stays transparent and reliable.</p>
+      <p><b>On this site.</b> Partly: the GLM side is in the <a href="../../ml/glm-studio/">GLM Pricing Studio</a>; the wider pricing framework is not built yet.</p></div></div>
+    <div class="ph-panel" data-tool="m6"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 6</span><span class="mg-st r">Partly / related</span></div>
+      <h3>A Machine-Learning Approach to Parameter Estimation</h3><p class="mg-au">Jim Kunce and Som Chatterjee</p>
+      <p><b>What it covers.</b> Using machine learning to estimate distribution parameters from data, instead of splitting the data into cells.</p>
+      <p><b>On this site.</b> Related: the tree and boosting models in the <a href="../../ml/playground/">ML Playground</a>. A tool for this approach is not built yet.</p></div></div>
+    <div class="ph-panel" data-tool="m9"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 9</span><span class="mg-st r">Partly / related</span></div>
+      <h3>Data Quality Management in the P&amp;C Insurance Sector</h3><p class="mg-au">Graham Hall, Mark Jones, Kevin Madigan and Steve Zheng</p>
+      <p><b>What it covers.</b> Data quality for insurers: the ideas, the regulation, frameworks and how to measure it.</p>
+      <p><b>On this site.</b> Related: the data health checks in the <a href="../../ml/playground/">ML Playground</a> (missing values, duplicates, outliers, leakage).</p></div></div>
+    <div class="ph-panel" data-tool="m8"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 8</span><span class="mg-st p">Planned</span></div>
+      <h3>Stochastic Loss Reserving Using Bayesian MCMC Models (2nd edition)</h3><p class="mg-au">Glenn Meyers</p>
+      <p><b>What it covers.</b> Bayesian reserving models fitted by MCMC, tested against Mack and the ODP bootstrap on many real triangles, plus a risk-margin approach. It replaces Monograph 1.</p>
+      <p><b>On this site.</b> Not built yet. Today the <a href="../../ml/reserving/">Reserving</a> tool has Mack and the ODP bootstrap it is compared with.</p></div></div>
+    <div class="ph-panel" data-tool="m10"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 10</span><span class="mg-st p">Planned</span></div>
+      <h3>Using the Hayne MLE Models: A Practitioner’s Guide</h3><p class="mg-au">Mark Shapland</p>
+      <p><b>What it covers.</b> Practical use of Hayne’s maximum-likelihood framework for distributions of unpaid claims.</p>
+      <p><b>On this site.</b> Not built yet.</p></div></div>
+    <div class="ph-panel" data-tool="m11"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 11</span><span class="mg-st n">Not a modelling topic</span></div>
+      <h3>Federal Income Taxes: Provisions Affecting Property and Casualty Insurers</h3><p class="mg-au">Arlene M. Richardson and Joel S. Chansky</p>
+      <p><b>What it covers.</b> How US federal tax law, including the 2017 changes, affects an insurer’s after-tax income and investments.</p>
+      <p><b>On this site.</b> Not planned: it is about tax rules rather than models.</p></div></div>
+    <div class="ph-panel" data-tool="m17"><div class="mg-card">
+      <div class="mg-top"><span class="mg-no">No. 17</span><span class="mg-st n">Not a modelling topic</span></div>
+      <h3>Professionalism</h3><p class="mg-au">Taub</p>
+      <p><b>What it covers.</b> Actuarial professionalism.</p>
+      <p><b>On this site.</b> Not planned: it is about professional standards rather than models.</p></div></div>
+  </div>
+  <p class="ph-note">Also in development at the CAS, and on the list here once published: machine-learning regression for ratemaking, game theory, and extreme value theory (the <a href="../../ml/distributions/">Distributions</a> tool already has a peaks-over-threshold stage).</p>
+</section>
+
+<section class="ph-sec" id="credits" data-n="5">
+  <div class="ph-head"><span class="ph-num">4</span><div><h2>Credits</h2><p>Where the methods come from.</p></div></div>
+  <p class="mg-credit">Adapted from: the <a href="https://www.casact.org/publications-research/publications/flagship-publications/cas-monographs" target="_blank" rel="noopener">CAS Monograph Series</a> (Casualty Actuarial Society), in particular No. 2 (Bahnemann), No. 3 (Taylor &amp; McGuire), No. 4 (Shapland), No. 5 (Goldburd, Khare, Tevet and Guller), No. 12 (Shapland &amp; Courchene), No. 13, No. 14 (Schirmacher) and No. 15 (Major &amp; Mildenhall). Also Hindley, <i>Claims Reserving in General Insurance</i> (2017), for the reserving checks; Mildenhall &amp; Major, <i>Pricing Insurance Risk</i> (2022); and the sources named in each tool’s Help. The monographs are the work of their authors and the CAS; the code here is written from scratch and the summaries are my own. Each tool’s <b>⋯ → Help</b> lists its sources in full.</p>
+</section>
+</main>
+</body>
+</html>

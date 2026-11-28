@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head><meta name="robots" content="noai, noimageai"><meta name="copyright" content="(c) Satish Thuwal. All rights reserved.">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Loss Distributions Playground</title>
+<meta name="description" content="Fit claim severity distributions in your browser the way actuaries do: maximum likelihood with deductibles and policy limits, limited expected values and increased limits factors, frequency models, the aggregate loss by FFT, extreme value tails and Bühlmann–Straub credibility, after CAS Monograph 2 (Distributions for Actuaries), with real data and Python for every step.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/ml.css">
+<link rel="stylesheet" href="../playground/pg.css">
+<link rel="stylesheet" href="../glm-studio/studio.css">
+<link rel="stylesheet" href="../reserving/res.css">
+<link rel="stylesheet" href="../playground/act.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+<script defer src="../assets/core.js"></script>
+<script defer src="../assets/lossdist.js"></script>
+<script defer src="../assets/lossdata.js"></script>
+<script defer src="ld-core.js"></script>
+<script defer src="../playground/actcore.js"></script>
+<script defer src="../playground/carousel.js"></script>
+<script defer src="ld-tabs.js"></script>
+<script defer src="ld-code.js"></script>
+<script defer src="../playground/explain.js"></script>
+<script defer src="ld-views.js"></script>
+<script defer src="../playground/viewkit.js"></script>
+<script defer src="../playground/wfdock.js"></script>
+<script defer src="../playground/depview.js"></script>
+<script defer src="../playground/shell.js"></script>
+</head>
+<body class="act-tool">
+<header class="top"><div class="wrap top-in"><a class="home" href="../../">&larr; Home</a><a class="sect" href="../../play/">Play</a><nav class="algnav playnav" aria-label="Play"><a href="../../play/">Start here</a><span class="pn-g ml"><a class="pn-l" href="../../play/#tools">ML &amp; DL</a><a href="../../ml/playground/">Playground</a><a href="../../word2vec/">Word2vec</a><a href="../../dl/lab/">DL lab</a></span><span class="pn-g act"><a class="pn-l" href="../../play/actuaries/">Actuaries</a><a href="../../ml/glm-studio/">GLM pricing</a><a href="../../ml/reserving/">Reserving</a><a class="on" href="./" aria-current="page">Distributions</a><a href="../../ml/capital/">Capital</a></span><a href="../../learn/start/">Learn ML &rarr;</a></nav></div></header>
+
+<main class="wrap">
+<section class="pg-hero">
+  <div class="hero-l"><h1><span class="grad">Loss Distributions Playground</span></h1><div class="viewseg" role="group" aria-label="View"><button type="button" data-view="tabs" class="on">Tabs</button><button type="button" data-view="flow">Workflow</button><button type="button" data-view="stat">Statistical</button><button type="button" data-view="dep">Dependency</button></div></div>
+  <div class="status" id="status"></div>
+</section>
+
+<div class="tabbar"><nav class="tabs wrap" id="tabs" role="tablist">
+  <button class="tab on" data-tab="data" role="tab"><span class="n">1</span><span>Claims data<span class="sub">losses</span></span></button>
+  <button class="tab" data-tab="fit" role="tab"><span class="n">2</span><span>Fit severity<span class="sub">MLE</span></span></button>
+  <button class="tab" data-tab="layers" role="tab"><span class="n">3</span><span>Limits &amp; layers<span class="sub">ILF, LEV</span></span></button>
+  <button class="tab" data-tab="freq" role="tab"><span class="n">4</span><span>Frequency<span class="sub">counts</span></span></button>
+  <button class="tab" data-tab="agg" role="tab"><span class="n">5</span><span>Aggregate loss<span class="sub">compound</span></span></button>
+  <button class="tab" data-tab="evt" role="tab"><span class="n">6</span><span>Extreme values<span class="sub">GPD</span></span></button>
+  <button class="tab" data-tab="cred" role="tab"><span class="n">7</span><span>Credibility models<span class="sub">Bühlmann</span></span></button>
+  <button class="tab" data-tab="compare" role="tab"><span class="n">8</span><span>Checks &amp; export<span class="sub">checks, code</span></span></button>
+</nav></div>
+
+<section class="pane on" id="pane-data"></section>
+<section class="pane" id="pane-fit"></section>
+<section class="pane" id="pane-layers"></section>
+<section class="pane" id="pane-freq"></section>
+<section class="pane" id="pane-agg"></section>
+<section class="pane" id="pane-evt"></section>
+<section class="pane" id="pane-cred"></section>
+<section class="pane" id="pane-compare"></section>
+<section class="wf" id="wf" aria-label="Workflow"></section>
+<section class="stv" id="stv" aria-label="Statistical view"></section>
+<section class="dep" id="dep" aria-label="Dependency view"></section>
+
+<p class="footnote">The engine is written from scratch in JavaScript and checked against scipy and the R package actuar (see <i>Checks against scipy and actuar</i> on the last stage). Real data from the CASdatasets R package (Dutang &amp; Charpentier) and actuar. Nothing leaves your browser.</p>
+</main>
+
+<div class="drawer-bg" id="drawerBg"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="Code">
+  <div class="drawer-h"><div style="flex:1;min-width:0"><h3 id="drawerTitle">Code</h3><p id="drawerSub"></p></div>
+    <button class="btn sm" id="drawerCopy">Copy</button><button class="btn sm" id="drawerDl">Download</button><button class="drawer-close" id="drawerX" aria-label="Close the code panel" title="Close (Esc)"><span aria-hidden="true">&times;</span> Close</button></div>
+  <div class="seg" id="drawerSeg"><button data-v="py" class="on">Python</button><button data-v="js">JavaScript · runs on this page</button></div>
+  <pre><code id="drawerCode"></code></pre>
+</aside>
+<div class="toast" id="toast"></div>
+<dialog class="help" id="help" aria-labelledby="helpT">
+  <div class="help-h"><h2 id="helpT">From claim amounts to prices and tails</h2><button class="x" id="helpX" aria-label="Close">&times;</button></div>
+  <div class="help-b">
+    <p class="help-lede">An actuary prices cover by describing losses with a probability distribution: how often they happen and how big they are. The stages go from the raw losses to a fitted distribution, then use it for deductibles, limits, the year’s total and the extreme tail. Every panel has a <b>&lt;/&gt; Code</b> button with the same calculation in Python (scipy), and every setting a <b>?</b> that explains it.</p>
+    <ol class="help-steps">
+      <li><b>Claims data.</b> Real losses (Danish fire, US liability with policy limits, Secura Re large losses) or a synthetic set with known truth hidden behind deductibles and limits. Look at the log-scale histogram first. <button class="btn sm" data-help-go="data">Open</button></li>
+      <li><b>Fit severity.</b> Seven families fitted by maximum likelihood, allowing for deductibles (truncation) and limits (censoring), ranked by AIC, with the curves, a Q–Q plot and (Advanced) standard errors and goodness of fit. <button class="btn sm" data-help-go="fit">Open</button></li>
+      <li><b>Limits &amp; layers.</b> What a deductible saves, what a higher limit costs (increased limits factors), and how inflation leverages through a layer. <button class="btn sm" data-help-go="layers">Open</button></li>
+      <li><b>Frequency.</b> Claim counts per policy with exposure: Poisson, negative binomial and binomial, and the (a, b, 0) check. <button class="btn sm" data-help-go="freq">Open</button></li>
+      <li><b>Aggregate loss.</b> Frequency and severity together: the distribution of the year’s total by FFT, VaR, TVaR and stop-loss premiums. <button class="btn sm" data-help-go="agg">Open</button></li>
+      <li><b>Extreme values.</b> A generalised Pareto above a threshold, with mean excess and Hill plots to choose it, and tail VaR and expected shortfall. <button class="btn sm" data-help-go="evt">Open</button></li>
+      <li><b>Credibility models.</b> Bühlmann–Straub: how far to trust a small group’s own experience, and the same shrinkage as a mixed model or a ridge or lasso penalty. <button class="btn sm" data-help-go="cred">Open</button></li>
+      <li><b>Checks &amp; export.</b> All fits side by side, the checks against scipy and actuar, a CSV of the fits and the full Python script. <button class="btn sm" data-help-go="compare">Open</button></li>
+    </ol>
+    <h3>Four views</h3>
+    <p><b>Tabs</b> shows one stage at a time. <b>Workflow</b> lays the steps out as boxes on a canvas; add or remove the optional ones and change settings in the side panel. <b>Statistical</b> writes the model out as equations with your numbers. <b>Dependency</b> traces how the frequency, severity parameters, deductible, limit and trend flow into the yearly cost of the layer, and how far each one can move it.</p>
+    <h3>Basic and Advanced</h3>
+    <p><b>Basic</b> covers the fit, layers, frequency and the aggregate. <b>Advanced</b> adds, each marked with a purple <span class="advb">Advanced</span> tag: standard errors and KS / Anderson–Darling statistics, method-of-moments fits for comparison, a simulation check of the aggregate, and the penalised-regression (ridge and lasso) view of credibility.</p>
+    <h3>Sources</h3>
+    <p class="help-lede">Adapted from: <b>David Bahnemann, <i>Distributions for Actuaries</i></b>, CAS Monograph No. 2 (Casualty Actuarial Society, 2015): the families, limited expected values, increased limits factors, trend leveraging, truncation and censoring, frequency models and the aggregate distribution follow its notation; section numbers beside the panels point to it. Also: McNeil (1997) and Embrechts, Klüppelberg &amp; Mikosch (1997) for peaks over threshold; Bühlmann &amp; Straub (1970) and Hachemeister (1975) for credibility; CAS Monograph 13 (penalised regression and lasso credibility) and CAS Monograph 14 (Schirmacher, <i>Practical Mixed Models for Actuaries</i>) for the link between credibility, mixed models and penalties.</p>
+    <p class="help-lede">Data: the <b>CASdatasets</b> R package by Christophe Dutang and Arthur Charpentier (GPL-2 or later): <code>danishuni</code> (Copenhagen Re, as used by McNeil 1997), <code>lossalaefull</code> (ISO general liability, Frees &amp; Valdez 1998), <code>besecura</code> (Secura Re, Beirlant et al. 2004) and <code>norauto</code>; and the <b>actuar</b> R package by Dutang, Goulet and Pigeon (<code>hachemeister</code>).</p>
+  </div>
+</dialog>
+</body>
+</html>

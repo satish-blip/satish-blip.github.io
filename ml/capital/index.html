@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head><meta name="robots" content="noai, noimageai"><meta name="copyright" content="(c) Satish Thuwal. All rights reserved.">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Capital Modelling Playground</title>
+<meta name="description" content="Build an insurer’s capital model in your browser: lines of business compounded by FFT, copulas for dependence, excess of loss and quota share, VaR and TVaR capital, Euler allocation and distortion pricing with its natural allocation, after CAS Monographs 15 (Major &amp; Mildenhall) and 12 (Shapland &amp; Courchene), with Python for every step.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/ml.css">
+<link rel="stylesheet" href="../playground/pg.css">
+<link rel="stylesheet" href="../glm-studio/studio.css">
+<link rel="stylesheet" href="../reserving/res.css">
+<link rel="stylesheet" href="../playground/act.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+<script defer src="../assets/core.js"></script>
+<script defer src="../assets/lossdist.js"></script>
+<script defer src="../assets/capital.js"></script>
+<script defer src="cap-core.js"></script>
+<script defer src="../playground/actcore.js"></script>
+<script defer src="../playground/carousel.js"></script>
+<script defer src="cap-tabs.js"></script>
+<script defer src="cap-code.js"></script>
+<script defer src="../playground/explain.js"></script>
+<script defer src="cap-views.js"></script>
+<script defer src="../playground/viewkit.js"></script>
+<script defer src="../playground/wfdock.js"></script>
+<script defer src="../playground/depview.js"></script>
+<script defer src="../playground/shell.js"></script>
+</head>
+<body class="act-tool">
+<header class="top"><div class="wrap top-in"><a class="home" href="../../">&larr; Home</a><a class="sect" href="../../play/">Play</a><nav class="algnav playnav" aria-label="Play"><a href="../../play/">Start here</a><span class="pn-g ml"><a class="pn-l" href="../../play/#tools">ML &amp; DL</a><a href="../../ml/playground/">Playground</a><a href="../../word2vec/">Word2vec</a><a href="../../dl/lab/">DL lab</a></span><span class="pn-g act"><a class="pn-l" href="../../play/actuaries/">Actuaries</a><a href="../../ml/glm-studio/">GLM pricing</a><a href="../../ml/reserving/">Reserving</a><a href="../../ml/distributions/">Distributions</a><a class="on" href="./" aria-current="page">Capital</a></span><a href="../../learn/start/">Learn ML &rarr;</a></nav></div></header>
+
+<main class="wrap">
+<section class="pg-hero">
+  <div class="hero-l"><h1><span class="grad">Capital Modelling Playground</span></h1><div class="viewseg" role="group" aria-label="View"><button type="button" data-view="tabs" class="on">Tabs</button><button type="button" data-view="flow">Workflow</button><button type="button" data-view="stat">Statistical</button><button type="button" data-view="dep">Dependency</button></div></div>
+  <div class="status" id="status"></div>
+</section>
+
+<div class="tabbar"><nav class="tabs wrap" id="tabs" role="tablist">
+  <button class="tab on" data-tab="lines" role="tab"><span class="n">1</span><span>Lines of business<span class="sub">lines</span></span></button>
+  <button class="tab" data-tab="dep" role="tab"><span class="n">2</span><span>Dependence<span class="sub">copula</span></span></button>
+  <button class="tab" data-tab="re" role="tab"><span class="n">3</span><span>Reinsurance<span class="sub">XoL, QS</span></span></button>
+  <button class="tab" data-tab="risk" role="tab"><span class="n">4</span><span>Risk &amp; capital<span class="sub">VaR, TVaR</span></span></button>
+  <button class="tab" data-tab="alloc" role="tab"><span class="n">5</span><span>Allocate capital<span class="sub">Euler</span></span></button>
+  <button class="tab" data-tab="price" role="tab"><span class="n">6</span><span>Price the risk<span class="sub">distortion</span></span></button>
+  <button class="tab" data-tab="compare" role="tab"><span class="n">7</span><span>Checks &amp; export<span class="sub">checks, code</span></span></button>
+</nav></div>
+
+<section class="pane on" id="pane-lines"></section>
+<section class="pane" id="pane-dep"></section>
+<section class="pane" id="pane-re"></section>
+<section class="pane" id="pane-risk"></section>
+<section class="pane" id="pane-alloc"></section>
+<section class="pane" id="pane-price"></section>
+<section class="pane" id="pane-compare"></section>
+<section class="wf" id="wf" aria-label="Workflow"></section>
+<section class="stv" id="stv" aria-label="Statistical view"></section>
+<section class="dep" id="dep" aria-label="Dependency view"></section>
+
+<p class="footnote">The engine is written from scratch in JavaScript; every panel has the same calculation in Python, and the last stage checks the engine against exact results. The portfolios are illustrative; the reserve-risk line uses the Taylor &amp; Ashe triangle and Mack’s prediction error from the Reserving playground. Nothing leaves your browser.</p>
+</main>
+<div class="drawer-bg" id="drawerBg"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="Code">
+  <div class="drawer-h"><div style="flex:1;min-width:0"><h3 id="drawerTitle">Code</h3><p id="drawerSub"></p></div>
+    <button class="btn sm" id="drawerCopy">Copy</button><button class="btn sm" id="drawerDl">Download</button><button class="drawer-close" id="drawerX" aria-label="Close the code panel" title="Close (Esc)"><span aria-hidden="true">&times;</span> Close</button></div>
+  <div class="seg" id="drawerSeg"><button data-v="py" class="on">Python</button><button data-v="js">JavaScript · runs on this page</button></div>
+  <pre><code id="drawerCode"></code></pre>
+</aside>
+<div class="toast" id="toast"></div>
+<dialog class="help" id="help" aria-labelledby="helpT">
+  <div class="help-h"><h2 id="helpT">From lines of business to capital and prices</h2><button class="x" id="helpX" aria-label="Close">&times;</button></div>
+  <div class="help-b">
+    <p class="help-lede">An insurer holds capital so that it can pay claims in a bad year. A capital model simulates many possible years for every line of business together, measures how bad the bad years are, and then asks which lines use the capital and what they should be charged for it. Every panel has a <b>&lt;/&gt; Code</b> button with the same calculation in Python, and every setting a <b>?</b> that explains it.</p>
+    <ol class="help-steps">
+      <li><b>Lines of business.</b> Each line’s claim count and claim size, turned into the distribution of its yearly total by FFT. Three sample books, including one with reserve risk. <button class="btn sm" data-help-go="lines">Open</button></li>
+      <li><b>Dependence.</b> A copula (Gaussian, t, Clayton, Gumbel) joins the lines; see how often their bad years come together. <button class="btn sm" data-help-go="dep">Open</button></li>
+      <li><b>Reinsurance.</b> Per-claim excess of loss and quota share; the capital they save and what that is worth. <button class="btn sm" data-help-go="re">Open</button></li>
+      <li><b>Risk &amp; capital.</b> VaR, TVaR, the capital they call for and the expected policyholder deficit. <button class="btn sm" data-help-go="risk">Open</button></li>
+      <li><b>Allocate capital.</b> Stand-alone, covariance, co-TVaR and co-VaR; the diversification benefit and each line’s return on its capital. <button class="btn sm" data-help-go="alloc">Open</button></li>
+      <li><b>Price the risk.</b> A distortion calibrated to a cost of capital, and its natural allocation of the margin to the lines. <button class="btn sm" data-help-go="price">Open</button></li>
+      <li><b>Checks &amp; export.</b> Checks of the engine against exact results, the full Python script and the simulated years as a CSV. <button class="btn sm" data-help-go="compare">Open</button></li>
+    </ol>
+    <h3>Four views</h3>
+    <p><b>Tabs</b> shows one stage at a time. <b>Workflow</b> lays the steps out as boxes; add or remove reinsurance, allocation and pricing, and change settings in the side panel. <b>Statistical</b> writes the model out as equations with your numbers. <b>Dependency</b> shows how the size of the book, claim variability, dependence, reinsurance and the confidence level flow into the capital, and how far each one moves it.</p>
+    <h3>Basic and Advanced</h3>
+    <p><b>Basic</b> covers the lines, dependence, reinsurance, capital, allocation and pricing. <b>Advanced</b> adds the t and comonotonic copulas, co-VaR, the number of simulated years and the seed, and every distortion side by side, each marked with a purple <span class="advb">Advanced</span> tag.</p>
+    <h3>Sources</h3>
+    <p class="help-lede">Adapted from: <b>John A. Major and Stephen J. Mildenhall, <i>Introduction to Capital Modeling and Portfolio Management</i></b>, CAS Monograph No. 15 (Casualty Actuarial Society): risk measures, capital allocation, distortion (spectral) pricing and the natural allocation; chapter references beside the panels point to it. Also: Mildenhall &amp; Major, <i>Pricing Insurance Risk</i> (Wiley, 2022); <b>Mark R. Shapland and Jeffrey A. Courchene, <i>The Actuary and Enterprise Risk Management: Integrating Reserve Variability</i></b>, CAS Monograph No. 12, for reserve risk as a line in the capital model; Tasche (1999) for Euler allocation; Wang (1996, 2000) and Wirch &amp; Hardy for distortion risk measures; Nelsen, <i>An Introduction to Copulas</i>, for the copulas.</p>
+  </div>
+</dialog>
+</body>
+</html>

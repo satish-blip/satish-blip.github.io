@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Play: hands-on machine learning tools | Satish Thuwal</title>
-<meta name="description" content="Start here for the Play section: a quick-start guide and a tour of every feature of the ML Playground, GLM Pricing Studio, Reserving Playground, Word2vec and the DL lab. Everything runs in your browser.">
+<meta name="description" content="Start here for the Play section: a quick-start guide and a tour of every tool in its two sections: ML &amp; DL (ML Playground, Word2vec, DL lab) and Actuaries (GLM pricing, reserving, loss distributions, capital modelling). Everything runs in your browser.">
 <link rel="canonical" href="https://satish-blip.github.io/play/">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,46 +16,50 @@
 <script defer src="play.js"></script>
 </head>
 <body class="playhome">
-<header class="top"><div class="wrap top-in"><a class="home" href="../">&larr; Home</a><a class="sect" href="./" aria-current="page">Play</a><nav class="algnav playnav" aria-label="Play"><a class="on" href="./" aria-current="page">Start here</a><a href="../ml/playground/">ML Playground</a><a href="../ml/glm-studio/">GLM pricing</a><a href="../ml/reserving/">Reserving</a><a href="../word2vec/">Word2vec</a><a href="../dl/lab/">DL lab</a><a href="../learn/start/">Learn ML &rarr;</a></nav></div></header>
+<header class="top"><div class="wrap top-in"><a class="home" href="../">&larr; Home</a><a class="sect" href="./" aria-current="page">Play</a><nav class="algnav playnav" aria-label="Play"><a class="on" href="./" aria-current="page">Start here</a><span class="pn-g ml"><a class="pn-l" href="../play/#tools">ML &amp; DL</a><a href="../ml/playground/">Playground</a><a href="../word2vec/">Word2vec</a><a href="../dl/lab/">DL lab</a></span><span class="pn-g act"><a class="pn-l" href="../play/actuaries/">Actuaries</a><a href="../ml/glm-studio/">GLM pricing</a><a href="../ml/reserving/">Reserving</a><a href="../ml/distributions/">Distributions</a><a href="../ml/capital/">Capital</a></span><a href="../learn/start/">Learn ML &rarr;</a></nav></div></header>
 
 <main class="wrap ph-main" id="main">
 <section class="ph-hero">
   <p class="ph-kicker">Play · start here</p>
   <h1><span class="grad">Machine learning you can touch.</span></h1>
-  <p class="ph-lede">Five hands-on tools that run entirely in your browser: build and explain models without writing code, price insurance with a GLM, set claims reserves, do arithmetic with word meanings and watch a neural network learn. Nothing you load ever leaves your computer.</p>
-  <div class="ph-cta"><a class="btn primary" href="#quick">Quick start (2 minutes)</a><a class="btn" href="../ml/playground/">Open the ML Playground &rarr;</a><a class="btn" href="#features">See every feature</a></div>
+  <p class="ph-lede">Seven hands-on tools in two sections, all running in your browser. <b>ML &amp; DL</b>: build and explain models without writing code, do arithmetic with word meanings and watch a neural network learn. <b>Actuaries</b>: price insurance with a GLM, set claims reserves, fit loss distributions and build a capital model, following the CAS monographs. Nothing you load ever leaves your computer.</p>
+  <div class="ph-cta"><a class="btn primary" href="#quick">Quick start (2 minutes)</a><a class="btn" href="../ml/playground/">Open the ML Playground &rarr;</a><a class="btn" href="actuaries/">Actuaries section &rarr;</a><a class="btn" href="#features">See every feature</a></div>
 </section>
 
 <section class="ph-sec" id="quick" data-n="1">
   <div class="ph-head"><span class="ph-num">1</span><div><h2>Quick start</h2><p>Your first model in four steps. Each step names the button to press.</p></div></div>
   <ol class="ph-steps">
-    <li><b>Pick a tool.</b> New to machine learning? Start with the <a href="../ml/playground/">ML Playground</a>. Working in insurance pricing? Start with <a href="../ml/glm-studio/">GLM pricing</a>. The tools are described one by one <a href="#tools">below</a>.</li>
+    <li><b>Pick a tool.</b> New to machine learning? Start with the <a href="../ml/playground/">ML Playground</a>. Working in insurance? Start at the <a href="actuaries/">Actuaries section</a>, with GLM pricing, reserving, distributions and capital. The tools are described one by one <a href="#tools">below</a>.</li>
     <li><b>Load data.</b> Every tool opens with a ready-made sample, so you can press on straight away. In the Playground, choose another sample from the <i>Sample datasets</i> drop-down, or drop in your own CSV under <i>Your own data</i> and pick the column to predict (the <i>target</i>).</li>
-    <li><b>Run it.</b> Follow the numbered stages in the left sidebar from top to bottom. In the Playground press <b>Train &amp; evaluate</b> at the <i>Model training</i> stage; in GLM pricing press <b>Fit GLM</b>. Defaults are sensible, so you can change settings later.</li>
-    <li><b>Read and explore.</b> Check the scores, then switch the view at the top to <b>Dependency</b> to see how every input travels to the prediction and how much the prediction moves when you change one input. Every panel has a <b>Learn</b> link to the lesson behind it and a <b>&lt;/&gt; Code</b> button with the matching Python.</li>
+    <li><b>Run it.</b> Follow the numbered stages in the left sidebar from top to bottom. In the Playground press <b>Train &amp; evaluate</b> at the <i>Model training</i> stage; in GLM pricing press <b>Fit GLM</b>; the reserving, distributions and capital tools work out everything as soon as data is loaded. Defaults are sensible, so you can change settings later.</li>
+    <li><b>Read and explore.</b> Check the scores, then switch the view at the top to <b>Statistical</b> for the formulas with your numbers, or <b>Dependency</b> to see how every input travels to the prediction and how much the prediction moves when you change one input. Every panel has a <b>Learn</b> link to the lesson behind it and a <b>&lt;/&gt; Code</b> button with the matching Python.</li>
   </ol>
   <p class="ph-note">Stuck at any point? Open <b>⋯ → Help</b> in the tool’s header, or the small <b>?</b> beside any setting: it says what the setting does, what turning it up or down changes, and why.</p>
 </section>
 
 <section class="ph-sec" id="tools" data-n="2">
   <div class="ph-head"><span class="ph-num">2</span><div><h2>Pick a tool</h2><p>Each card says what the tool is for and what to try first.</p></div></div>
-  <div class="ph-tilewrap"><button class="ph-arrow l" type="button" aria-label="Previous tools" data-tiles="-1">&lsaquo;</button>
+  <div class="ph-group ml"><div class="ph-gh"><span class="ph-gl">ML &amp; DL</span><p>General machine learning and deep learning: no-code models, word vectors and neural-network sandboxes.</p></div>
   <div class="ph-tiles" id="phTiles">
     <article class="ph-tile t1"><p class="ph-tag">No-code ML</p><h3>ML Playground</h3><p>A complete modelling workflow: import, check the data, build a preprocessing pipeline, train any of 24 models, tune, evaluate, explain and export the Python.</p><p class="ph-try"><b>Try first:</b> the Rice grains sample, Random forest, then the Dependency view.</p><a class="btn primary" href="../ml/playground/">Open the Playground</a></article>
-    <article class="ph-tile t2"><p class="ph-tag">Insurance pricing</p><h3>GLM Pricing Studio</h3><p>Fit a pricing GLM the way pricing actuaries do: exposure offsets, Poisson, gamma and Tweedie families, bands, base levels, relativities, lift and Gini, then the statsmodels code.</p><p class="ph-try"><b>Try first:</b> the motor portfolio, Claim frequency, Fit GLM, then the Relativities stage.</p><a class="btn primary" href="../ml/glm-studio/">Open GLM pricing</a></article>
-    <article class="ph-tile t3"><p class="ph-tag">Claims reserving</p><h3>Reserving Playground</h3><p>From a claims triangle to reserves: link ratios, chain ladder, Bornhuetter–Ferguson, Cape Cod, Mack, the over-dispersed Poisson GLM, bootstraps and one-year risk.</p><p class="ph-try"><b>Try first:</b> the Taylor &amp; Ashe triangle, then Mack for the prediction error.</p><a class="btn primary" href="../ml/reserving/">Open Reserving</a></article>
     <article class="ph-tile t4"><p class="ph-tag">Word meanings</p><h3>Word2vec</h3><p>Arithmetic with word vectors trained on Google News: king − man + woman ≈ queen, the nearest words to any answer, 2-D maps and a look inside the vectors.</p><p class="ph-try"><b>Try first:</b> one of the ready-made analogies, then type your own.</p><a class="btn primary" href="../word2vec/">Open Word2vec</a></article>
-    <article class="ph-tile t5"><p class="ph-tag">Deep learning</p><h3>DL lab</h3><p>Three sandboxes: a convolution sandbox with your own images and kernels, a backpropagation and gradient-flow visualiser, and a self-attention explorer for your own sentences.</p><p class="ph-try"><b>Try first:</b> the edge-detection kernel in the convolution sandbox.</p><a class="btn primary" href="../dl/lab/">Open the DL lab</a></article>
-  </div>
-  <button class="ph-arrow r" type="button" aria-label="Next tools" data-tiles="1">&rsaquo;</button></div>
+    <article class="ph-tile t5"><p class="ph-tag">Deep learning</p><h3>DL lab</h3><p>Five sandboxes: convolution on your own images, a backpropagation and gradient-flow visualiser, a self-attention explorer, a word2vec music recommender and a RAG builder, with Workflow, Statistical and Dependency views.</p><p class="ph-try"><b>Try first:</b> the edge-detection kernel, then the Statistical view.</p><a class="btn primary" href="../dl/lab/">Open the DL lab</a></article>
+  </div></div>
+  <div class="ph-group act"><div class="ph-gh"><span class="ph-gl">Actuaries</span><p>Insurance work built from the CAS monographs: rating, reserving, loss distributions and capital. <a href="actuaries/">Open the section page &rarr;</a></p></div>
+  <div class="ph-tiles">
+    <article class="ph-tile t2"><p class="ph-tag">Pricing · Monograph 5</p><h3>GLM Pricing Studio</h3><p>Fit a pricing GLM the way pricing actuaries do: exposure offsets, Poisson, gamma and Tweedie families, bands, base levels, relativities, lift and Gini, then the statsmodels code.</p><p class="ph-try"><b>Try first:</b> the motor portfolio, Claim frequency, Fit GLM, then the Relativities stage.</p><a class="btn primary" href="../ml/glm-studio/">Open GLM pricing</a></article>
+    <article class="ph-tile t3"><p class="ph-tag">Reserving · Monographs 3, 4</p><h3>Reserving Playground</h3><p>From a claims triangle to reserves: link ratios, chain ladder, Bornhuetter–Ferguson, Cape Cod, Mack, the over-dispersed Poisson GLM, bootstraps and one-year risk.</p><p class="ph-try"><b>Try first:</b> the Taylor &amp; Ashe triangle, then Mack for the prediction error.</p><a class="btn primary" href="../ml/reserving/">Open Reserving</a></article>
+    <article class="ph-tile t6"><p class="ph-tag">Distributions · Monograph 2</p><h3>Loss Distributions</h3><p>Fit severity curves with deductibles and limits, layers and increased limits factors, claim counts, the aggregate loss by FFT, extreme-value tails and credibility.</p><p class="ph-try"><b>Try first:</b> the Danish fire losses, then compare the fits on the Q–Q plot.</p><a class="btn primary" href="../ml/distributions/">Open Distributions</a></article>
+    <article class="ph-tile t7"><p class="ph-tag">Capital · Monograph 15</p><h3>Capital Modelling</h3><p>Lines of business, copulas, reinsurance, VaR and TVaR capital, Euler allocation and distortion pricing with its natural allocation.</p><p class="ph-try"><b>Try first:</b> switch the copula to Clayton and watch the capital and the allocation move.</p><a class="btn primary" href="../ml/capital/">Open Capital</a></article>
+  </div></div>
 </section>
 
 <section class="ph-sec" id="how" data-n="3">
-  <div class="ph-head"><span class="ph-num">3</span><div><h2>How every tool is laid out</h2><p>The Playground, GLM pricing and Reserving share one layout, so once you know one you know them all.</p></div></div>
+  <div class="ph-head"><span class="ph-num">3</span><div><h2>How every tool is laid out</h2><p>Every tool except Word2vec shares one layout, so once you know one you know them all.</p></div></div>
   <div class="ph-grid">
     <div class="ph-card"><h3>Header</h3><p>A short line under the title shows the loaded data, target and model. On the right, the <b>⋯</b> menu holds <b>Help</b>, the light/dark switch and <b>Verbose / Clean</b> (Clean folds long descriptions behind an ⓘ); the panel button opens <b>Details</b>, a summary of your session and an outline of the current screen. Only one side panel is open at a time: opening Details or the code drawer folds the stage sidebar.</p></div>
     <div class="ph-card"><h3>Sidebar of stages</h3><p>The numbered stages on the left are the workflow in order. Click any stage to jump to it; a tick shows what is done. The ‹ button folds the sidebar to icons to give the workspace more room.</p></div>
-    <div class="ph-card"><h3>Four views of the same model</h3><p><b>Tabs</b>: the stages one at a time. <b>Workflow</b>: drag-and-drop boxes on a canvas. <b>Statistical</b>: the fitted model written as equations with your numbers. <b>Dependency</b>: a column-by-column graph from each input to the prediction, plus what-if controls.</p></div>
+    <div class="ph-card"><h3>Four views of the same model</h3><p><b>Tabs</b>: the stages one at a time. <b>Workflow</b>: drag-and-drop boxes on a canvas. <b>Statistical</b>: every formula behind the result, written out with your numbers. <b>Dependency</b>: a graph from each input to the result, what each input added, and what-if controls. All four views exist in every tool of both sections.</p></div>
     <div class="ph-card"><h3>Panels</h3><p>Each panel has <span class="ico-in" aria-label="fold"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></span> to fold it away and <span class="ico-in" aria-label="full screen"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></span> to open it full screen (Esc closes). <b>&lt;/&gt; Code</b> opens a drawer with the Python for that panel and the JavaScript that runs on the page. <b>Learn</b> opens the matching lesson in a new tab.</p></div>
     <div class="ph-card"><h3>The “?” explainers</h3><p>Every setting has a <b>?</b>. It explains what the setting is, what a higher or lower value does to the result, what each option means and the rule of thumb behind the default.</p></div>
     <div class="ph-card"><h3>Your data stays with you</h3><p>Files are read by your browser and never uploaded. Settings, theme and folded panels are remembered on this device only. Export the settings to pick up later or on another computer.</p></div>
@@ -64,7 +68,7 @@
 
 <section class="ph-sec" id="features" data-n="4">
   <div class="ph-head"><span class="ph-num">4</span><div><h2>Every feature, tool by tool</h2><p>Choose a tool to see everything it can do, stage by stage.</p></div></div>
-  <div class="ph-pick"><label for="phTool">Tool</label><select id="phTool"><option value="pg">ML Playground</option><option value="glm">GLM Pricing Studio</option><option value="res">Reserving Playground</option><option value="w2v">Word2vec</option><option value="dl">DL lab</option></select></div>
+  <div class="ph-pick"><label for="phTool">Tool</label><select id="phTool"><optgroup label="ML &amp; DL"><option value="pg">ML Playground</option><option value="w2v">Word2vec</option><option value="dl">DL lab</option></optgroup><optgroup label="Actuaries"><option value="glm">GLM Pricing Studio</option><option value="res">Reserving Playground</option><option value="ld">Loss Distributions</option><option value="cap">Capital Modelling</option></optgroup></select></div>
   <div class="ph-panels">
     <div class="ph-panel on" data-tool="pg">
       <div class="ph-flist">
@@ -101,6 +105,32 @@
         <details><summary><span>5</span>ODP &amp; bootstrap</summary><p>The over-dispersed Poisson GLM and bootstrap simulations of the reserve distribution.</p></details>
         <details><summary><span>6</span>One-year risk</summary><p>Merz–Wüthrich: how much the reserve estimate can move over the next year.</p></details>
         <details><summary><span>7</span>Compare &amp; export</summary><p>Every method side by side with its error and percentiles, checks against the textbook, a CSV of the results and the full Python script.</p></details>
+        <details><summary><span>V</span>Views: Workflow, Statistical, Dependency</summary><p><b>Workflow</b> lays the triangle, factors and methods out as boxes, with Mack, ODP and one-year risk as optional steps. <b>Statistical</b> writes each method as formulas with the triangle’s numbers. <b>Dependency</b> shows how each development factor drives the chain-ladder reserve and how far the reserve moves when one factor changes.</p></details>
+      </div>
+    </div>
+    <div class="ph-panel" data-tool="ld">
+      <div class="ph-flist">
+        <details open><summary><span>1</span>Claims data</summary><p>Real losses (Danish fire, general liability, Secura Re) or a synthetic set with deductibles and policy limits, or your own CSV; histograms and the empirical distribution.</p></details>
+        <details><summary><span>2</span>Fit severity</summary><p>Seven families (exponential, gamma, Weibull, lognormal, Pareto, loglogistic, Burr) by maximum likelihood, allowing for truncation at the deductible and censoring at the limit; AIC, BIC, Q–Q and P–P plots and a flag when a fit runs to the edge of its parameters.</p></details>
+        <details><summary><span>3</span>Limits &amp; layers</summary><p>Limited expected values, increased limits factors, deductible credits, the cost of any layer, and how trend leverages into excess layers.</p></details>
+        <details><summary><span>4</span>Frequency</summary><p>Poisson, negative binomial and binomial counts with exposure, and the (a, b, 0) check that tells them apart.</p></details>
+        <details><summary><span>5</span>Aggregate loss</summary><p>Frequency and severity combined by FFT: the distribution of the year’s total, its percentiles, stop-loss premiums and a simulation check.</p></details>
+        <details><summary><span>6</span>Extreme values</summary><p>Mean excess and Hill plots, a generalised Pareto above a threshold, tail VaR and expected shortfall.</p></details>
+        <details><summary><span>7</span>Credibility models</summary><p>Bühlmann–Straub credibility, and the same shrinkage seen as a mixed model or a ridge / lasso penalty (Monographs 13 and 14).</p></details>
+        <details><summary><span>8</span>Checks &amp; export</summary><p>Every fit side by side, checks against scipy and actuar, and the full Python script.</p></details>
+        <details><summary><span>V</span>Views: Workflow, Statistical, Dependency</summary><p><b>Statistical</b> collects every formula (densities, the likelihood with truncation and censoring, LEV, ILF, FFT) with the fitted numbers. <b>Dependency</b> shows how frequency, severity and the layer drive the aggregate.</p></details>
+      </div>
+    </div>
+    <div class="ph-panel" data-tool="cap">
+      <div class="ph-flist">
+        <details open><summary><span>1</span>Lines of business</summary><p>Each line’s claim count and severity, compounded into a full distribution of the line’s total by FFT. Includes a reserve-risk line, after Monograph 12.</p></details>
+        <details><summary><span>2</span>Dependence</summary><p>Independent, Gaussian, Student t, Clayton, Gumbel and comonotonic copulas, with Kendall’s tau and tail dependence.</p></details>
+        <details><summary><span>3</span>Reinsurance</summary><p>Excess of loss and quota share per line: the expected cost and how much capital each treaty saves.</p></details>
+        <details><summary><span>4</span>Risk &amp; capital</summary><p>The distribution of the total: VaR, TVaR, the capital they call for and the expected policyholder deficit.</p></details>
+        <details><summary><span>5</span>Allocate capital</summary><p>Stand-alone, covariance, co-TVaR and co-VaR (Euler) allocation and the return each line earns.</p></details>
+        <details><summary><span>6</span>Price the risk</summary><p>Distortion pricing (proportional hazard, Wang, dual, TVaR, constant cost of capital) and its natural allocation of the margin.</p></details>
+        <details><summary><span>7</span>Checks &amp; export</summary><p>Consistency checks of the engine, the full Python script and CSV downloads.</p></details>
+        <details><summary><span>V</span>Views: Workflow, Statistical, Dependency</summary><p><b>Statistical</b> writes every step as formulas with your numbers. <b>Dependency</b> shows how portfolio size, volatility, dependence, retention and the security level drive the capital.</p></details>
       </div>
     </div>
     <div class="ph-panel" data-tool="w2v">
@@ -118,6 +148,9 @@
         <details open><summary><span>1</span>Convolution sandbox</summary><p>Slide a kernel over a picture (a sample or your own), choose a preset kernel or edit its numbers, set the stride and pooling, see the resulting feature map, and compare every preset on the same picture.</p></details>
         <details><summary><span>2</span>Backprop visualiser</summary><p>A small network learning live on a 2-D data set you choose: set the layers, width, learning rate and initialisation, follow one example step by step, and watch the loss and the gradient flow layer by layer.</p></details>
         <details><summary><span>3</span>Attention explorer</summary><p>Type a sentence and see the self-attention matrix as a heat map (which word looks at which), one query in detail, and all heads at once for multi-head attention.</p></details>
+        <details><summary><span>4</span>Music recommender</summary><p>Word2vec trained in your browser on real radio playlists: pick songs you like for recommendations, see the song map, and test next-song prediction against simple baselines.</p></details>
+        <details><summary><span>5</span>RAG builder</summary><p>Retrieval-augmented question answering step by step: pick Wikipedia articles, chunk them, embed them into a FAISS-style index, retrieve passages for a question and let a small open model answer; then score set-ups on a QA test set and compare strategies.</p></details>
+        <details><summary><span>V</span>Views: Workflow, Statistical, Dependency</summary><p><b>Workflow</b> shows the open tool as boxes whose settings stay in step with it. <b>Statistical</b> writes it as equations with your current numbers (the convolution sum, the forward pass, loss and backprop, scaled dot-product attention). <b>Dependency</b> shows how each setting drives the result: the feature-map size, the gradient reaching the first layer, or how focused the attention is.</p></details>
       </div>
     </div>
   </div>
