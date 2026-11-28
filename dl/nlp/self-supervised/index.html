@@ -3,8 +3,8 @@
 <head><meta name="robots" content="noai, noimageai"><meta name="copyright" content="(c) Satish Thuwal. All rights reserved.">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Self-supervised & contrastive learning: SimCLR, collapse, masked autoencoders, CLIP, DINO</title>
-<meta name="description" content="How models learn from unlabelled data by making labels out of the data itself: SimCLR and the NT-Xent loss trained live (and the collapse you get without negatives), masked autoencoding at 75% masking and why images need so much more masking than text, and how SimCLR, BYOL, DINO, MAE and CLIP compare.">
+<title>Self-supervised & contrastive learning: SimCLR, collapse, masked autoencoders, DINO, ViT registers</title>
+<meta name="description" content="How models learn from unlabelled data by making labels out of the data itself: SimCLR and the NT-Xent loss trained live (and the collapse you get without negatives), masked autoencoding at 75% masking and why images need so much more masking than text, DINO self-distillation trained live (EMA teacher, centring, sharpening, multi-crop), why large Vision Transformers need register tokens, and how SimCLR, BYOL, DINO, MAE and CLIP compare.">
 <link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
@@ -30,8 +30,8 @@
 <section class="hero">
   <p class="kicker">Deep Learning &middot; Vision &amp; multimodal &middot; Representation learning</p>
   <h1>Self-supervised learning: <span class="grad">labels from the data itself</span></h1>
-  <p class="lede">Labels are expensive; raw images, audio and text are nearly free. Self-supervised learning invents a task whose answer is already in the data (fill in the hidden patch, recognise two crops of the same photo) and trains a network on billions of examples of it. The network has to understand the data to do the task, and what it learns transfers to the tasks we actually care about with very few labels. This page trains a contrastive model live, shows the collapse it must avoid, works through masked autoencoding, and compares the main families.</p>
-  <div class="toc"><a href="#intro">0 · Start here</a><a href="#simclr">1 · Contrastive learning</a><a href="#collapse">2 · Collapse</a><a href="#mae">3 · Masked autoencoders</a><a href="#compare">4 · SimCLR, BYOL, DINO, MAE, CLIP</a><a href="#py">5 · Python</a><a href="#credits">6 · Sources &amp; credits</a></div>
+  <p class="lede">Labels are expensive; raw images, audio and text are nearly free. Self-supervised learning invents a task whose answer is already in the data (fill in the hidden patch, recognise two crops of the same photo) and trains a network on billions of examples of it. The network has to understand the data to do the task, and what it learns transfers to the tasks we actually care about with very few labels. This page trains a contrastive model live, shows the collapse it must avoid, works through masked autoencoding, trains DINO's student and teacher, shows why large Vision Transformers need registers, and compares the main families.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#simclr">1 · Contrastive learning</a><a href="#collapse">2 · Collapse</a><a href="#mae">3 · Masked autoencoders</a><a href="#dino">4 · DINO</a><a href="#registers">5 · ViT registers</a><a href="#compare">6 · SimCLR, BYOL, DINO, MAE, CLIP</a><a href="#py">7 · Python</a><a href="#credits">8 · Sources &amp; credits</a></div>
 </section>
 
 <section id="intro" class="card intro">
@@ -46,7 +46,7 @@
     <div>
       <h3>An everyday picture</h3><p>A child shown thousands of toys from every angle, in every light, never told their names. They come to know that the red car seen from above and the red car seen from the side are the same object, and different from the blue truck. When an adult finally says “car” once, the child generalises immediately, because the hard part, knowing what makes objects the same or different, was already learnt.</p>
       <div class="pc"><div class="pro"><b>Good at</b><ul><li>Uses unlabelled data, which is plentiful</li><li>Features that transfer to many tasks with few labels</li><li>The basis of foundation models in vision, speech and text</li></ul></div><div class="con"><b>Watch out for</b><ul><li><a class="term" data-t="representation-collapse">Collapse</a>: every input mapped to the same vector</li><li>The augmentations decide what the model ignores</li><li>Pre-training is expensive; evaluation needs care</li></ul></div></div>
-      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="self-supervised">Self-supervised</a><a class="term" data-t="pretext-task">Pretext task</a><a class="term" data-t="data-augmentation">Augmentation</a><a class="term" data-t="contrastive-learning">Contrastive learning</a><a class="term" data-t="nt-xent">NT-Xent / InfoNCE</a><a class="term" data-t="temperature">Temperature</a><a class="term" data-t="representation-collapse">Collapse</a><a class="term" data-t="mae">MAE</a><a class="term" data-t="linear-probe">Linear probe</a><a class="term" data-t="dino">DINO</a><a class="term" data-t="clip">CLIP</a></div>
+      <h3>Words you will meet</h3><div class="terms"><a class="term" data-t="self-supervised">Self-supervised</a><a class="term" data-t="pretext-task">Pretext task</a><a class="term" data-t="data-augmentation">Augmentation</a><a class="term" data-t="contrastive-learning">Contrastive learning</a><a class="term" data-t="nt-xent">NT-Xent / InfoNCE</a><a class="term" data-t="temperature">Temperature</a><a class="term" data-t="representation-collapse">Collapse</a><a class="term" data-t="mae">MAE</a><a class="term" data-t="linear-probe">Linear probe</a><a class="term" data-t="dino">DINO</a><a class="term" data-t="distillation">Distillation</a><a class="term" data-t="cls-token">[CLS] token</a><a class="term" data-t="clip">CLIP</a></div>
       <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition. <a href="../clip/">CLIP</a> and the <a href="../visual-tokenisation/">Vision Transformer</a> have their own chapters; masked language modelling is in <a href="../transformers/">Transformers</a>.</p>
     </div>
   </div>
@@ -130,8 +130,91 @@
   </div>
 </section>
 
+<section id="dino" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>DINO: a student learns from its own average, no labels</h2>
+    <p class="sub">The same 400 unlabelled 6-number “images” as section 1. A student network outputs a softmax over 8 prototypes; a teacher, the running average of the student, supplies the targets. Each dot sits at its hidden position and is coloured by the prototype the teacher assigns it. Switch centring or sharpening off to watch the two kinds of collapse.</p>
+    <div class="plot ss-sq" id="dnPlot"></div>
+    <div class="ctl"><div class="seg" id="dnC"><button data-v="1" class="on">Centring on</button><button data-v="0">Centring off</button></div></div>
+    <div class="ctl"><label for="dnTt"><span>Teacher temperature τ<sub>t</sub> (student τ<sub>s</sub> = 0.1)</span><output id="dnTtOut"></output></label><input type="range" id="dnTt" min="0.02" max="0.2" step="0.01" value="0.04"></div>
+    <div class="ctl"><label for="dnM"><span>Teacher momentum λ</span><output id="dnMOut"></output></label><input type="range" id="dnM" min="0.9" max="0.998" step="0.002" value="0.99"></div>
+    <div class="row" style="margin:8px 0"><button class="btn primary" id="dnGo">Retrain</button></div>
+    <div class="plot wide" id="dnBars" style="aspect-ratio:16/6"></div>
+    <div class="stats" id="dnStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>DINO stands for <b>self-<a class="term" data-t="distillation">distillation</a> with no labels</b>. Distillation normally means a small <i>student</i> network is trained to copy the output probabilities of a big, already-trained <i>teacher</i>. DINO has no trained teacher: the teacher is just an average of the student's own past weights, and the student is asked to give the same answer for different crops of an image as the teacher gives for the full view.</p>
+      <p><b>The two networks.</b> Student \(g_{\theta_s}\) and teacher \(g_{\theta_t}\) have the same architecture (usually a <a class="term" data-t="vit">ViT</a> plus a small head). Each maps an image \(x\) to \(K\) scores, one per <b>prototype</b> (a learnt “pseudo-class”; DINO uses \(K=65{,}536\), the lab uses 8). The scores become probabilities with a temperature softmax:</p>
+      <div class="mathbox c1">$$P_s(x)_k=\frac{\exp\big(g_{\theta_s}(x)_k/\tau_s\big)}{\sum_{k'}\exp\big(g_{\theta_s}(x)_{k'}/\tau_s\big)},\qquad P_t(x)_k=\frac{\exp\big((g_{\theta_t}(x)_k-c_k)/\tau_t\big)}{\sum_{k'}\exp\big((g_{\theta_t}(x)_{k'}-c_{k'})/\tau_t\big)}.$$</div>
+      <p>Here \(\tau_s\) and \(\tau_t\) are the student and teacher temperatures and \(c\) is a <b>centre</b> vector, explained below. The loss is the <a class="term" data-t="cross-entropy">cross-entropy</a> from the teacher's distribution to the student's, \(H(P_t,P_s)=-\sum_k P_{t,k}\log P_{s,k}\), and only the student gets gradients. Because \(H(P_t,P_s)=H(P_t)+\mathrm{KL}(P_t\,\Vert\,P_s)\) and the teacher's term is fixed, minimising it pushes the student's distribution onto the teacher's.</p>
+      <p><b>Multi-crop.</b> From each image DINO cuts two <i>global</i> crops (each covering more than half the image, 224 × 224 pixels) and several <i>local</i> crops (less than half, 96 × 96). The teacher sees only the global crops; the student sees all of them. With the set of views \(V\) and the global views \(G\subset V\):</p>
+      <div class="mathbox c1">$$\mathcal L=\sum_{x\in G}\ \sum_{\substack{x'\in V\\ x'\ne x}} H\big(P_t(x),\,P_s(x')\big).$$</div>
+      <p>To match the teacher from a small patch, the student has to infer what the whole image shows (“this bit of fur belongs to a dog”), which is <b>local-to-global correspondence</b>. In the lab a local crop is a view with more noise on the meaningful numbers, so it carries less information than a global one.</p>
+      <p><b>The teacher is a moving average.</b> After every student gradient step, \(\theta_t\leftarrow\lambda\,\theta_t+(1-\lambda)\,\theta_s\) with momentum \(\lambda\) close to 1 (0.996 rising to 1 in the paper). This is an exponential moving average (EMA): the teacher is a smoothed ensemble of recent students, so it is steadier and in practice better than the student at every point of training, which is what makes it a useful target.</p>
+      <p><b>Centring and sharpening stop collapse.</b> Nothing in the loss forbids a constant output, so DINO uses two opposite forces on the teacher:</p>
+      <ul><li><b>Centring</b> subtracts a running mean of the teacher's scores, \(c\leftarrow m\,c+(1-m)\,\frac1B\sum_{i=1}^{B}g_{\theta_t}(x_i)\) over a batch of \(B\) images (\(m=0.9\)). No prototype can win for every image, but on its own centring pushes the outputs towards uniform.</li><li><b>Sharpening</b> uses a low teacher temperature (\(\tau_t\approx0.04\) against \(\tau_s=0.1\)), which makes each teacher output peaked, close to one-hot. On its own sharpening lets one prototype take over.</li></ul>
+      <p>Balanced, they leave one stable solution: every image confidently assigned, and all prototypes used. The bars under the lab show the <b>usage</b> of each prototype (share of images the teacher assigns to it) and the stats show two entropies (see <a class="term" data-t="entropy">entropy</a>), both divided by \(\log K\) so they run from 0 to 1. With centring off, usage piles onto one or two bars and the usage entropy falls. With centring on but \(\tau_t\) raised to the student's 0.1 or above, each output goes flat (per-image entropy near 1). Either way the nearest-neighbour accuracy falls.</p>
+      <div class="algo" data-anim="dinostep"><h5 class="algo-h">Algorithm: one DINO step</h5><ol>
+        <li><span class="kw">input</span> batch of images, student \(\theta_s\), teacher \(\theta_t\), centre \(c\), temperatures \(\tau_s,\tau_t\), momenta \(\lambda, m\)</li>
+        <li><span class="kw">for</span> each image: 2 global crops \(G\) and several local crops; all crops form \(V\)</li>
+        <li>teacher on \(G\) only: \(P_t=\text{softmax}\big((g_{\theta_t}(x)-c)/\tau_t\big)\) <span class="cm">// no gradient</span></li>
+        <li>student on all of \(V\): \(P_s=\text{softmax}\big(g_{\theta_s}(x')/\tau_s\big)\)</li>
+        <li>\(\mathcal L\leftarrow\) mean of \(H(P_t(x),P_s(x'))\) over pairs with \(x\in G,\ x'\ne x\)</li>
+        <li>update \(\theta_s\) by gradient descent on \(\mathcal L\)</li>
+        <li>\(\theta_t\leftarrow\lambda\theta_t+(1-\lambda)\theta_s\); \(\ c\leftarrow mc+(1-m)\,\text{mean}\,g_{\theta_t}(G)\)</li>
+      </ol></div>
+      <p><b>Emergent attention maps.</b> When the network is a ViT, the <a class="term" data-t="cls-token">[CLS] token</a>'s <a class="term" data-t="self-attention">self-attention</a> in the last layer, drawn as a heat map over the image patches, outlines the main object, although no label or mask was ever used. Different heads pick out different parts. Supervised ViTs show this much less cleanly. It is a side effect of the task: to match the teacher from any crop, the [CLS] token must gather the patches that belong to the object. Section 5 shows why later, larger models lost these clean maps, and how they got them back.</p>
+      <p><b>DINOv2</b> (2023) scales the recipe into a general-purpose image encoder: 142 million automatically curated images, the DINO image-level loss plus an iBOT masked-patch loss (as in <a href="#mae">MAE</a> patches are hidden, but the student predicts the teacher's output for them rather than pixels), Sinkhorn–Knopp centring, a KoLeo regulariser that spreads features out, and distillation of a 1-billion-parameter ViT into smaller ones. Its frozen features work, with only a linear layer on top, for classification, retrieval, semantic segmentation and depth estimation.</p>
+      <details class="deeper"><summary>Going deeper: why the gradient is so simple, and what centring and sharpening do to it</summary><div>
+        <p>With logits \(u=g_{\theta_s}(x')\), \(\partial H(P_t,P_s)/\partial u_k=(P_{s,k}-P_{t,k})/\tau_s\): the student is pulled towards the teacher, prototype by prototype. Caron et al. show the collapse trade-off directly: centring alone drives the KL divergence between consecutive teacher outputs and uniform to zero, sharpening alone drives the entropy of the teacher's output to zero, and with both the entropy settles at an intermediate value. The EMA teacher behaves like Polyak–Ruppert averaging, a known way to get a better model than the latest iterate. With \(\lambda=0\) (teacher = current student) training fails.</p>
+      </div></details>
+      <p class="src">Adapted from: Caron et al., <a href="https://arxiv.org/abs/2104.14294" target="_blank" rel="noopener">Emerging Properties in Self-Supervised Vision Transformers</a> (DINO, ICCV 2021); Oquab et al., <a href="https://arxiv.org/abs/2304.07193" target="_blank" rel="noopener">DINOv2: Learning Robust Visual Features without Supervision</a> (2023); Zhou et al., iBOT (2022); Hinton et al., distillation (2015).</p>
+    </div>
+  </div>
+</section>
+
+<section id="registers" class="lab">
+  <div class="card hl">
+    <h2><span class="num">5</span>Vision Transformers need registers</h2>
+    <p class="sub">A 14 × 14 grid of patches with one object on a plain background, and the [CLS] token's attention over it. This is a small hand-built model of the effect (not a trained network): its numbers are set to mirror what Darcet et al. measured in large ViTs.</p>
+    <div class="ss-imgs" style="grid-template-columns:repeat(2,minmax(0,1fr))"><figure><canvas id="rgImg" width="168" height="140"></canvas><figcaption>input patches</figcaption></figure><figure><canvas id="rgAtt" width="168" height="140"></canvas><figcaption id="rgCap">[CLS] attention map</figcaption></figure></div>
+    <div class="ctl"><div class="seg" id="rgR"><button data-v="0" class="on">No registers</button><button data-v="4">4 registers</button></div></div>
+    <div class="ctl"><label for="rgS"><span>Model size and training length</span><output id="rgSOut"></output></label><input type="range" id="rgS" min="0" max="1" step="0.05" value="0.9"></div>
+    <div class="row" style="margin:6px 0"><button class="btn" id="rgNew">New image</button></div>
+    <div class="plot wide" id="rgNorm" style="aspect-ratio:16/6"></div>
+    <div class="stats" id="rgStats"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p><b>The symptom.</b> The clean DINO attention maps of section 4 do not appear in many later, larger ViTs: DINOv2, OpenCLIP and supervised DeiT-III all show bright speckles on plain background, such as sky or wall, where nothing interesting is. Darcet et al. (2023) traced the speckles to a few output tokens whose vector length (norm) is about ten times that of the others. About 2% of patch tokens become these <b>high-norm artifact tokens</b>, and the histogram of token norms turns bimodal (the chart under the lab).</p>
+      <p><b>Where and when they appear.</b> The artifacts sit on patches that are very similar to their neighbours, that is, <i>redundant</i> background. They appear only in sufficiently large models (ViT-L and up), only after a good part of training, and in the middle-to-late layers. Slide “model size and training length” down and they vanish.</p>
+      <p><b>Why attention goes there.</b> The [CLS] query \(q\) attends to every token \(i\) with key \(k_i\) through a <a class="term" data-t="softmax">softmax</a> over scaled dot products:</p>
+      <div class="mathbox c1">$$a_i=\frac{\exp\big(q^\top k_i/\sqrt d\big)}{\sum_{j}\exp\big(q^\top k_j/\sqrt d\big)},\qquad q^\top k_i=\lVert q\rVert\,\lVert k_i\rVert\cos\angle(q,k_i).$$</div>
+      <p>Here \(d\) is the key dimension. A token whose key is ten times longer and points the same way as \(q\) gets a score ten times larger, and because the softmax exponentiates it, it takes most of the attention mass: a handful of tokens out of 196 can absorb the majority. The heat map then shows those spots instead of the object.</p>
+      <p><b>What the artifacts hold.</b> Linear probes tell the story. From an artifact token you can <i>not</i> recover its own position or its original pixels well, so it has thrown its local content away. But a classifier fitted on artifact tokens alone predicts the image class better than one on normal patches. The model has learnt to <b>recycle redundant patches as scratch memory for global information</b>: a large, well-trained network finds it useful to store and process image-level information somewhere, and the only slots it has are patch tokens whose own content it can afford to lose.</p>
+      <p><b>The fix: registers.</b> Give the model dedicated slots. Append \(R\) extra learnable tokens, the <b>registers</b>, to the input sequence, exactly like the [CLS] token but never used for any output:</p>
+      <div class="mathbox c1">$$z_0=\big[\,x_{\text{cls}};\ r_1;\dots;r_R;\ x_1E;\dots;x_NE\,\big]+E_{\text{pos}},\qquad\text{length }1+R+N,$$</div>
+      <p>where \(x_n E\) are the \(N\) embedded patches, \(r_1..r_R\) are learnt vectors shared by all images, and \(E_{\text{pos}}\) are position embeddings (none for the registers). After the last layer the register outputs are simply thrown away. The model now parks its global computation in the registers, the artifact tokens disappear, and the norms of patch tokens are unimodal again. Switch the lab to “4 registers”: the attention that went to background patches now goes to the registers (the four slots to the right of the map, outside the image; dashed and empty when there are no registers), and the map outlines the object.</p>
+      <div class="algo" data-anim="vitreg"><h5 class="algo-h">Algorithm: a ViT forward pass with registers</h5><ol>
+        <li><span class="kw">input</span> image cut into \(N\) patches, \(R\) learnt register vectors (\(R=4\) is enough)</li>
+        <li>embed the patches, add position embeddings</li>
+        <li>sequence \(\leftarrow\) [CLS] \(+\) \(R\) registers \(+\) \(N\) patch tokens</li>
+        <li><span class="kw">for</span> each transformer layer: self-attention over all \(1+R+N\) tokens, then MLP</li>
+        <li class="i1">global information can be written into registers instead of redundant patches</li>
+        <li>output: [CLS] for the image, patch tokens for dense tasks; <span class="kw">discard</span> the registers</li>
+      </ol></div>
+      <p><b>The effect.</b> With registers, attention maps of DINOv2, OpenCLIP and DeiT-III become clean; dense tasks improve slightly (semantic segmentation and depth estimation from frozen features) and unsupervised object discovery, which reads the attention map directly (the LOST method), improves a lot for DINOv2. Classification accuracy is unchanged or slightly better. The cost is \(R\) extra tokens in a sequence of hundreds, under 2% more compute. Pretrained DINOv2 checkpoints with registers are released (<code>dinov2_vitb14_reg</code> and friends), and they are the usual choice when patch features or attention maps are used.</p>
+      <details class="deeper"><summary>Going deeper: why the original DINO had no artifacts, and later work</summary><div>
+        <p>The original DINO ViT-S/B models were small and trained on ImageNet only; the paper finds artifacts emerge with model size and long training, which is why DINO's maps were clean and DINOv2's were not. A related finding in language models is the “attention sink”: LLMs dump attention on the first token or on delimiter tokens, again a slot with little content used as a default destination, and StreamingLLM keeps a few sink tokens for the same reason. A 2025 follow-up, “Vision Transformers Don't Need Trained Registers” (Jiang et al.), traces the artifacts to a few neurons and shifts their activations into an extra token at test time, getting much of the benefit without retraining.</p>
+      </div></details>
+      <p class="src">Adapted from: Darcet, Oquab, Mairal and Bojanowski, <a href="https://arxiv.org/abs/2309.16588" target="_blank" rel="noopener">Vision Transformers Need Registers</a> (ICLR 2024); Siméoni et al., LOST (2021); Xiao et al., StreamingLLM attention sinks (2023); Jiang et al., <a href="https://arxiv.org/abs/2506.08010" target="_blank" rel="noopener">Vision Transformers Don't Need Trained Registers</a> (2025).</p>
+    </div>
+  </div>
+</section>
+
 <section id="compare" class="card">
-  <h2><span class="num">4</span>SimCLR, BYOL, DINO, MAE and CLIP compared</h2>
+  <h2><span class="num">6</span>SimCLR, BYOL, DINO, MAE and CLIP compared</h2>
   <div style="overflow-x:auto">
   <table class="ss-tab">
     <tr><th>Method</th><th>Pretext task</th><th>Stops collapse by</th><th>Data</th><th>Best known for</th></tr>
@@ -146,13 +229,13 @@
   </div>
   <div class="prose">
     <p><a href="../clip/">CLIP</a> is the same NT-Xent idea applied across two modalities: the two “views” are an image and its caption, with separate encoders for each. That is why the same loss shows up in the CLIP chapter, in two-tower recommenders (in-batch negatives) and in dense retrieval for <a href="../rag/">RAG</a>: contrastive learning is a general recipe for making embeddings in which “belongs together” means “close”.</p>
-    <p class="src">Sources for the table: the papers cited in sections 1–3; Radford et al., <a href="https://arxiv.org/abs/2103.00020" target="_blank" rel="noopener">CLIP</a> (2021); Oquab et al., <a href="https://arxiv.org/abs/2304.07193" target="_blank" rel="noopener">DINOv2</a> (2023); Baevski et al., wav2vec 2.0 (2020).</p>
+    <p class="src">Sources for the table: the papers cited in sections 1–5; Radford et al., <a href="https://arxiv.org/abs/2103.00020" target="_blank" rel="noopener">CLIP</a> (2021); Oquab et al., <a href="https://arxiv.org/abs/2304.07193" target="_blank" rel="noopener">DINOv2</a> (2023); Baevski et al., wav2vec 2.0 (2020).</p>
   </div>
 </section>
 
 <section id="py" class="card">
-  <h2><span class="num">5</span>The same thing in Python</h2>
-  <p class="sub">The NT-Xent loss in PyTorch, frozen DINOv2 features with a linear probe, and a pretrained MAE from Hugging Face.</p>
+  <h2><span class="num">7</span>The same thing in Python</h2>
+  <p class="sub">The NT-Xent loss in PyTorch, frozen DINOv2 features with a linear probe, a pretrained MAE from Hugging Face, the DINO loss with its EMA teacher, and DINOv2 with registers.</p>
 <pre class="code"><span class="c"># pip install torch torchvision transformers scikit-learn pillow</span>
 <span class="k">import</span> torch, torch.nn.functional <span class="k">as</span> F
 
@@ -190,17 +273,42 @@ proc = AutoImageProcessor.from_pretrained(<span class="s">"facebook/vit-mae-base
 mae = ViTMAEForPreTraining.from_pretrained(<span class="s">"facebook/vit-mae-base"</span>)   <span class="c"># mask_ratio 0.75 by default</span>
 <span class="c"># out = mae(**proc(images=pil_image, return_tensors="pt"))</span>
 <span class="c"># out.loss: MSE on the masked patches; out.mask: which patches were hidden; out.logits: predicted pixels</span>
+<span class="c"># ---- 4. The DINO loss, centring and the EMA teacher ----</span>
+<span class="k">def</span> <span class="f">dino_loss</span>(s_out, t_out, center, tau_s=0.1, tau_t=0.04, n_global=2):
+    <span class="c"># s_out: student logits for all crops, list of (B, K); t_out: teacher logits for the global crops</span>
+    t_prob = [F.softmax((t - center) / tau_t, dim=-1).detach() <span class="k">for</span> t <span class="k">in</span> t_out]   <span class="c"># centre + sharpen</span>
+    loss, n = 0, 0
+    <span class="k">for</span> i, pt <span class="k">in</span> <span class="f">enumerate</span>(t_prob):
+        <span class="k">for</span> j, s <span class="k">in</span> <span class="f">enumerate</span>(s_out):
+            <span class="k">if</span> i == j: <span class="k">continue</span>                                 <span class="c"># same view: skip</span>
+            loss += -(pt * F.log_softmax(s / tau_s, dim=-1)).sum(-1).mean(); n += 1
+    <span class="k">return</span> loss / n
+
+@torch.no_grad()
+<span class="k">def</span> <span class="f">update_teacher</span>(student, teacher, center, t_out, lam=0.996, m=0.9):
+    <span class="k">for</span> ps, pt <span class="k">in</span> <span class="f">zip</span>(student.parameters(), teacher.parameters()):
+        pt.mul_(lam).add_((1 - lam) * ps)                         <span class="c"># EMA of the student's weights</span>
+    <span class="k">return</span> m * center + (1 - m) * torch.cat(t_out).mean(0)          <span class="c"># running mean of teacher logits</span>
+
+<span class="c"># ---- 5. DINOv2 with registers: check the patch-token norms ----</span>
+reg = torch.hub.load(<span class="s">"facebookresearch/dinov2"</span>, <span class="s">"dinov2_vitb14_reg"</span>).eval()   <span class="c"># 4 registers</span>
+<span class="k">with</span> torch.no_grad():
+    f = reg.forward_features(prep(pil_image)[<span class="k">None</span>])
+patch_norms = f[<span class="s">"x_norm_patchtokens"</span>].norm(dim=-1)                   <span class="c"># (1, 256): no outliers with registers</span>
+<span class="c"># f["x_norm_regtokens"] holds the 4 register outputs; they are discarded for downstream tasks</span>
+<span class="c"># try "dinov2_vitb14" (no registers) on the same image: a few background patches stand out</span>
 </pre>
 </section>
 
 <section id="credits" class="card">
-  <h2><span class="num">6</span>Sources and credits</h2>
+  <h2><span class="num">8</span>Sources and credits</h2>
   <div class="prose">
     <p>This page is written for this site in its own words, with its own labs and synthetic data. The methods come from these papers:</p>
     <ul>
       <li>Chen et al., <a href="https://arxiv.org/abs/2002.05709" target="_blank" rel="noopener">SimCLR</a> (2020); He et al., MoCo (2020); van den Oord et al., CPC / InfoNCE (2018); Wang and Isola, alignment and uniformity (2020).</li>
       <li>Grill et al., BYOL (2020); Chen and He, SimSiam (2021); Zbontar et al., Barlow Twins (2021); Bardes et al., VICReg (2022).</li>
-      <li>Caron et al., <a href="https://arxiv.org/abs/2104.14294" target="_blank" rel="noopener">DINO</a> (2021); Oquab et al., DINOv2 (2023).</li>
+      <li>Caron et al., <a href="https://arxiv.org/abs/2104.14294" target="_blank" rel="noopener">DINO</a> (2021); Oquab et al., <a href="https://arxiv.org/abs/2304.07193" target="_blank" rel="noopener">DINOv2</a> (2023); Zhou et al., iBOT (2022); Hinton et al., knowledge distillation (2015).</li>
+      <li>Darcet et al., <a href="https://arxiv.org/abs/2309.16588" target="_blank" rel="noopener">Vision Transformers Need Registers</a> (ICLR 2024); Jiang et al., Vision Transformers Don't Need Trained Registers (2025); Siméoni et al., LOST (2021); Xiao et al., StreamingLLM (2023). The register lab is a hand-built illustration of their measurements, not a trained model.</li>
       <li>He et al., <a href="https://arxiv.org/abs/2111.06377" target="_blank" rel="noopener">MAE</a> (2022); Bao et al., BEiT (2022); Devlin et al., BERT (2019).</li>
       <li>Radford et al., CLIP (2021); Baevski et al., wav2vec 2.0 (2020). PyTorch, torchvision and Hugging Face Transformers documentation, for the Python section.</li>
     </ul>
@@ -211,7 +319,11 @@ mae = ViTMAEForPreTraining.from_pretrained(<span class="s">"facebook/vit-mae-bas
 {"q":"What goes wrong if you train two views to agree with no negatives and no other safeguard?","o":["The model overfits to the augmentations","Representation collapse: every input maps to the same vector","The loss diverges to infinity","Nothing; this is BYOL"],"a":1,"e":"A constant output makes all views agree perfectly. BYOL avoids this only through its asymmetric predictor and stop-gradient."},
 {"q":"Why does MAE mask 75% of image patches while BERT masks about 15% of words?","o":["Images have fewer patches than sentences have words","Images are highly redundant, so low masking can be solved by interpolation without understanding","ViTs cannot see more than 25% of an image","It was chosen at random"],"a":1,"e":"Neighbouring pixels predict a missing patch well; heavy masking forces the model to learn what objects look like. It also makes the encoder four times cheaper."},
 {"q":"What does lowering the temperature τ in NT-Xent do?","o":["Makes all negatives count equally","Sharpens the softmax so the loss focuses on the hardest negatives","Removes the positive pair","Has no effect on gradients"],"a":1,"e":"Dividing by a small τ magnifies similarity differences, so the most similar negatives dominate the loss."},
-{"q":"How is a self-supervised encoder usually evaluated with a linear probe?","o":["Fine-tune all layers on the full labelled set","Freeze the encoder and train only a linear classifier on its features","Measure the pretext loss","Count its parameters"],"a":1,"e":"A linear probe tests how linearly separable the frozen features already are."}
+{"q":"How is a self-supervised encoder usually evaluated with a linear probe?","o":["Fine-tune all layers on the full labelled set","Freeze the encoder and train only a linear classifier on its features","Measure the pretext loss","Count its parameters"],"a":1,"e":"A linear probe tests how linearly separable the frozen features already are."},
+{"q":"In DINO, where do the teacher's weights come from?","o":["A separately pre-trained supervised network","An exponential moving average of the student's weights","Random weights that are never updated","The student's weights from one step ago, copied exactly"],"a":1,"e":"θ_t ← λθ_t + (1−λ)θ_s with λ near 1: the teacher is a smoothed ensemble of recent students and gets no gradients."},
+{"q":"What happens in DINO if you keep centring but remove sharpening (teacher temperature as high as the student's)?","o":["Every image is assigned to the same prototype","Every output becomes close to uniform, so the features carry no information","Training becomes supervised","Nothing changes"],"a":1,"e":"Centring alone pushes outputs towards uniform; sharpening alone pushes towards one dominant prototype. DINO needs both."},
+{"q":"Why do large ViTs such as DINOv2 show high-norm artifact tokens on plain background?","o":["The background pixels are noisy","The model reuses redundant patch tokens as scratch memory for global information","Position embeddings are missing","The images are too small"],"a":1,"e":"Artifact tokens lose their local content but hold global information; adding register tokens gives the model dedicated slots and the artifacts disappear."},
+{"q":"What happens to the register tokens at the output of a ViT with registers?","o":["They replace the [CLS] token","They are discarded","They are used as extra patch features","They are averaged into every patch"],"a":1,"e":"Registers are extra learnable input tokens used only inside the network; their outputs are thrown away."}
 ]</script>
 </main>
 <script src="../../../ml/assets/core.js"></script>
@@ -287,6 +399,85 @@ function drawMae(){ const P=P0(), ratio=+$('#maeR').value, a=makeImg(img), m=mas
   const vis=NP*NP-m.reduce((s,v)=>s+v,0);
   GX.stats('#maeStats',[[vis+' of '+NP*NP,'patches the encoder processes','c1'],[(NP*NP/Math.max(1,vis)).toFixed(1)+'×','cheaper than encoding all patches','c5'],[(100*e/base).toFixed(0)+'%','interpolation error vs guessing the mean','c2']]); }
 ML.bindRange('maeR',drawMae,v=>Math.round(v*100)+'%'); ML.bindSeg('maeI',v=>{ img=+v; curve=null; drawMae(); }); $('#maeNew').onclick=()=>{ mseed++; drawMae(); }; mP.onResize=drawMae; drawMae();
+
+/* ---------- bar helper (sections 4 and 5) ---------- */
+function bars(pl,vals,o){ const P=P0(), c=pl.ctx, n=vals.length, ymax=o.ymax||Math.max(1e-9,...vals)*1.15;
+  pl.setBounds({x0:-.6,x1:n-.4,y0:-ymax*.12,y1:ymax}); pl.clear();
+  c.strokeStyle=P.line; c.lineWidth=1; c.beginPath(); c.moveTo(pl.X(-.6),pl.Y(0)); c.lineTo(pl.X(n-.4),pl.Y(0)); c.stroke();
+  vals.forEach((v,i)=>{ const x0=pl.X(i-.38), x1=pl.X(i+.38); c.fillStyle=o.col(i,P); c.globalAlpha=.85; c.fillRect(x0,pl.Y(v),x1-x0,pl.Y(0)-pl.Y(v)); c.globalAlpha=1;
+    if(o.lab&&(n<=16||i%Math.ceil(n/12)===0)){ c.fillStyle=P.muted; c.font='11px system-ui,sans-serif'; c.textAlign='center'; c.textBaseline='top'; c.fillText(o.lab(i),(x0+x1)/2,pl.Y(0)+3); } });
+  if(o.title){ c.fillStyle=P.muted; c.font='12px system-ui,sans-serif'; c.textAlign='left'; c.textBaseline='top'; c.fillText(o.title,pl.X(-.5),pl.Y(ymax)+2); } }
+const hue=k=>`hsl(${(k*47+200)%360},68%,54%)`;
+const H01=p=>{ let h=0; p.forEach(v=>{ if(v>1e-12) h-=v*Math.log(v); }); return h/Math.log(p.length); };
+
+/* ---------- 4. DINO: student, EMA teacher, centring, sharpening, multi-crop ---------- */
+const K=8, TS=0.1, DSTEPS=1200;
+const dnP=new ML.Plot('#dnPlot'), dnB=new ML.Plot('#dnBars',{equal:false});
+let dS=null,dT=null,cen=null,dIt=0,dRaf=0,dFixed=null,dItems=null,dRaw=0;
+const lview=it=>mix([it.s[0]+.45*gs(),it.s[1]+.45*gs(),3*gs(),3*gs(),3*gs(),3*gs()]);   /* local crop: less of the meaning survives */
+function smax(u,t,c){ const z=Array.from(u,(v,k)=>(v-(c?c[k]:0))/t), mx=Math.max(...z), e=z.map(v=>Math.exp(v-mx)), s=e.reduce((a,b)=>a+b,0); return e.map(v=>v/s); }
+function dnStart(){ cancelAnimationFrame(dRaf); dItems=scData(); dS=GX.MLP([DIM,32,32,K],{act:'tanh',seed:5}); dT=GX.MLP([DIM,32,32,K],{act:'tanh',seed:5}); cen=new Float64Array(K); dIt=0;
+  dFixed=dItems.map(view); dRaw=knn(dFixed,dItems.map(x=>x.c)); dnLoop(); }
+function dnStep(){ const tt=+$('#dnTt').value, lam=+$('#dnM').value, useC=$('#dnC .on').dataset.v==='1', B=24, tsum=new Float64Array(K); let L=0,n=0;
+  for(let b=0;b<B;b++){ const itx=dItems[Math.floor(Math.random()*dItems.length)], V=[view(itx),view(itx),lview(itx),lview(itx)];
+    const Pt=[0,1].map(g=>{ const u=dT.run(V[g]); for(let k=0;k<K;k++) tsum[k]+=u[k]; return smax(u,tt,useC?cen:null); });
+    for(let v=0;v<V.length;v++){ const f=dS.fwd(V[v]), ps=smax(f.y,TS), gr=new Float64Array(K);
+      for(let g=0;g<2;g++){ if(g===v) continue; for(let k=0;k<K;k++){ gr[k]+=(ps[k]-Pt[g][k])/TS; L-=Pt[g][k]*Math.log(ps[k]+1e-12); } n++; }
+      dS.bwd(f.c,gr); } }
+  dS.adam(2e-3,1/n,{clip:5});
+  dS.ly.forEach((q,l)=>{ const t=dT.ly[l]; for(let i=0;i<q.W.length;i++) t.W[i]=lam*t.W[i]+(1-lam)*q.W[i]; for(let i=0;i<q.b.length;i++) t.b[i]=lam*t.b[i]+(1-lam)*q.b[i]; });
+  for(let k=0;k<K;k++) cen[k]=.9*cen[k]+.1*tsum[k]/(2*B);
+  return L/n; }
+function dnLoop(){ const t0=performance.now(); while(performance.now()-t0<14&&dIt<DSTEPS){ dnStep(); dIt++; } drawDn(); if(dIt<DSTEPS) dRaf=requestAnimationFrame(dnLoop); }
+function drawDn(){ if(!dS) return; const P=P0(), c=dnP.ctx, tt=+$('#dnTt').value, useC=$('#dnC .on').dataset.v==='1';
+  const PT=dFixed.map(x=>smax(dT.run(x),tt,useC?cen:null)), arg=PT.map(p=>p.indexOf(Math.max(...p))), use=new Array(K).fill(0), mean=new Array(K).fill(0);
+  arg.forEach(a=>use[a]++); PT.forEach(p=>p.forEach((v,k)=>mean[k]+=v/PT.length));
+  dnP.setBounds({x0:-1.9,x1:1.9,y0:-1.9,y1:1.9}); dnP.clear();
+  dItems.forEach((it,i)=>{ c.fillStyle=hue(arg[i]); c.globalAlpha=.8; c.beginPath(); c.arc(dnP.X(it.s[0]),dnP.Y(it.s[1]),3.2,0,7); c.fill(); }); c.globalAlpha=1;
+  c.fillStyle=P.muted; c.font='12px system-ui,sans-serif'; c.textAlign='left'; c.textBaseline='top'; c.fillText('hidden position of each image, coloured by teacher prototype',dnP.X(-1.85),dnP.Y(1.85));
+  bars(dnB,use.map(u=>u/PT.length),{ymax:1,col:k=>hue(k),lab:k=>'p'+(k+1),title:'prototype usage (share of images)'});
+  const SP=dFixed.map(x=>smax(dS.run(x),TS)), acc=knn(SP,dItems.map(x=>x.c)), hUse=H01(mean), hImg=PT.reduce((s,p)=>s+H01(p),0)/PT.length;
+  const top=Math.max(...use)/PT.length, verdict=top>.45?'collapsing: '+pct(top)+' on one prototype':hImg>.75?'collapsed to uniform outputs':'healthy: confident and diverse';
+  GX.stats('#dnStats',[[pct(dRaw),'nearest-neighbour accuracy on raw inputs','c3'],[pct(acc),'same, on student outputs','c5'],[hUse.toFixed(2),'usage entropy (0 = one prototype)','c1'],[hImg.toFixed(2),'per-image entropy (1 = flat)','c2'],[verdict,String(dIt)+' steps','c4']]); }
+ML.bindRange('dnTt',dnStart,v=>(+v).toFixed(2)); ML.bindRange('dnM',dnStart,v=>(+v).toFixed(3)); ML.bindSeg('dnC',dnStart); $('#dnGo').onclick=dnStart; dnP.onResize=drawDn; dnB.onResize=drawDn;
+(()=>{ const el=$('#dnPlot'); if(!('IntersectionObserver' in window)) return dnStart(); let done=false; const io=new IntersectionObserver(es=>{ if(!done&&es.some(e=>e.isIntersecting)){ done=true; io.disconnect(); dnStart(); } },{rootMargin:'100px'}); io.observe(el); })();
+
+/* ---------- 5. registers: a hand-built model of high-norm artifact tokens ---------- */
+const G=14, NPt=G*G, PX=10; let rgSeed=3;
+const rgN=new ML.Plot('#rgNorm',{equal:false});
+function rgScene(seed){ const r=ML.rng(seed), cx=4.5+r()*5, cy=4.5+r()*5, ax=2.2+r()*1.3, ay=2+r()*1.3, sky=[.55+.2*r(),.7+.15*r(),.9], obj=[.85,.45+.3*r(),.2];
+  const cells=[]; for(let y=0;y<G;y++) for(let x=0;x<G;x++){ const inO=((x+.5-cx)/ax)**2+((y+.5-cy)/ay)**2<1, tex=inO?.12*Math.sin(x*1.7+y*2.3):0;
+    cells.push({x,y,inO,col:inO?obj.map(v=>T01(v+tex)):sky.map(v=>T01(v-.12*y/G)),noise:r()}); }
+  cells.forEach(cl=>{ let same=0,n=0; [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]].forEach(([dx,dy])=>{ const X=cl.x+dx,Y=cl.y+dy; if(X<0||Y<0||X>=G||Y>=G) return; n++; if(cells[Y*G+X].inO===cl.inO) same++; }); cl.red=cl.inO?0:same/n; });
+  return cells; }
+const T01=v=>Math.max(0,Math.min(1,v));
+function rgModel(){ const R=+$('#rgR .on').dataset.v, s=+$('#rgS').value, cells=rgScene(rgSeed), r=ML.rng(rgSeed*7+1);
+  const on=T01((s-.45)/.4), nA=Math.round(on*5), mult=1+9*on;
+  const bg=cells.map((c,i)=>i).filter(i=>!cells[i].inO&&cells[i].red===1).sort((a,b)=>cells[a].noise-cells[b].noise);
+  const art=new Set(R?[]:bg.slice(0,nA));
+  const norm=cells.map((c,i)=>art.has(i)?mult*(1+.08*r.gauss()):1+.12*r.gauss());
+  const score=cells.map((c,i)=>art.has(i)?.55*mult:(c.inO?2.5:0)+.15*r.gauss());
+  const regS=R?[...Array(R)].map(()=>.55*(1+9*on)*(on>0?1:.2)+.2*r.gauss()):[], regN=regS.map(()=>(1+9*on)*(on>0?1:.3)*(1+.08*r.gauss()));
+  const all=score.concat(regS), mx=Math.max(...all), e=all.map(v=>Math.exp(v-mx)), Z=e.reduce((a,b)=>a+b,0), a=e.map(v=>v/Z);
+  return {cells,art,norm,a:a.slice(0,NPt),ra:a.slice(NPt),regN,R,on}; }
+function drawRg(){ const P=P0(), M=rgModel(), ci=$('#rgImg').getContext('2d'), ca=$('#rgAtt'), cx=ca.getContext('2d');
+  ci.fillStyle=P.soft||'#eef1f6'; ci.fillRect(0,0,168,140);
+  M.cells.forEach(c=>{ ci.fillStyle=`rgb(${c.col.map(v=>Math.round(v*255)).join(',')})`; ci.fillRect(c.x*PX,c.y*PX,PX,PX); });
+  ci.strokeStyle='rgba(0,0,0,.12)'; ci.lineWidth=1; for(let i=1;i<G;i++){ ci.beginPath(); ci.moveTo(i*PX+.5,0); ci.lineTo(i*PX+.5,G*PX); ci.moveTo(0,i*PX+.5); ci.lineTo(G*PX,i*PX+.5); ci.stroke(); }
+  const top=Math.max(...M.a);
+  cx.fillStyle='#0b1020'; cx.fillRect(0,0,ca.width,ca.height);
+  M.cells.forEach((c,i)=>{ const v=Math.sqrt(M.a[i]/top); cx.fillStyle=`rgb(${Math.round(255*v)},${Math.round(200*v*v)},${Math.round(60*v)})`; cx.fillRect(c.x*PX,c.y*PX,PX,PX); });
+  if(M.R){ M.ra.forEach((v,j)=>{ cx.fillStyle=P.c4; cx.globalAlpha=.25+.75*Math.min(1,v/Math.max(1e-9,M.ra.reduce((s,x)=>s+x,0))*M.R*.5); cx.fillRect(G*PX+8,8+j*32,18,26); }); cx.globalAlpha=1; }
+  else { cx.strokeStyle='rgba(255,255,255,.25)'; cx.setLineDash([3,3]); for(let j=0;j<4;j++) cx.strokeRect(G*PX+8.5,8.5+j*32,17,25); cx.setLineDash([]); }
+  $('#rgCap').textContent=M.R?'[CLS] attention map, with the 4 registers on the right':'[CLS] attention map';
+  /* histogram of token norms */
+  const nb=22, top2=11, h=new Array(nb).fill(0), hr=new Array(nb).fill(0), bin=v=>Math.max(0,Math.min(nb-1,Math.floor(v/top2*nb)));
+  M.norm.forEach(v=>h[bin(v)]++); M.regN.forEach(v=>hr[bin(v)]++);
+  const cnt=h.map((v,i)=>v+hr[i]);
+  bars(rgN,cnt.map(v=>Math.log10(1+v)),{ymax:2.5,col:(i,P)=>hr[i]?P.c4:(i*top2/nb>3?P.c2:P.c1),lab:i=>i%2?'':String(i/2),title:'token norms (log count; ×1 = a typical patch)'});
+  const sum=f=>M.a.reduce((s,v,i)=>s+(f(i)?v:0),0), aObj=sum(i=>M.cells[i].inO), aArt=sum(i=>M.art.has(i)), aBg=sum(i=>!M.cells[i].inO&&!M.art.has(i)), aReg=M.ra.reduce((s,v)=>s+v,0);
+  GX.stats('#rgStats',[[String(M.art.size)+' of '+NPt,'high-norm artifact tokens','c2'],[pct(aObj),'[CLS] attention on the object','c5'],[pct(aArt),'on artifact tokens','c2'],[pct(aBg),'on normal background','c3'],[M.R?pct(aReg):'none','on registers','c4']]); }
+ML.bindSeg('rgR',drawRg); ML.bindRange('rgS',drawRg,v=>v<.45?'small / early':v<.75?'medium':'large / long'); $('#rgNew').onclick=()=>{ rgSeed++; drawRg(); }; rgN.onResize=drawRg; drawRg();
 })();
 </script>
 <script>NLP.nav('nlp','self-supervised'); ML.renderMath(document.body);</script>
