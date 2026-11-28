@@ -22,6 +22,8 @@
 <script defer src="lab.js"></script>
 <script defer src="lab-x.js"></script>
 <script defer src="music.js"></script>
+<script defer src="rag-index.js"></script>
+<script defer src="rag.js"></script>
 </head>
 <body class="shell dllab">
 <div class="app-head" id="appHead">
@@ -39,6 +41,7 @@
     <li><a class="sitem" href="#backprop" data-stage="backprop"><span class="n">2</span><span class="t">Backprop visualiser<span class="sub">activations &amp; gradients</span></span></a></li>
     <li><a class="sitem" href="#attention" data-stage="attention"><span class="n">3</span><span class="t">Attention explorer<span class="sub">heatmaps for sentences</span></span></a></li>
     <li><a class="sitem" href="#music" data-stage="music"><span class="n">4</span><span class="t">Music recommender<span class="sub">word2vec on playlists</span></span></a></li>
+    <li><a class="sitem" href="#rag" data-stage="rag"><span class="n">5</span><span class="t">RAG builder<span class="sub">Wikipedia, FAISS, Flan-T5</span></span></a></li>
   </ol>
 </nav>
 
@@ -218,6 +221,84 @@ seed = <span class="s">"1"</span>                      <span class="c"># a song 
 <span class="c"># several seeds: average their unit vectors (what this page does)</span>
 print(model.wv.most_similar(positive=[<span class="s">"1"</span>, <span class="s">"5"</span>, <span class="s">"9"</span>], topn=10))</pre>
     <p class="hint mu-credit">Data: Shuo Chen, Josh L. Moore, Douglas Turnbull and Thorsten Joachims, “Playlist Prediction via Metric Embedding”, KDD 2012 (Cornell yes.com playlist dataset, <code>yes_big</code>; radio playlists collected from yes.com, tags from Last.fm). Used here for teaching; subjective tags such as “favourites” removed and genres grouped into seven colours. Method: Mikolov et al., 2013; applied to playlists as “item2vec” / “prod2vec”.</p>
+  </div>
+</section>
+
+<!-- ================= 5. RAG builder (rag-index.js + rag.js) ================= -->
+<section class="stage" id="st-rag" data-stage="rag" hidden>
+  <div class="ws-head"><div class="ws-t"><span class="ws-n">5</span><div><h2>RAG builder</h2><p>Build a retrieval-augmented QA system step by step: pick Wikipedia articles, cut them into chunks, embed them, store the vectors in a FAISS-style index, retrieve the best chunks for a question and let a small open model (Flan-T5, DistilBERT, SmolLM2, Qwen2.5) write the answer. Then score the whole pipeline on a real QA test set. Everything runs in your browser.</p></div></div><div class="ws-act"><a class="btn sm" href="../nlp/rag/">Learn: RAG, sparse vs dense →</a><a class="btn sm" href="../nlp/llm-adaptation/">Learn: LLM adaptation map →</a></div></div>
+  <div class="rg-stat" aria-live="polite"><span id="rgStatus"></span><div class="mu-bar" hidden><i id="rgProg"></i></div></div>
+  <div class="pg2">
+    <div class="tool">
+      <div class="tool-h"><div class="grow"><h3>1 · Documents</h3><p id="rgDocInfo">Loading the Wikipedia sample…</p></div></div>
+      <p class="hint">48 Wikipedia articles from the SQuAD v1.1 test set, each with crowd-written questions and answers. Tick the ones to put in your knowledge base.</p>
+      <div class="row" style="gap:6px;margin:4px 0 8px;flex-wrap:wrap"><button type="button" class="btn sm" id="rgAll">All 48</button><button type="button" class="btn sm" id="rgNone">None</button></div>
+      <div id="rgArts" class="rg-arts"></div>
+      <div id="rgExtra" class="mu-seeds" style="margin-top:8px"></div>
+      <details class="rg-det"><summary>Add a live Wikipedia article</summary>
+        <div class="mu-find" style="margin-top:8px"><input type="search" id="rgWiki" class="txt" placeholder="Search Wikipedia (for example: Ada Lovelace)" autocomplete="off" aria-label="Search Wikipedia"><div id="rgWikiHits" class="mu-hits" hidden></div></div>
+        <div class="row" style="gap:8px;margin-top:6px;flex-wrap:wrap;align-items:center"><button type="button" class="btn sm" id="rgWikiAdd">Add this title</button><span class="hint" id="rgWikiMsg">Text from the Wikipedia API (CC BY-SA 4.0). It has no test questions: add your own below.</span></div>
+      </details>
+      <details class="rg-det"><summary>Add your own text</summary>
+        <input type="text" id="rgOwnTitle" class="txt" placeholder="Title" style="margin-top:8px;width:100%;box-sizing:border-box">
+        <textarea id="rgOwnText" rows="5" class="txt" placeholder="Paste notes, a manual or an article. A blank line starts a new paragraph. Stays in your browser." style="margin-top:6px"></textarea>
+        <button type="button" class="btn sm primary" id="rgOwnAdd" style="margin-top:6px">Add to the knowledge base</button>
+      </details>
+      <details class="rg-det"><summary>Add your own test questions</summary>
+        <p class="hint" style="margin-top:8px">One per line: <code>question | answer</code> (more answers with more <code>|</code>).</p>
+        <textarea id="rgQaText" rows="4" class="txt" placeholder="Who wrote the first published algorithm for a machine? | Ada Lovelace | Lovelace"></textarea>
+        <div class="row" style="gap:8px;margin-top:6px;flex-wrap:wrap;align-items:center"><button type="button" class="btn sm primary" id="rgQaAdd">Add questions</button><span class="hint" id="rgQaMsg"></span></div>
+      </details>
+    </div>
+    <div class="tool">
+      <div class="tool-h"><div class="grow"><h3>2 · Chunking</h3><p id="rgChunkInfo">–</p></div></div>
+      <div class="ctl"><label><span>Split into</span></label><div class="seg" id="rgChunk"><button data-v="para" class="on">Paragraphs</button><button data-v="sent">Sentences</button><button data-v="words">Fixed words</button></div></div>
+      <div class="lab-ctl2">
+        <div class="ctl" id="rgSizeBox" hidden><label for="rgSize"><span>Chunk size</span><output id="rgSizeOut"></output></label><input type="range" id="rgSize" min="20" max="300" step="10" value="120"></div>
+        <div class="ctl" id="rgOvBox" hidden><label for="rgOv"><span>Overlap</span><output id="rgOvOut"></output></label><input type="range" id="rgOv" min="0" max="50" step="5" value="20"></div>
+      </div>
+      <div id="rgChunkEx" class="rg-ex"></div>
+      <div class="tool-h" style="margin-top:14px"><div class="grow"><h3>3 · Embeddings and vector index</h3><p>Turn every chunk into a vector and store it for fast nearest-neighbour search.</p></div></div>
+      <div class="ctl"><label for="rgEmb"><span>Embedding model</span></label><select id="rgEmb"></select></div>
+      <div id="rgIdxBox" class="rg-idx">
+        <div class="ctl"><label><span>FAISS index</span></label><div class="seg" id="rgIdx"><button data-v="Flat" class="on">Flat</button><button data-v="IVF">IVF</button><button data-v="HNSW">HNSW</button><button data-v="PQ">PQ</button></div></div>
+        <div class="lab-ctl2">
+          <div class="ctl" data-rg-for="IVF" hidden><label for="rgNlist"><span>nlist</span><output id="rgNlistOut"></output></label><input type="range" id="rgNlist" min="2" max="64" value="16"></div>
+          <div class="ctl" data-rg-for="IVF" hidden><label for="rgNprobe"><span>nprobe</span><output id="rgNprobeOut"></output></label><input type="range" id="rgNprobe" min="1" max="16" value="4"></div>
+          <div class="ctl" data-rg-for="HNSW" hidden><label for="rgM"><span>M (links)</span><output id="rgMOut"></output></label><input type="range" id="rgM" min="4" max="48" step="4" value="16"></div>
+          <div class="ctl" data-rg-for="HNSW" hidden><label for="rgEf"><span>efSearch</span><output id="rgEfOut"></output></label><input type="range" id="rgEf" min="8" max="128" step="8" value="32"></div>
+          <div class="ctl" data-rg-for="PQ" hidden><label for="rgPq"><span>Bytes per vector (m)</span><output id="rgPqOut"></output></label><input type="range" id="rgPq" min="0" max="7" value="3"></div>
+        </div>
+      </div>
+      <p class="hint" id="rgIdxSparse" hidden>Sparse retrievers keep an inverted index (word → chunks) instead of a vector index. Pick a dense model to try FAISS indexes.</p>
+      <div class="player" style="margin-top:8px"><button class="btn primary" id="rgBuild" type="button">Build the index</button></div>
+      <p class="hint" id="rgBuildInfo">Not built yet. The first dense model or generator you pick downloads once from Hugging Face and is cached by your browser.</p>
+    </div>
+  </div>
+  <div class="pg2">
+    <div class="tool">
+      <div class="tool-h"><div class="grow"><h3>4 · Generator</h3><p>The model that reads the retrieved chunks and writes the answer.</p></div></div>
+      <div class="ctl"><label for="rgGen"><span>Answer model</span></label><select id="rgGen"></select></div>
+      <div class="lab-ctl2">
+        <div class="ctl"><label for="rgK"><span>Chunks to the model (top-k)</span><output id="rgKOut"></output></label><input type="range" id="rgK" min="1" max="10" value="3"></div>
+        <div class="ctl"><label for="rgMax"><span>Max answer tokens</span><output id="rgMaxOut"></output></label><input type="range" id="rgMax" min="8" max="160" step="8" value="48"></div>
+      </div>
+      <div id="rgPromptBox" hidden><label class="small" for="rgPrompt"><b>Prompt template</b> <span class="muted">{context} and {question} are filled in</span></label><textarea id="rgPrompt" rows="7" class="txt mono" style="margin-top:4px"></textarea><button type="button" class="btn sm" id="rgPromptReset" style="margin-top:4px">Reset prompt</button></div>
+      <div class="tool-h" style="margin-top:14px"><div class="grow"><h3>5 · Ask</h3><p>Type a question about your documents, or take one from the test set to see the expected answer.</p></div></div>
+      <div class="row" style="gap:6px;flex-wrap:wrap"><input type="text" id="rgQ" class="txt" style="flex:1 1 220px;min-width:0" placeholder="Which NFL team represented the AFC at Super Bowl 50?" aria-label="Question"><button type="button" class="btn primary" id="rgAsk">Ask</button><button type="button" class="btn" id="rgSample">Test-set question</button></div>
+      <p class="hint" id="rgQHint"></p>
+      <div id="rgAns"></div>
+    </div>
+    <div class="tool">
+      <div class="tool-h"><div class="grow"><h3>6 · Evaluate on the QA test set</h3><p>Run many test questions through the pipeline. Retrieval is scored by whether a chunk containing the reference answer comes back; answers by SQuAD exact match and token F1.</p></div></div>
+      <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap"><div class="ctl" style="min-width:150px"><label for="rgEvalN"><span>Questions</span></label><select id="rgEvalN"><option>25</option><option selected>100</option><option>300</option><option>1000</option></select></div><label class="small" style="margin-bottom:12px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="rgEvalGen"> also score the generator (slower)</label><button type="button" class="btn primary" id="rgEvalBtn" style="margin-bottom:8px">Run the test set</button></div>
+      <div id="rgEval"><p class="hint">Change one setting at a time (chunking, embedding model, index, k) and run again: every run is kept in a table so you can compare.</p></div>
+    </div>
+  </div>
+  <div class="tool">
+    <div class="tool-h"><div class="grow"><h3>The same pipeline in Python</h3><p>Updates with your settings: Hugging Face datasets, sentence-transformers, faiss-cpu and transformers.</p></div></div>
+    <pre class="code" id="rgPy"></pre>
+    <p class="hint mu-credit">Data: SQuAD v1.1 development set (Rajpurkar, Zhang, Lopyrev and Liang, “SQuAD: 100,000+ Questions for Machine Comprehension of Text”, EMNLP 2016), paragraphs from English Wikipedia, CC BY-SA 4.0; live articles from the Wikipedia API, CC BY-SA 4.0. Indexes follow FAISS (Johnson, Douze and Jégou, “Billion-scale similarity search with GPUs”, 2017; Douze et al., “The Faiss library”, 2024), HNSW (Malkov and Yashunin, 2018) and product quantisation (Jégou, Douze and Schmid, 2011); checked against faiss-cpu on the same vectors. Method: Lewis et al., “Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks”, 2020. Models via Transformers.js from the Hugging Face Hub: Flan-T5 (Google, Apache-2.0), LaMini-Flan-T5 (MBZUAI, CC BY-NC 4.0), DistilBERT-SQuAD (Hugging Face, Apache-2.0), SmolLM2 (Hugging Face, Apache-2.0), Qwen2.5 (Alibaba, Apache-2.0), all-MiniLM-L6-v2 (sentence-transformers, Apache-2.0), bge-small-en-v1.5 (BAAI, MIT), gte-small (Alibaba DAMO, MIT); word2vec Google News vectors (Mikolov et al., 2013).</p>
   </div>
 </section>
 
