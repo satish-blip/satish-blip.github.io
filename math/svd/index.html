@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>The singular value decomposition (SVD), explained interactively</title>
-<meta name="description" content="The SVD as rotate, stretch, rotate; where U, Σ and V come from; the best low-rank approximation demonstrated on an image; and how the SVD gives PCA, the pseudo-inverse, rank and the condition number.">
+<meta name="description" content="The SVD as rotate, stretch, rotate; where U, Σ and V come from; the best low-rank approximation demonstrated on an image; low-rank factorisation A ≈ UVᵀ, which matrices it suits, its benefits and limits; and how the SVD gives PCA, the pseudo-inverse, rank and the condition number.">
 <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
@@ -21,7 +21,7 @@
   <p class="kicker">Mathematical concepts &middot; Linear algebra</p>
   <h1>The singular value <span class="grad">decomposition</span></h1>
   <p class="lede">Eigenvectors only work for square matrices, and even then not always. The SVD works for every matrix, of any shape. It says that any linear map is a rotation, then a stretch along perpendicular axes, then another rotation. From that one statement come rank, the best low-rank approximation, PCA and the pseudo-inverse.</p>
-  <div class="toc"><a href="#intro">0 · Start here</a><a href="#geom">1 · Rotate, stretch, rotate</a><a href="#derive">2 · Where the pieces come from</a><a href="#lowrank">3 · Low-rank approximation</a><a href="#uses">4 · PCA, pseudo-inverse, conditioning</a><a href="#ml">5 · In ML</a><a href="#py">6 · Python</a></div>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#geom">1 · Rotate, stretch, rotate</a><a href="#derive">2 · Where the pieces come from</a><a href="#lowrank">3 · Low-rank approximation</a><a href="#lrf">4 · Low-rank factorisation</a><a href="#uses">5 · PCA, pseudo-inverse, conditioning</a><a href="#ml">6 · In ML</a><a href="#py">7 · Python</a></div>
 </section>
 
 <section id="intro" class="card intro">
@@ -120,8 +120,82 @@
   </div>
 </section>
 
+<section id="lrf" class="lab">
+  <div class="card hl">
+    <h2><span class="num">4</span>Low-rank factorisation: a big table made of a few patterns</h2>
+    <p class="sub">Pick a kind of matrix and a rank \(k\). The tall strip \(U\) (left) and the wide strip \(V^\top\) (top) are the two factors: \(k\) columns and \(k\) rows instead of the whole table. Their product \(UV^\top\) sits where they meet; compare it with the original \(A\) below. Blue is positive, red negative.</p>
+    <div class="lrf-fact" id="lrfFact" aria-label="U times V transposed, laid out like a multiplication table">
+      <div class="lrf-corner">row of U · column of Vᵀ = one cell</div>
+      <figure class="lrf-v"><canvas id="lrfV"></canvas><figcaption id="lrfVcap">Vᵀ</figcaption></figure>
+      <figure class="lrf-u"><canvas id="lrfU"></canvas><figcaption id="lrfUcap">U</figcaption></figure>
+      <figure class="lrf-k"><canvas id="lrfK"></canvas><figcaption id="lrfKcap">UVᵀ</figcaption></figure>
+    </div>
+    <div class="lrf-pair">
+      <figure><canvas id="lrfA"></canvas><figcaption id="lrfAcap">A, the original</figcaption></figure>
+      <figure><canvas id="lrfE"></canvas><figcaption>left over, A − UVᵀ</figcaption></figure>
+    </div>
+    <div class="ctl"><label for="lrfType"><span>Kind of matrix</span></label><select id="lrfType"></select></div>
+    <p class="hint lrf-desc" id="lrfDesc"></p>
+    <div class="ctl"><label for="lrfk"><span>Rank \(k\) (patterns kept)</span><output id="lrfkOut"></output></label><input type="range" id="lrfk" min="1" max="24" step="1" value="3"></div>
+    <div class="plot short" id="pLrf"></div>
+    <div class="stats" id="lrfStats"></div>
+    <div class="note" id="lrfNote"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Section 3 kept the first few layers of an image's SVD. That idea has a name of its own, used all over ML: <b>low-rank factorisation</b>. A big \(m\times n\) table is written, exactly or nearly, as a tall thin matrix times a short wide one:</p>
+      <div class="mathbox c1">$$\underbrace{A}_{m\times n}\;\approx\;\underbrace{U}_{m\times k}\;\underbrace{V^\top}_{k\times n},\qquad k\ll\min(m,n).$$</div>
+      <p><b>An everyday picture.</b> A table of 1,000 people by 500 films holds half a million ratings. But taste is not random: a few hidden traits, such as liking action, liking comedy and liking old films, explain most of it. Row \(i\) of \(U\) says how much person \(i\) has of each trait. Column \(j\) of \(V^\top\) says how much film \(j\) offers of each trait. The predicted rating is the dot product of the two, and \(k\) traits replace the whole table.</p>
+      <p>Each of the \(k\) patterns is a rank-one layer, a column times a row, so the factorisation is also a sum of \(k\) simple pictures:</p>
+      <div class="mathbox c2">$$UV^\top=\sum_{t=1}^{k}u_t\,v_t^\top .$$</div>
+      <p><b>How do you find \(U\) and \(V\)?</b> The truncated <a class="term" data-t="svd">SVD</a> gives the best possible answer: take \(U=U_k\Sigma_k\) and \(V=V_k\) from the first \(k\) singular triplets. By the Eckart–Young theorem, no other rank-\(k\) matrix is closer to \(A\). The demo does exactly this. The bar chart shows the <a class="term" data-t="singular-value">singular values</a>: when they drop fast, a small \(k\) captures almost everything.</p>
+      <h3>Does every matrix have one?</h3>
+      <p>Yes, in the exact sense. Every matrix of rank \(r\) can be written exactly as an \(m\times r\) matrix times an \(r\times n\) matrix. For example, take \(r\) independent columns of \(A\) as \(U\); every other column is a combination of them. So exactness is never the question. The real question is whether a <i>small</i> \(k\) is <i>nearly</i> exact. That depends on the matrix, and the singular values tell you.</p>
+      <div class="lrf-kinds">
+        <div class="lrf-good"><h4>Works well (singular values fall fast)</h4><ul>
+          <li><b>Ratings and preferences:</b> users × products, readers × articles.</li>
+          <li><b>Smooth tables:</b> similarity or distance kernels, covariance matrices of correlated features, images with large smooth areas.</li>
+          <li><b>Panels driven by a few common factors:</b> store × week sales with shared seasonality, yields across maturities, asset returns.</li>
+          <li><b>Claims triangles:</b> the chain ladder treats claims as an origin-year level times a development pattern, which is a rank-one structure.</li>
+          <li><b>Word co-occurrence counts:</b> their factors are word embeddings.</li>
+          <li><b>Weight updates in fine-tuning</b> large models, which is why LoRA works.</li>
+        </ul></div>
+        <div class="lrf-bad"><h4>Works badly (singular values stay flat)</h4><ul>
+          <li><b>Identity, permutation and near-diagonal matrices:</b> every direction is equally important, so nothing can be dropped.</li>
+          <li><b>Pure noise:</b> there is no shared pattern to find.</li>
+          <li><b>Sparse link tables</b> with mostly local structure, such as a road network or friendships within many small groups.</li>
+          <li><b>Sharp, local detail:</b> edges, checkerboards and isolated spikes need many patterns to rebuild.</li>
+        </ul></div>
+      </div>
+      <h3>Benefits</h3>
+      <ul>
+        <li><b>Storage:</b> \(k(m+n)\) numbers instead of \(mn\). For a \(1000\times500\) table with \(k=10\), that is 15,000 numbers instead of 500,000.</li>
+        <li><b>Speed:</b> compute \(Ax\) as \(U(V^\top x)\). That costs \(k(m+n)\) multiplications instead of \(mn\).</li>
+        <li><b>Denoising:</b> noise spreads over all the small singular values, so dropping them removes much of it.</li>
+        <li><b>Filling gaps:</b> fit \(U\) and \(V\) on the known entries only, and \(UV^\top\) predicts the missing ones. This is the classic <a href="../../ml/recommender/">recommender</a> method.</li>
+        <li><b>Hidden factors and regularisation:</b> fewer free numbers means less over-fitting. The factors are often meaningful: tastes, topics, seasons.</li>
+        <li><b>Efficient deep learning:</b> <a class="term" data-t="lora">LoRA</a> learns a weight update \(\Delta W=BA\) of rank 8 or 16 instead of millions of free numbers, and low-rank layers shrink trained models (see <a href="../../dl/nn/compression/">compression</a>).</li>
+      </ul>
+      <h3>Limitations</h3>
+      <ul>
+        <li><b>It only helps when the singular values fall.</b> Identity-like, noisy or truly high-rank matrices need almost every pattern. Try them in the demo.</li>
+        <li><b>Choosing \(k\) is a trade-off.</b> Too small loses real structure. Too large keeps the noise. Use the energy kept, the elbow of the bar chart, or validation error.</li>
+        <li><b>Sparsity is lost.</b> \(UV^\top\) is usually dense, even when \(A\) was mostly zeros. Look at the sparse links example.</li>
+        <li><b>Factors are not unique.</b> \(UV^\top=(UR)(R^{-1}V^\top)\) for any invertible \(R\), so read single factors with care. Also, plain SVD factors can be negative. Use non-negative matrix factorisation (NMF) when the parts must add up, such as topics in documents.</li>
+        <li><b>Outliers and missing data make it harder.</b> A few huge entries can capture whole patterns (robust PCA handles this). With missing entries there is no closed-form answer, so alternating least squares or gradient descent is used.</li>
+        <li><b>Cost at scale.</b> A full SVD of a big matrix is expensive. Randomised SVD finds the top \(k\) patterns much faster.</li>
+      </ul>
+      <details class="deeper"><summary>Going deeper: the error, the cost, and the factorisation zoo</summary><div>
+        <p><b>Error.</b> With singular values \(\sigma_1\ge\sigma_2\ge\dots\), the best rank-\(k\) error is \(\|A-A_k\|_F=\sqrt{\sum_{i>k}\sigma_i^2}\) and \(\|A-A_k\|_2=\sigma_{k+1}\). The share of "energy" kept is \(\sum_{i\le k}\sigma_i^2/\sum_i\sigma_i^2\), the number shown in the demo.</p>
+        <p><b>Break-even.</b> Factorisation saves storage only when \(k(m+n)<mn\), that is \(k<\frac{mn}{m+n}\). For a square \(n\times n\) matrix, that means \(k<n/2\).</p>
+        <p><b>The family.</b> Truncated SVD: optimal and orthogonal factors. PCA: the truncated SVD of a centred data matrix. NMF: \(U,V\ge0\), so the factors are additive parts. Probabilistic matrix factorisation and ALS: fit on observed entries with an \(L_2\) penalty. CP and Tucker decompositions extend the idea to tensors. In transformers, Linformer and similar methods approximate the \(n\times n\) attention matrix with a low-rank one.</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
 <section id="uses" class="card">
-  <h2><span class="num">4</span>What else the SVD gives you</h2>
+  <h2><span class="num">5</span>What else the SVD gives you</h2>
   <div class="grid3 prose">
     <div><h3>PCA</h3><p>Centre the data matrix \(X\) (subtract each column's mean) and take its SVD, \(X=U\Sigma V^\top\). Then the covariance is \(\frac{1}{n-1}X^\top X=V\frac{\Sigma^2}{n-1}V^\top\). The principal directions are the columns of \(V\), the variances are \(\sigma_i^2/(n-1)\), and the projected coordinates are \(U\Sigma\). This is how <a href="../../ml/pca/">PCA</a> is computed in practice.</p></div>
     <div><h3>Pseudo-inverse</h3><p>Invert what can be inverted: \(A^+=V\Sigma^+U^\top\), where \(\Sigma^+\) takes \(1/\sigma_i\) for each nonzero \(\sigma_i\) and leaves zeros alone. \(x=A^+b\) is the least-squares solution, and when there are many it is the one with the smallest \(\|x\|\). It works for any shape or rank.</p></div>
@@ -135,7 +209,7 @@
 </section>
 
 <section id="ml" class="card">
-  <h2><span class="num">5</span>Where the SVD shows up in ML</h2>
+  <h2><span class="num">6</span>Where the SVD shows up in ML</h2>
   <div class="grid3 prose">
     <div><h3>LoRA</h3><p>Fine-tuning updates a weight matrix by \(\Delta W=BA\) of rank \(r\ll d\). The bet is that useful updates have quickly decaying singular values. See the <a href="../../dl/nlp/llm-adaptation/">LLM adaptation map</a>.</p></div>
     <div><h3>Latent semantic analysis</h3><p>Take the SVD of a word–document count matrix and keep \(k\approx300\) components. Words used in similar documents land close together: an early form of <a href="../../dl/nlp/embeddings/">word embeddings</a>.</p></div>
@@ -147,7 +221,7 @@
 </section>
 
 <section id="py" class="card">
-  <h2><span class="num">6</span>The same thing in Python (NumPy)</h2>
+  <h2><span class="num">7</span>The same thing in Python (NumPy)</h2>
 <pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
 A = np.array([[<span class="s">3.</span>, <span class="s">0.</span>], [<span class="s">4.</span>, <span class="s">5.</span>]])
 U, s, Vt = np.linalg.svd(A)             <span class="c"># s = [6.708, 2.236]</span>
@@ -158,7 +232,28 @@ k = <span class="s">5</span>; img_k = U[:, :k] @ np.diag(s[:k]) @ Vt[:k]       <
 err = np.sqrt((s[k:]**<span class="s">2</span>).sum())                  <span class="c"># == np.linalg.norm(img - img_k)</span>
 np.linalg.pinv(A)                       <span class="c"># pseudo-inverse V Σ⁺ Uᵀ</span>
 s[<span class="s">0</span>] / s[-<span class="s">1</span>], np.linalg.cond(A)               <span class="c"># condition number</span>
-<span class="k">from</span> sklearn.utils.extmath <span class="k">import</span> randomized_svd     <span class="c"># fast top-k SVD for big matrices</span></pre>
+<span class="k">from</span> sklearn.utils.extmath <span class="k">import</span> randomized_svd     <span class="c"># fast top-k SVD for big matrices</span>
+
+<span class="c"># low-rank factorisation A ≈ U Vᵀ (section 4)</span>
+k = <span class="s">3</span>
+U_k = U[:, :k] * np.sqrt(s[:k])           <span class="c"># m × k  (tall factor)</span>
+V_k = Vt[:k].T * np.sqrt(s[:k])           <span class="c"># n × k  (Vᵀ is the wide factor)</span>
+A_k = U_k @ V_k.T                         <span class="c"># best rank-k approximation</span>
+energy = (s[:k]**<span class="s">2</span>).sum() / (s**<span class="s">2</span>).sum()   <span class="c"># share of Σσᵢ² kept</span>
+x = np.random.rand(img.shape[<span class="s">1</span>])
+y = U_k @ (V_k.T @ x)                     <span class="c"># = A_k @ x, in k(m+n) steps instead of mn</span>
+<span class="k">from</span> sklearn.decomposition <span class="k">import</span> TruncatedSVD, NMF
+Z = TruncatedSVD(n_components=k).fit_transform(img)  <span class="c"># works on sparse matrices too</span>
+W = NMF(n_components=k, init=<span class="s">"nndsvda"</span>, max_iter=<span class="s">1000</span>).fit_transform(img)  <span class="c"># non-negative parts (img ≥ 0)</span>
+<span class="c"># LoRA in PyTorch: freeze W, learn ΔW = B @ A of rank r</span>
+<span class="k">import</span> torch, torch.nn <span class="k">as</span> nn
+<span class="k">class</span> LoRALinear(nn.Module):
+    <span class="k">def</span> __init__(self, base, r=<span class="s">8</span>):
+        super().__init__(); self.base = base; base.weight.requires_grad_(<span class="k">False</span>)
+        self.A = nn.Parameter(<span class="s">0.01</span> * torch.randn(r, base.in_features))
+        self.B = nn.Parameter(torch.zeros(base.out_features, r))
+    <span class="k">def</span> forward(self, x):
+        <span class="k">return</span> self.base(x) + x @ self.A.T @ self.B.T</pre>
 </section>
 <p class="foot">Part of the <a href="../">Mathematical concepts</a> series. Everything runs in your browser.</p>
 </main>
@@ -213,6 +308,56 @@ $('#imPre').addEventListener('click',e=>{ const b=e.target.closest('button'); if
 ML.bindRange('kr',v=>{K=v;drawK();}); pSv.onResize=drawK;
 ML.onTheme(()=>{ drawG(); drawK(); });
 drawG(); loadImg('Shapes');
+/* ---- 4. low-rank factorisation A ≈ U Vᵀ ---- */
+(function(){
+const m=24, n=32, R=ML.rng(11), gauss=()=>{ let u=0,v=0; while(!u) u=R(); v=R(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
+const mk=f=>Array.from({length:m},(_,i)=>Array.from({length:n},(_,j)=>f(i,j)));
+const KINDS={
+  ratings:{name:'Film ratings (people × films)', desc:'24 people rate 32 films. Behind the scenes, three hidden tastes (action, comedy, old films) plus a little noise make every rating. Three patterns should be enough.', make:()=>{ const U0=mk(()=>0).map(()=>[0,1,2].map(()=>gauss())).sort((p,q)=>p[0]-q[0]), V0=[0,1,2].map(()=>Array.from({length:n},()=>gauss())), ord=V0[0].map((v,j)=>j).sort((p,q)=>V0[0][p]-V0[0][q]); for(let t=0;t<3;t++) V0[t]=ord.map(j=>V0[t][j]); /* people and films sorted by the first taste, so the pattern is visible */ return mk((i,j)=>U0[i][0]*V0[0][j]+U0[i][1]*V0[1][j]+U0[i][2]*V0[2][j]+0.25*gauss()); }},
+  smooth:{name:'Smooth similarity table', desc:'Entry (i, j) is how similar item i is to item j along a scale: high near the diagonal, fading smoothly away from it. Smooth tables like kernels and covariances have quickly falling singular values.', make:()=>mk((i,j)=>Math.exp(-Math.pow(i/(m-1)-j/(n-1),2)/0.09))},
+  seasonal:{name:'Sales: stores × weeks', desc:'Each store’s weekly sales mix one shared seasonal wave, a trend and its own level, plus noise. A few common factors drive the whole panel.', make:()=>{ const c=Array.from({length:m},()=>[gauss(),gauss(),gauss(),2+gauss()]); return mk((i,j)=>c[i][3]+c[i][0]*Math.sin(2*Math.PI*j/13)+c[i][1]*Math.cos(2*Math.PI*j/13)+0.6*c[i][2]*(j/(n-1))+0.15*gauss()); }},
+  band:{name:'Near-diagonal band', desc:'Only entries close to the diagonal are non-zero, like “each day depends on the day before”. Every row has its own private spot, so few patterns are shared.', make:()=>mk((i,j)=>Math.abs(i*(n-1)/(m-1)-j)<1.6?1:0)},
+  sparse:{name:'Sparse links (who knows whom)', desc:'Each person is linked to three random others out of 32 (a 1), and everything else is 0. Mostly zeros and no shared pattern. Notice that UVᵀ is no longer mostly zeros: the factorisation loses sparsity.', make:()=>{ const A=mk(()=>0); for(let i=0;i<m;i++){ let c=0; while(c<3){ const j=Math.floor(R()*n); if(!A[i][j]){ A[i][j]=1; c++; } } } return A; }},
+  identity:{name:'Identity (ones on the diagonal)', desc:'Every row points in its own direction, and all directions matter equally. All singular values are 1 (a flat bar chart), so dropping any of them loses the same amount.', make:()=>mk((i,j)=>i===j?1:0)},
+  noise:{name:'Pure noise', desc:'Independent random numbers. There is nothing shared to find, so every pattern carries a similar small share.', make:()=>mk(()=>gauss())}
+};
+const sel=$('#lrfType'); sel.innerHTML=Object.entries(KINDS).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('');
+let kind='ratings', A=null, S=null, k=3; const cache={};
+const pL=new ML.Plot('#pLrf',{equal:false});
+function base(){ const P=ML.palette(); return P.dark?[28,25,44]:[255,255,255]; }
+function heat(id, M, mx){ const cv=document.getElementById(id), r=M.length, c=M[0].length; cv.width=c; cv.height=r; const g=cv.getContext('2d'), d=g.createImageData(c,r), b0=base(), pos=[37,99,235], neg=[220,38,38];
+  for(let i=0;i<r;i++) for(let j=0;j<c;j++){ const v=Math.max(-1,Math.min(1,M[i][j]/(mx||1))), col=v>=0?pos:neg, a=Math.pow(Math.abs(v),0.8), o=4*(i*c+j); for(let q=0;q<3;q++) d.data[o+q]=Math.round(b0[q]+(col[q]-b0[q])*a); d.data[o+3]=255; }
+  g.putImageData(d,0,0); }
+function size(id, cols, rows, cell){ const cv=document.getElementById(id); cv.style.width=Math.max(2,Math.round(cols*cell))+'px'; cv.style.height=Math.max(2,Math.round(rows*cell))+'px'; }
+/* the description box keeps the height of the longest description at this width, so switching kinds never moves the page */
+let descW=0; function fitDesc(){ const el=$('#lrfDesc'), w=el.clientWidth; if(!w || w===descW) return; descW=w; const t=el.cloneNode(); t.style.cssText=`position:absolute;visibility:hidden;left:-9999px;width:${w}px;min-height:0`; document.body.appendChild(t); let h=0; Object.values(KINDS).forEach(v=>{ t.textContent=v.desc; h=Math.max(h,t.offsetHeight); }); t.remove(); el.style.minHeight=h+'px'; }
+function load(kd){ kind=kd; if(!cache[kd]){ const M=KINDS[kd].make(), sv=MX.svd(M); cache[kd]={M,sv}; } A=cache[kd].M; S=cache[kd].sv; $('#lrfDesc').textContent=KINDS[kd].desc; draw(); }
+function draw(){ const P=ML.palette(), sv=S, Ak=LA.zeros(m,n), Uf=LA.zeros(m,k), Vf=LA.zeros(k,n);
+  for(let t=0;t<k;t++){ const s=sv.S[t], rs=Math.sqrt(Math.max(0,s)), u=sv.U[t], v=sv.V[t]; for(let i=0;i<m;i++){ Uf[i][t]=rs*u[i]; for(let j=0;j<n;j++) Ak[i][j]+=s*u[i]*v[j]; } for(let j=0;j<n;j++) Vf[t][j]=rs*v[j]; }
+  const E=A.map((r,i)=>r.map((x,j)=>x-Ak[i][j]));
+  const mx=Math.max(...A.flat().map(Math.abs)), mf=Math.max(1e-9,...Uf.flat().map(Math.abs),...Vf.flat().map(Math.abs));
+  heat('lrfA',A,mx); heat('lrfK',Ak,mx); heat('lrfE',E,mx); heat('lrfU',Uf,mf); heat('lrfV',Vf,mf);
+  const W=$('#lrfFact').clientWidth-14, cell=Math.max(2,Math.min(10,Math.floor((W-70)/(n+m)*10)/10)); /* sized for the largest k, so nothing moves as k changes */
+  $('#lrfFact').style.minHeight=Math.ceil(2*m*cell+52)+'px';
+  size('lrfU',k,m,cell); size('lrfV',n,k,cell); size('lrfK',n,m,cell);
+  const W2=$('#lrfA').closest('.lrf-pair').clientWidth, c2=Math.max(2,Math.min(cell,Math.floor((W2-16)/(2*n)*10)/10)); size('lrfA',n,m,c2); size('lrfE',n,m,c2);
+  $('#lrfAcap').textContent=`A, the original  ${m}×${n}`; $('#lrfUcap').textContent=`U  ${m}×${k}`; $('#lrfVcap').textContent=`Vᵀ  ${k}×${n}`; $('#lrfKcap').textContent=`UVᵀ  rank ${k}`;
+  const tot=sv.S.reduce((a,s)=>a+s*s,0), kept=sv.S.slice(0,k).reduce((a,s)=>a+s*s,0), rank=sv.S.filter(s=>s>1e-6*sv.S[0]).length;
+  let k95=1, acc=0; for(let t=0;t<sv.S.length;t++){ acc+=sv.S[t]*sv.S[t]; if(acc>=0.95*tot){ k95=t+1; break; } }
+  ML.chart(pL,[{pts:sv.S.slice(0,m).map((s,i)=>[i+1,s]),color:P.muted,dots:true,r:2.5,noline:true},{pts:sv.S.slice(0,k).map((s,i)=>[i+1,s]),color:P.c1,dots:true,r:3.5,noline:true}],{xl:'σᵢ for pattern i',vline:k+0.5,y0:0});
+  const store=k*(m+n), full=m*n;
+  $('#lrfStats').innerHTML=`<div class="stat c1"><b>${(100*kept/tot).toFixed(1)}%</b><span>energy kept, Σσᵢ² up to k</span></div><div class="stat c4"><b>${(100*Math.sqrt(Math.max(0,tot-kept)/tot)).toFixed(1)}%</b><span>relative error ‖A − UVᵀ‖ / ‖A‖</span></div><div class="stat c3"><b>${store} / ${full}</b><span>numbers stored (${Math.round(100*store/full)}%)</span></div><div class="stat c2"><b>${rank}</b><span>exact rank of A</span></div>`;
+  fitDesc();
+  const nt=$('#lrfNote'), good=k95<=5, bad=k95>=14;
+  nt.className='note'+(good?' ok':bad?' warn':'');
+  nt.innerHTML=(good?`<b>Low rank fits well.</b> `:bad?`<b>Low rank fits badly.</b> `:`<b>Partly compressible.</b> `)+`Keeping 95% of the energy needs <b>${k95}</b> of ${m} patterns, storing ${k95*(m+n)} numbers instead of ${full}${k95*(m+n)>=full?' (no saving at all)':` (${Math.round(100*k95*(m+n)/full)}%)`}.`; }
+sel.addEventListener('change',()=>load(sel.value));
+ML.bindRange('lrfk',v=>{ k=v; if(S) draw(); });
+pL.onResize=()=>{ if(S) draw(); }; ML.onTheme(()=>{ if(S) draw(); });
+let rt=0; addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout(()=>{ if(S) draw(); },120); });
+load('ratings');
+})();
+
 })();
 </script>
 <script>NLP.nav('math','svd'); ML.renderMath(document.body);</script>

@@ -288,6 +288,7 @@
     <tr><td><b>QR</b> \(A=QR\)</td><td>any \(m\times n\)</td><td>orthonormal \(Q\), triangular \(R\)</td><td>\(2mn^2\)</td><td>least squares, orthonormal bases</td><td>linear regression solvers, eigenvalue algorithms</td></tr>
     <tr><td><b>Cholesky</b> \(LL^\top\)</td><td>symmetric positive definite</td><td>one triangular</td><td>\(\tfrac13n^3\)</td><td>fast stable solves, sampling Gaussians</td><td>GPs, ridge regression, Newton steps, VAEs</td></tr>
     <tr><td><b>SVD</b> \(U\Sigma V^\top\)</td><td>any matrix</td><td>two orthonormal, one diagonal</td><td>\(O(mn^2)\)</td><td>rank, best low-rank approximation, pseudo-inverse</td><td>PCA, LSA, LoRA, compression. See the <a href="../svd/">SVD page</a></td></tr>
+    <tr><td><b>Low-rank</b> \(A\approx UV^\top\)</td><td>any matrix; useful when singular values fall fast</td><td>tall \(m\times k\), wide \(k\times n\)</td><td>\(O(mnk)\) (randomised)</td><td>compress, denoise, fill in missing entries, speed up \(Ax\)</td><td>recommenders, embeddings, LoRA, model compression. See <a href="../svd/#lrf">low-rank factorisation</a></td></tr>
   </table></div>
 </section>
 

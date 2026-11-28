@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Matrices, rank and inverses, explained interactively</title>
-<meta name="description" content="A matrix as a transformation of space, matrix multiplication as dot products, the determinant as area, rank by row reduction step by step, and the inverse for solving Ax = b, with draggable diagrams and calculators.">
+<meta name="description" content="A matrix as a transformation of space, matrix multiplication as dot products and as one transformation after another, the determinant as area, rank by row reduction step by step, and the inverse for solving Ax = b, with draggable diagrams and calculators.">
 <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
@@ -21,7 +21,7 @@
   <p class="kicker">Mathematical concepts &middot; Linear algebra</p>
   <h1>Matrices, <span class="grad">rank and inverses</span></h1>
   <p class="lede">A matrix is usually introduced as a table of numbers. It is far more useful to see it as a machine that moves every point in space. Once you see that, the determinant, rank and inverse stop being formulas to memorise and become questions you can answer by looking: how much does it stretch, how much does it flatten, and can it be undone?</p>
-  <div class="toc"><a href="#intro">0 · Start here</a><a href="#transform">1 · A matrix moves space</a><a href="#mult">2 · Multiplication</a><a href="#det">3 · Determinant</a><a href="#rank">4 · Rank</a><a href="#inverse">5 · Inverse and Ax = b</a><a href="#special">6 · Special matrices</a><a href="#ml">7 · In ML</a><a href="#py">8 · Python</a></div>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#transform">1 · A matrix moves space</a><a href="#mult">2 · Multiplication</a><a href="#compose">3 · One move after another</a><a href="#det">4 · Determinant</a><a href="#rank">5 · Rank</a><a href="#inverse">6 · Inverse and Ax = b</a><a href="#special">7 · Special matrices</a><a href="#ml">8 · In ML</a><a href="#py">9 · Python</a></div>
 </section>
 
 <section id="intro" class="card intro">
@@ -67,14 +67,14 @@
 </section>
 
 <section id="mult" class="card">
-  <h2><span class="num">2</span>Matrix multiplication: dot products, and doing one move after another</h2>
+  <h2><span class="num">2</span>Matrix multiplication: rows times columns</h2>
   <div class="grid2">
     <div class="prose">
       <p>To multiply \(A\) (\(m\times k\)) by \(B\) (\(k\times n\)), each entry of the product is a <a class="term" data-t="dot-product">dot product</a>:</p>
       <div class="mathbox c2">$$(AB)_{ij}=\sum_{t=1}^{k}A_{it}B_{tj}=(\text{row } i \text{ of } A)\cdot(\text{column } j\text{ of } B).$$</div>
       <p>The inner sizes must match (\(k\)), because a dot product needs two lists of the same length. Click any entry of the result to see which row and column produced it.</p>
       <div class="algo"><h5 class="algo-h">Algorithm: matrix multiplication \(C = AB\)</h5><ol><li><span class="kw">input</span> \(A\) of size \(m\times k\), \(B\) of size \(k\times n\) <span class="cm">inner sizes must match</span></li><li><span class="kw">for</span> \(i = 1\) <span class="kw">to</span> \(m\) <span class="kw">do</span></li><li class="i1"><span class="kw">for</span> \(j = 1\) <span class="kw">to</span> \(n\) <span class="kw">do</span></li><li class="i2">\(C_{ij} \leftarrow 0\)</li><li class="i2"><span class="kw">for</span> \(t = 1\) <span class="kw">to</span> \(k\) <span class="kw">do</span> \(C_{ij} \leftarrow C_{ij} + A_{it}B_{tj}\) <span class="cm">row i · column j</span></li><li><span class="kw">return</span> \(C\) <span class="cm">m·n·k multiplications</span></li></ol></div>
-<p>Why this odd rule? Because it is exactly what makes \((AB)x=A(Bx)\). Applying \(B\) and then \(A\) is the same as applying the single matrix \(AB\). Reading right to left, \(AB\) means "first \(B\), then \(A\)". Since rotating then shearing differs from shearing then rotating, \(AB\) and \(BA\) are usually different.</p>
+<p>Why this odd rule? Because it is exactly what makes \((AB)x=A(Bx)\). Applying \(B\) and then \(A\) is the same as applying the single matrix \(AB\). Reading right to left, \(AB\) means "first \(B\), then \(A\)". Since rotating then shearing differs from shearing then rotating, \(AB\) and \(BA\) are usually different. <a href="#compose">Section 3</a> shows this as a picture.</p>
       <p>Two special cases are worth naming. The <b>identity</b> \(I\) has ones on the diagonal and leaves every vector alone, so \(AI=IA=A\). The <b>transpose</b> \(A^\top\) swaps rows and columns, and a dot product is a tiny matrix product: \(a\cdot b=a^\top b\).</p>
 <details class="deeper"><summary>Going deeper: four ways to read a product, and the rules that follow</summary><div><p>The same product \(C=AB\) can be read four ways, and each is useful:</p>
 <ul><li><b>Entries:</b> \(C_{ij}\) = row \(i\) of \(A\) · column \(j\) of \(B\).</li><li><b>Columns:</b> column \(j\) of \(C\) is \(A\) times column \(j\) of \(B\), a combination of the columns of \(A\).</li><li><b>Rows:</b> row \(i\) of \(C\) is row \(i\) of \(A\) times \(B\), a combination of the rows of \(B\).</li><li><b>Outer products:</b> \(AB=\sum_{t=1}^{k}a_{:t}\,b_{t:}\), a sum of \(k\) rank-one matrices. This is the view behind the SVD.</li></ul>
@@ -87,9 +87,44 @@
   </div>
 </section>
 
+<section id="compose" class="lab">
+  <div class="card hl">
+    <h2><span class="num">3</span>Multiplying matrices = doing one move after another</h2>
+    <p class="sub">Choose a first move \(B\) and a second move \(A\), then press Play. The grid, the unit square and the letter F are carried through \(B\) and then through \(A\). The end picture is exactly what the single matrix \(AB\) does.</p>
+    <div class="plot sq" id="pC"></div>
+    <div class="cmp-picks">
+      <div class="ctl"><label for="cB"><span>First move \(B\)</span></label><select id="cB"></select></div>
+      <div class="ctl"><label for="cA"><span>Then move \(A\)</span></label><select id="cA"></select></div>
+    </div>
+    <div class="ctl"><label for="cT"><span>Progress: \(I \to B \to AB\)</span><output id="cTOut"></output></label><input type="range" id="cT" min="0" max="2" step="0.01" value="2"></div>
+    <div class="player cmp-play"><button class="btn primary" id="cPlay" type="button">Play</button><button class="btn" id="cSwap" type="button" aria-pressed="false">Swap the order</button><span class="pos" id="cStage"></span></div>
+    <div class="texout" id="cTex"></div>
+    <div class="stats" id="cStats"></div>
+    <div class="note" id="cNote"></div>
+  </div>
+  <div>
+    <div class="card prose">
+      <p>Section 1 showed that a matrix is a <a class="term" data-t="linear-map">linear map</a>: it moves every point of the plane, and its columns say where the two basis arrows land. Section 2 gave the rule for multiplying two matrices. This section shows why that rule is the right one: <b>multiplying is the same as doing one move after the other.</b></p>
+      <div class="mathbox c1">$$(AB)\,x \;=\; A\,(B\,x)\qquad\text{“first }B\text{, then }A\text{”}.$$</div>
+      <p>Read a product from right to left, like a function: \(f(g(x))\) means "\(g\) first". The matrix nearest to \(x\) acts first.</p>
+      <p><b>Where do the columns of \(AB\) come from?</b> The first column of \(AB\) is where \(e_1\) ends up. \(B\) sends \(e_1\) to \(b_1\), its first column, and \(A\) then sends \(b_1\) to \(Ab_1\). So</p>
+      <div class="mathbox c2">$$AB=\begin{bmatrix}A\,b_1 & A\,b_2\end{bmatrix}$$</div>
+      <p>In words: each column of \(B\), moved by \(A\).</p>
+      <p>Work this out entry by entry and you get exactly the row-times-column rule of section 2. The rule looks odd only until you see it as "apply \(A\) to each column of \(B\)". In the picture, the faint arrows are \(b_1\) and \(b_2\), where the first move left the basis arrows. During step 2 the solid arrows carry them on to \(Ab_1\) and \(Ab_2\), which are the columns of \(AB\).</p>
+      <p><b>Order matters.</b> Rotating and then stretching sideways gives a different picture from stretching and then rotating. Press <b>Swap the order</b> to compare \(AB\) with \(BA\). They match only for special pairs: two rotations, two stretches along the same axes, or any move paired with the identity.</p>
+      <p><b>Areas multiply.</b> \(B\) scales every area by \(\det B\), and \(A\) then scales by \(\det A\), so \(\det(AB)=\det A\cdot\det B\). If either move flattens the plane (det 0), nothing afterwards can bring the lost dimension back. A flip (negative det) followed by another flip gives a positive det: the F reads the right way round again.</p>
+      <details class="deeper"><summary>Going deeper: why this matters in ML</summary><div>
+        <p><b>Stacked layers.</b> A neural network without activation functions is a chain \(W_3W_2W_1x\). By the rule above, that is one matrix \(W=W_3W_2W_1\), so a hundred linear layers can do no more than one. The nonlinearity between layers is what stops the chain from collapsing. See <a href="../../dl/nn/neural-networks/">neural networks</a>.</p>
+        <p><b>The order of evaluation sets the cost.</b> \((AB)x\) and \(A(Bx)\) give the same answer, but for \(n\times n\) matrices the first costs about \(n^3\) multiplications and the second about \(2n^2\). Push the vector through one matrix at a time. This is also why <a href="../svd/#lrf">low-rank factorisation</a> saves work: \(UV^\top x=U(V^\top x)\).</p>
+        <p><b>Undoing a chain.</b> To undo "first \(B\), then \(A\)", undo \(A\) first: \((AB)^{-1}=B^{-1}A^{-1}\).</p>
+      </div></details>
+    </div>
+  </div>
+</section>
+
 <section id="det" class="lab">
   <div class="card hl">
-    <h2><span class="num">3</span>The determinant: how much area is scaled</h2>
+    <h2><span class="num">4</span>The determinant: how much area is scaled</h2>
     <p class="sub">The unit square (area 1) lands on the shaded parallelogram. Drag the tips of \(a_1\) and \(a_2\), or slide \(t\) to push \(a_2\) onto the line of \(a_1\).</p>
     <div class="plot sq" id="pDet"></div>
   </div>
@@ -110,11 +145,11 @@
 </section>
 
 <section id="rank" class="card">
-  <h2><span class="num">4</span>Rank: how many dimensions survive</h2>
+  <h2><span class="num">5</span>Rank: how many dimensions survive</h2>
   <div class="grid2">
     <div class="prose">
       <p>The determinant says <i>whether</i> space is flattened. The <a class="term" data-t="rank">rank</a> says <i>how badly</i>. It is the number of independent directions the columns point in, which is the dimension of the set of all outputs \(\{Ax\}\) (the <b>column space</b>).</p>
-      <p>A \(3\times3\) matrix of rank 3 keeps 3-D space 3-D. Rank 2 squashes it onto a plane; rank 1 onto a line. When a column is a combination of the others, it adds no new direction. For example, if column 3 = column 1 + column 2, the rank is at most 2.</p>
+      <p>A \(3\times3\) matrix of rank 3 keeps 3-D space 3-D. Rank 2 squashes it onto a plane; rank 1 onto a line. When a column is a combination of the others, it adds no new direction. For example, if column 3 = column 1 + column 2, the rank is at most 2. Many real tables are <i>nearly</i> low rank, and <a href="../svd/#lrf">low-rank factorisation</a> turns that into big savings.</p>
       <p>How do we compute it? By <b>row reduction</b> (Gaussian elimination). Adding a multiple of one row to another, swapping rows, or scaling a row never changes which combinations of the columns are zero, so it never changes the rank. We use these moves to clear everything below and above each leading entry (a <b>pivot</b>). The rank is the number of pivots.</p>
       <div class="algo"><h5 class="algo-h">Algorithm: row reduction (Gauss–Jordan) and rank</h5><ol><li><span class="kw">input</span> \(A\) (\(m\times n\)), tolerance \(\varepsilon\)</li><li>\(r \leftarrow 1\) <span class="cm">next pivot row</span></li><li><span class="kw">for</span> each column \(c = 1\) <span class="kw">to</span> \(n\) <span class="kw">while</span> \(r \le m\) <span class="kw">do</span></li><li class="i1">\(p \leftarrow\) row \(\ge r\) with the largest \(|A_{pc}|\) <span class="cm">partial pivoting</span></li><li class="i1"><span class="kw">if</span> \(|A_{pc}| &lt; \varepsilon\) <span class="kw">then continue</span> <span class="cm">no pivot in this column</span></li><li class="i1">swap rows \(p\) and \(r\); divide row \(r\) by \(A_{rc}\)</li><li class="i1"><span class="kw">for</span> every other row \(i\) <span class="kw">do</span> row\(_i \leftarrow\) row\(_i - A_{ic}\,\)row\(_r\)</li><li class="i1">\(r \leftarrow r + 1\)</li><li><span class="kw">return</span> reduced matrix, rank \(= r - 1\) (number of pivots)</li></ol></div>
 <div class="mathbox c4">$$\underbrace{\operatorname{rank}(A)}_{\text{dimensions kept}}+\underbrace{\dim\operatorname{null}(A)}_{\text{dimensions crushed to }0}=n\ (\text{number of columns}).$$</div>
@@ -136,7 +171,7 @@
 
 <section id="inverse" class="lab">
   <div class="card hl">
-    <h2><span class="num">5</span>The inverse, and solving \(Ax=b\)</h2>
+    <h2><span class="num">6</span>The inverse, and solving \(Ax=b\)</h2>
     <p class="sub">Drag \(b\). The coloured path shows \(x_1a_1\) followed by \(x_2a_2\): the recipe that reaches \(b\).</p>
     <div class="plot sq" id="pS"></div>
   </div>
@@ -161,7 +196,7 @@ $$\frac{\|\delta x\|}{\|x\|}\le\kappa(A)\,\frac{\|\delta b\|}{\|b\|},\qquad\kapp
 
 <section id="special" class="lab">
   <div class="card hl">
-    <h2><span class="num">6</span>A field guide to special matrices</h2>
+    <h2><span class="num">7</span>A field guide to special matrices</h2>
     <p class="sub">Pick a type and watch what it does to the unit square (shaded) and the unit circle (outline). Drag the grey tip to move \(x\); the orange arrow \(Ax\) shows where it lands.</p>
     <div class="plot sq" id="pSp"></div>
     <div class="seg" id="spSeg" style="margin-top:10px;flex-wrap:wrap"><button data-v="id">Identity</button><button data-v="diag">Diagonal</button><button data-v="tri">Triangular</button><button data-v="sym" class="on">Symmetric</button><button data-v="rot">Rotation</button><button data-v="ref">Reflection</button><button data-v="gen">General</button></div>
@@ -223,7 +258,7 @@ $$\frac{\|\delta x\|}{\|x\|}\le\kappa(A)\,\frac{\|\delta b\|}{\|b\|},\qquad\kapp
 </section>
 
 <section id="ml" class="card">
-  <h2><span class="num">7</span>Where this shows up in ML</h2>
+  <h2><span class="num">8</span>Where this shows up in ML</h2>
   <div class="grid3 prose">
     <div><h3>The normal equations</h3><p><a href="../../ml/linear-regression/">Least squares</a> solves \(X^\top X\theta=X^\top y\). If two features are copies of each other (say area in feet and in metres), \(X\) loses rank, \(X^\top X\) is not invertible, and infinitely many \(\theta\) fit equally well. <a href="../../ml/regularisation/">Ridge</a> adds \(\lambda I\) to make it invertible again.</p></div>
     <div><h3>Layers of a network</h3><p>Each layer of a <a href="../../dl/nn/neural-networks/">neural network</a> is \(g(Wx+b)\): a matrix moves space, then a non-linearity bends it. Without the bend, stacked layers would collapse into one matrix product.</p></div>
@@ -235,7 +270,7 @@ $$\frac{\|\delta x\|}{\|x\|}\le\kappa(A)\,\frac{\|\delta b\|}{\|b\|},\qquad\kapp
 </section>
 
 <section id="py" class="card">
-  <h2><span class="num">8</span>The same thing in Python (NumPy)</h2>
+  <h2><span class="num">9</span>The same thing in Python (NumPy)</h2>
 <pre class="code"><span class="k">import</span> numpy <span class="k">as</span> np
 A = np.array([[<span class="s">2.</span>, <span class="s">1.</span>], [<span class="s">1.</span>, <span class="s">3.</span>]])
 A @ np.array([<span class="s">1.</span>, <span class="s">0.</span>])                 <span class="c"># first column: where e1 lands</span>
@@ -288,6 +323,50 @@ function drawM(){ const C=LA.mul(MA,MB), [i,j]=sel;
   document.querySelectorAll('#mA input').forEach(el=>el.style.background=+el.dataset.i===i?'color-mix(in srgb,var(--c1) 18%,var(--card))':'');
   document.querySelectorAll('#mB input').forEach(el=>el.style.background=+el.dataset.j===j?'color-mix(in srgb,var(--c3) 18%,var(--card))':'');
   MX.set('mTex',`(AB)_{${i+1}${j+1}}=`+MA[i].map((a,t)=>`(${MX.n(a)})(${MX.n(MB[t][j])})`).join('+')+`=${MX.n(C[i][j])}`,true); }
+
+/* ---- 3. multiplication as composition: first B, then A ---- */
+(function(){
+const c30=Math.cos(Math.PI/6), s30=Math.sin(Math.PI/6);
+const MOVES={'Rotate 90°':[[0,-1],[1,0]],'Rotate 30°':[[c30,-s30],[s30,c30]],'Shear sideways':[[1,1],[0,1]],'Stretch sideways ×2':[[2,0],[0,1]],'Squash up–down ×½':[[1,0],[0,0.5]],'Flip left–right':[[-1,0],[0,1]],'Flatten onto a line':[[0.8,0.4],[0.4,0.2]],'Identity (do nothing)':[[1,0],[0,1]]};
+const NAMES=Object.keys(MOVES), selB=$('#cB'), selA=$('#cA');
+[selB,selA].forEach((s,k)=>{ s.innerHTML=NAMES.map(n=>`<option>${n}</option>`).join(''); s.value=k?'Shear sideways':'Rotate 90°'; });
+const pC=new ML.Plot('#pC',{bounds:{x0:-3.5,x1:3.5,y0:-3.5,y1:3.5}});
+const I2=[[1,0],[0,1]], lerp=(P,Q,u)=>P.map((r,i)=>r.map((v,j)=>(1-u)*v+u*Q[i][j]));
+const F=[[[0.25,0],[0.25,1.3]],[[0.25,1.3],[1,1.3]],[[0.25,0.7],[0.8,0.7]]];
+let t=2, swapped=false, raf=0, last=0;
+const cT=$('#cT'), cPlay=$('#cPlay'), cSwap=$('#cSwap');
+const pair=()=>{ const B=MOVES[selB.value], A=MOVES[selA.value]; return swapped?{first:A,second:B,fN:'A',sN:'B'}:{first:B,second:A,fN:'B',sN:'A'}; };
+function cur(){ const {first,second}=pair(); return t<=1? lerp(I2,first,t) : LA.mul(lerp(I2,second,t-1),first); }
+function drawC(){ const P=ML.palette(), M=cur(), {first,second,fN,sN}=pair(), prod=LA.mul(second,first), other=LA.mul(first,second);
+  pC.clear(); pC.grid(1,true); grid(pC,M,P.c1,8);
+  MX.poly(pC,[[0,0],[1,0],[1,1],[0,1]],P.muted,.10,P.muted);
+  const sq=[[0,0],[1,0],[1,1],[0,1]].map(q=>LA.mv(M,q)); MX.poly(pC,sq,P.c2,.26,P.c2);
+  F.forEach(([a,b])=>{ const p=LA.mv(M,a), q=LA.mv(M,b); pC.line(p[0],p[1],q[0],q[1],{color:P.c4,width:5}); });
+  const m1=[M[0][0],M[1][0]], m2=[M[0][1],M[1][1]];
+  if(t>1){ MX.vec(pC,[first[0][0],first[1][0]],P.c1,'',{width:2,alpha:.35}); MX.vec(pC,[first[0][1],first[1][1]],P.c3,'',{width:2,alpha:.35}); }
+  MX.vec(pC,m1,P.c1,t>=2?`${sN}b₁`:t>=1?'b₁':''); MX.vec(pC,m2,P.c3,t>=2?`${sN}b₂`:t>=1?'b₂':'');
+  const stage = t<=0.001?'Start: nothing has moved yet' : t<1?`Step 1: applying ${fN}` : t<1.999?`Step 2: applying ${sN} to the result` : `Done: this is the single matrix ${sN}${fN}`;
+  $('#cStage').textContent=stage;
+  MX.set('cTex',`${sN}${fN}=${MX.mtex(second,2)}${MX.mtex(first,2)}=${MX.mtex(prod,2)}`,true);
+  const dF=LA.det2(first), dS=LA.det2(second), dP=LA.det2(prod);
+  $('#cStats').innerHTML=`<div class="stat c1"><b>${dF.toFixed(2)}</b><span>det ${fN} (first)</span></div><div class="stat c3"><b>${dS.toFixed(2)}</b><span>det ${sN} (second)</span></div><div class="stat c2"><b>${dP.toFixed(2)}</b><span>det ${sN}${fN} = ${dS.toFixed(2)} × ${dF.toFixed(2)}</span></div>`;
+  const same=prod.every((r,i)=>r.every((v,j)=>Math.abs(v-other[i][j])<1e-9));
+  const n=$('#cNote'); n.className='note'+(Math.abs(dP)<1e-9?' warn':same?' ok':'');
+  n.innerHTML = Math.abs(dP)<1e-9 ? `<b>Flattened.</b> One of the moves squashes the plane onto a line (det 0), so the product does too, whatever comes after. Area ${dS.toFixed(2)} × ${dF.toFixed(2)} = 0, and the lost direction cannot be recovered.`
+    : same ? `<b>Here the order does not matter.</b> ${sN}${fN} = ${fN}${sN}: these two moves commute. That is the exception, not the rule. Try a rotation with a stretch.`
+    : `<b>Order matters.</b> ${sN}${fN} ≠ ${fN}${sN}. The other order gives \\(${fN}${sN}=${MX.mtex(other,2)}\\). Press <b>Swap the order</b> to watch it.`;
+  ML.renderMath(n); }
+const fmtT=v=>v<=0.001?'start':v<1?`${fN0()} ${Math.round(v*100)}%`:v<1.999?`${sN0()} ${Math.round((v-1)*100)}%`:'done';
+const fN0=()=>pair().fN, sN0=()=>pair().sN;
+ML.bindRange('cT',v=>{ t=v; drawC(); },fmtT);
+const setT=v=>{ t=v; cT.value=v; cT.dispatchEvent(new Event('input')); };
+const stop=()=>{ cancelAnimationFrame(raf); raf=0; cPlay.textContent='Play'; };
+function step(ts){ if(!last) last=ts; const dt=Math.min(64,ts-last); last=ts; const nt=Math.min(2,t+dt/1500); setT(nt); if(nt<2) raf=requestAnimationFrame(step); else stop(); }
+cPlay.addEventListener('click',()=>{ if(raf){ stop(); return; } if(t>=2) setT(0); last=0; cPlay.textContent='Pause'; raf=requestAnimationFrame(step); });
+cSwap.addEventListener('click',()=>{ swapped=!swapped; cSwap.setAttribute('aria-pressed',String(swapped)); cSwap.textContent=swapped?'Back to the first order':'Swap the order'; stop(); setT(0); last=0; cPlay.textContent='Pause'; raf=requestAnimationFrame(step); });
+[selB,selA].forEach(s=>s.addEventListener('change',()=>{ stop(); setT(2); }));
+pC.onResize=drawC; ML.onTheme(drawC); drawC();
+})();
 
 /* ---- 3. determinant ---- */
 const pDet=new ML.Plot('#pDet',{bounds:{x0:-1.5,x1:4.5,y0:-1.5,y1:4.5}}); let t=0;
