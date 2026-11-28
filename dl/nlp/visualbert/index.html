@@ -20,7 +20,7 @@
   <p class="kicker">Deep Learning &middot; NLP &middot; Multimodal (part 2 of 5)</p>
   <h1>VisualBERT: <span class="grad">one transformer for words and pictures</span></h1>
   <p class="lede">In <a href="../visual-tokenisation/">part 1</a> an image became a list of visual tokens. VisualBERT's idea is almost cheeky in its simplicity: put those visual tokens right after the words of a caption, and feed the whole thing to an ordinary BERT. Self-attention, which already links words to words, now links words to parts of the picture too. This page builds the input, shows the attention, and walks through how it is trained.</p>
-  <div class="toc"><a href="#intro">0 · Start here</a><a href="#input">1 · One sequence</a><a href="#attn">2 · Attention across modalities</a><a href="#pre">3 · Pre-training</a><a href="#tasks">4 · Fine-tuning tasks</a><a href="#family">5 · The family</a><a href="#py">6 · Python</a></div>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#flow">▶ Data flow</a><a href="#input">1 · One sequence</a><a href="#attn">2 · Attention across modalities</a><a href="#pre">3 · Pre-training</a><a href="#tasks">4 · Fine-tuning tasks</a><a href="#family">5 · The family</a><a href="#py">6 · Python</a></div>
 </section>
 
 <section id="intro" class="card intro">
@@ -39,6 +39,13 @@
       <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
     </div>
   </div>
+</section>
+
+<section id="flow" class="card">
+  <h2>Watch the data flow</h2>
+  <p class="sub">A simplified, animated picture of VisualBERT: dots are data moving between blocks. Press Play, or use Back and Step; the caption explains each move.</p>
+  <div data-flow="visualbert"></div>
+  <p class="hint">Simplified for learning. Adapted from: Li et al. (2019), VisualBERT.</p>
 </section>
 
 <section id="input" class="card hl">
@@ -188,6 +195,8 @@ proc = CLIPProcessor.from_pretrained(<span class="s">"openai/clip-vit-base-patch
 <script src="../../../ml/assets/core.js"></script>
 <script src="../../../ml/assets/gloss.js"></script>
 <script src="../../../dl/assets/nlp.js"></script>
+<script src="../../../dl/assets/flow.js"></script>
+<script src="../../../dl/assets/flows_dl.js"></script>
 <script src="../../assets/vis.js"></script>
 <script>
 (function(){

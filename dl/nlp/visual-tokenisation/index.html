@@ -20,7 +20,7 @@
   <p class="kicker">Deep Learning &middot; NLP &middot; Multimodal (part 1 of 5)</p>
   <h1>Visual tokenisation: <span class="grad">turning a picture into words</span></h1>
   <p class="lede">A transformer reads a list of vectors. For text, the tokeniser cuts the sentence into pieces and looks each one up. To let the same machinery read an image, we need the visual version of that step: cut the picture into pieces, and turn each piece into a vector. There are three main ways to do it, and this page lets you try all three.</p>
-  <div class="toc"><a href="#intro">0 · Start here</a><a href="#patch">1 · Patches</a><a href="#vit">2 · Patch to vector: the vision transformer</a><a href="#regions">3 · Object regions</a><a href="#codes">4 · A codebook of visual words</a><a href="#compare">5 · Side by side</a><a href="#py">6 · Python</a></div>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#flow">▶ Data flow</a><a href="#patch">1 · Patches</a><a href="#vit">2 · Patch to vector: the vision transformer</a><a href="#regions">3 · Object regions</a><a href="#codes">4 · A codebook of visual words</a><a href="#compare">5 · Side by side</a><a href="#py">6 · Python</a></div>
 </section>
 
 <section id="intro" class="card intro">
@@ -39,6 +39,13 @@
       <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
     </div>
   </div>
+</section>
+
+<section id="flow" class="card">
+  <h2>Watch the data flow</h2>
+  <p class="sub">A simplified, animated picture of a Vision Transformer: dots are data moving between blocks. Press Play, or use Back and Step; the caption explains each move.</p>
+  <div data-flow="vit"></div>
+  <p class="hint">Simplified for learning. Adapted from: Dosovitskiy et al. (2021), An Image is Worth 16x16 Words.</p>
 </section>
 
 <section id="patch" class="card hl">
@@ -215,6 +222,8 @@ ids = torch.cdist(tok[<span class="s">0</span>], codebook).argmin(dim=<span clas
 <script src="../../../ml/assets/core.js"></script>
 <script src="../../../ml/assets/gloss.js"></script>
 <script src="../../../dl/assets/nlp.js"></script>
+<script src="../../../dl/assets/flow.js"></script>
+<script src="../../../dl/assets/flows_dl.js"></script>
 <script src="../../assets/vis.js"></script>
 <script>
 (function(){

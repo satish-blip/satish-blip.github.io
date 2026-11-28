@@ -20,7 +20,7 @@
   <p class="kicker">Deep Learning &middot; NLP &middot; Multimodal (part 3 of 5)</p>
   <h1>ViLBERT: <span class="grad">two streams that talk through co-attention</span></h1>
   <p class="lede"><a href="../visualbert/">VisualBERT</a> poured words and image regions into one BERT. ViLBERT, published the same month (Lu et al., 2019), keeps them apart: one transformer for the text, another for the image, and special <b>co-attentional transformer layers</b> (Co-TRM) where the text stream asks the image questions and the image stream asks the text. This page builds that layer from the attention you already know.</p>
-  <div class="toc"><a href="#intro">0 · Start here</a><a href="#arch">1 · Two streams</a><a href="#co">2 · Co-attention, live</a><a href="#cotrm">3 · The Co-TRM layer</a><a href="#pre">4 · Pre-training</a><a href="#vs">5 · ViLBERT, VisualBERT, LXMERT</a><a href="#py">6 · Python</a></div>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#flow">▶ Data flow</a><a href="#arch">1 · Two streams</a><a href="#co">2 · Co-attention, live</a><a href="#cotrm">3 · The Co-TRM layer</a><a href="#pre">4 · Pre-training</a><a href="#vs">5 · ViLBERT, VisualBERT, LXMERT</a><a href="#py">6 · Python</a></div>
 </section>
 
 <section id="intro" class="card intro">
@@ -39,6 +39,13 @@
       <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
     </div>
   </div>
+</section>
+
+<section id="flow" class="card">
+  <h2>Watch the data flow</h2>
+  <p class="sub">A simplified, animated picture of ViLBERT: dots are data moving between blocks. Press Play, or use Back and Step; the caption explains each move.</p>
+  <div data-flow="vilbert"></div>
+  <p class="hint">Simplified for learning. Adapted from: Lu et al. (2019), ViLBERT.</p>
 </section>
 
 <section id="arch" class="card hl">
@@ -207,6 +214,8 @@ print(Aw.shape, Av.shape)            <span class="c"># (1, 12, 37) and (1, 37, 1
 <script src="../../../ml/assets/core.js"></script>
 <script src="../../../ml/assets/gloss.js"></script>
 <script src="../../../dl/assets/nlp.js"></script>
+<script src="../../../dl/assets/flow.js"></script>
+<script src="../../../dl/assets/flows_dl.js"></script>
 <script src="../../assets/vis.js"></script>
 <script>
 (function(){

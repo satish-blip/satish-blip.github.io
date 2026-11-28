@@ -20,7 +20,7 @@
   <p class="kicker">Deep Learning &middot; NLP &middot; Multimodal (part 4 of 5)</p>
   <h1>CLIP: <span class="grad">one space for pictures and words</span></h1>
   <p class="lede">VisualBERT and ViLBERT fuse an image and a caption inside one network to answer questions about them. CLIP (Radford et al., OpenAI, 2021) does something simpler and, it turned out, far more widely useful: it trains an image encoder and a text encoder separately, so that a picture and a sentence describing it land on the same point of a shared space. On this page you train a small CLIP yourself, then use it to classify images it was never trained to classify.</p>
-  <div class="toc"><a href="#intro">0 · Start here</a><a href="#space">1 · Two encoders, one space</a><a href="#train">2 · Contrastive training, live</a><a href="#maths">3 · The loss, step by step</a><a href="#zero">4 · Zero-shot classification</a><a href="#search">5 · Search by text</a><a href="#real">6 · The real CLIP</a><a href="#py">7 · Python</a></div>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#flow">▶ Data flow</a><a href="#space">1 · Two encoders, one space</a><a href="#train">2 · Contrastive training, live</a><a href="#maths">3 · The loss, step by step</a><a href="#zero">4 · Zero-shot classification</a><a href="#search">5 · Search by text</a><a href="#real">6 · The real CLIP</a><a href="#py">7 · Python</a></div>
 </section>
 
 <section id="intro" class="card intro">
@@ -39,6 +39,13 @@
       <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
     </div>
   </div>
+</section>
+
+<section id="flow" class="card">
+  <h2>Watch the data flow</h2>
+  <p class="sub">A simplified, animated picture of CLIP training: dots are data moving between blocks. Press Play, or use Back and Step; the caption explains each move.</p>
+  <div data-flow="clip"></div>
+  <p class="hint">Simplified for learning. Adapted from: Radford et al. (2021), Learning Transferable Visual Models From Natural Language Supervision.</p>
 </section>
 
 <section id="space" class="card hl">
@@ -206,6 +213,8 @@ labels = [<span class="s">"a photo of a dog"</span>, <span class="s">"a photo of
 <script src="../../../ml/assets/core.js"></script>
 <script src="../../../ml/assets/gloss.js"></script>
 <script src="../../../dl/assets/nlp.js"></script>
+<script src="../../../dl/assets/flow.js"></script>
+<script src="../../../dl/assets/flows_dl.js"></script>
 <script>
 (function(){
 const {$} = ML; const P0=()=>ML.palette();

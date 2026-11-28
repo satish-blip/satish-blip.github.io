@@ -20,7 +20,7 @@
   <p class="kicker">Deep Learning &middot; NLP &middot; Multimodal (part 5 of 5)</p>
   <h1>LayoutLMv2: <span class="grad">reading documents with text, layout and image</span></h1>
   <p class="lede">A receipt is not a sentence. "13.55" means nothing until you notice that it sits on the same line as "TOTAL", in bold, at the bottom of the page. The models in parts 1 to 4 paired photos with captions. LayoutLMv2 (Xu et al., 2021) pairs the <i>text</i> of a scanned page with <i>where</i> each word is and <i>what the page looks like</i>, and it became a standard model for document understanding. This page builds its input, probes its attention, walks through how it is pre-trained, and uses it to pull fields out of documents.</p>
-  <div class="toc"><a href="#intro">0 · Start here</a><a href="#page">1 · From a page to tokens</a><a href="#spatial">2 · Spatial-aware attention</a><a href="#pre">3 · Pre-training</a><a href="#extract">4 · Pulling out fields</a><a href="#family">5 · The family</a><a href="#py">6 · Python</a></div>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#flow">▶ Data flow</a><a href="#page">1 · From a page to tokens</a><a href="#spatial">2 · Spatial-aware attention</a><a href="#pre">3 · Pre-training</a><a href="#extract">4 · Pulling out fields</a><a href="#family">5 · The family</a><a href="#py">6 · Python</a></div>
 </section>
 
 <section id="intro" class="card intro">
@@ -39,6 +39,13 @@
       <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
     </div>
   </div>
+</section>
+
+<section id="flow" class="card">
+  <h2>Watch the data flow</h2>
+  <p class="sub">A simplified, animated picture of LayoutLMv2: dots are data moving between blocks. Press Play, or use Back and Step; the caption explains each move.</p>
+  <div data-flow="layoutlmv2"></div>
+  <p class="hint">Simplified for learning. Adapted from: Xu et al. (2021), LayoutLMv2.</p>
 </section>
 
 <section id="page" class="lab">
@@ -249,6 +256,8 @@ enc2 = proc2(page, [<span class="s">"TOTAL"</span>, <span class="s">"13.55"</spa
 <script src="../../../ml/assets/core.js"></script>
 <script src="../../../ml/assets/gloss.js"></script>
 <script src="../../../dl/assets/nlp.js"></script>
+<script src="../../../dl/assets/flow.js"></script>
+<script src="../../../dl/assets/flows_dl.js"></script>
 <script src="../../assets/doc.js"></script>
 <script>
 (function(){

@@ -20,7 +20,7 @@
   <p class="kicker">Deep Learning &middot; NLP</p>
   <h1>Embeddings: <span class="grad">bag of words to BERT</span></h1>
   <p class="lede">After tokenisation every word is just an id. An embedding turns that id into a list of numbers, and the whole history of NLP is a search for better lists: ones where similar meanings get similar numbers. This page walks the path from counting words, through word2vec, to vectors that change with context.</p>
-  <div class="toc"><a href="#intro">0 · Start here</a><a href="#onehot">1 · One-hot</a><a href="#bow">2 · Bag of words and TF-IDF</a><a href="#w2v">3 · word2vec, trained live</a><a href="#context">4 · Context changes meaning</a><a href="#timeline">5 · The timeline</a><a href="#code">6 · Python</a></div>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#flow">▶ Data flow</a><a href="#onehot">1 · One-hot</a><a href="#bow">2 · Bag of words and TF-IDF</a><a href="#w2v">3 · word2vec, trained live</a><a href="#context">4 · Context changes meaning</a><a href="#timeline">5 · The timeline</a><a href="#code">6 · Python</a></div>
 </section>
 
 <section id="intro" class="card intro">
@@ -40,6 +40,13 @@
       <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
     </div>
   </div>
+</section>
+
+<section id="flow" class="card">
+  <h2>Watch the data flow</h2>
+  <p class="sub">A simplified, animated picture of word2vec (skip-gram and CBOW) and GloVe: dots are data moving between blocks. Press Play, or use Back and Step; the caption explains each move.</p>
+  <div data-flow="skipgram,cbow,glove"></div>
+  <p class="hint">Simplified for learning. Adapted from: Mikolov et al. (2013), word2vec; Pennington et al. (2014), GloVe.</p>
 </section>
 
 <section id="onehot" class="card">
@@ -169,6 +176,8 @@ vecs = bert(**tok(<span class="s">"we sat on the river bank"</span>, return_tens
 <script src="../../../ml/assets/core.js"></script>
 <script src="../../../ml/assets/gloss.js"></script>
 <script src="../../../dl/assets/nlp.js"></script>
+<script src="../../../dl/assets/flow.js"></script>
+<script src="../../../dl/assets/flows_dl.js"></script>
 <script>
 (function(){
 const {$, fmt} = ML; const esc=NLP.esc;

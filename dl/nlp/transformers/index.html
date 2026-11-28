@@ -20,7 +20,7 @@
   <p class="kicker">Deep Learning &middot; NLP</p>
   <h1>Transformers: <span class="grad">attention plus everything around it</span></h1>
   <p class="lede">A transformer is a stack of identical blocks. Each block lets the tokens talk to each other (<a href="../self-attention/">self-attention</a>), then lets each token think on its own (an <a class="term" data-t="mlp">MLP</a>), with <a href="../../nn/residual/">residual connections</a> and <a href="../../nn/normalisation/">normalisation</a> keeping a stack of dozens of blocks trainable. Every part of this page uses pieces from the earlier pages.</p>
-  <div class="toc"><a href="#intro">0 · Start here</a><a href="#arch">1 · The architecture</a><a href="#pe">2 · Where am I? Positions</a><a href="#params">3 · Counting parameters</a><a href="#gen">4 · Generating text</a><a href="#family">5 · The family</a><a href="#py">6 · Python</a></div>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#flow">▶ Data flow</a><a href="#arch">1 · The architecture</a><a href="#pe">2 · Where am I? Positions</a><a href="#params">3 · Counting parameters</a><a href="#gen">4 · Generating text</a><a href="#family">5 · The family</a><a href="#py">6 · Python</a></div>
 </section>
 
 <section id="intro" class="card intro">
@@ -40,6 +40,13 @@
       <p class="hint">Dotted-underlined words anywhere on this page are clickable: tap one to see its definition.</p>
     </div>
   </div>
+</section>
+
+<section id="flow" class="card">
+  <h2>Watch the data flow</h2>
+  <p class="sub">A simplified, animated picture of the three transformer families: dots are data moving between blocks. Press Play, or use Back and Step; the caption explains each move.</p>
+  <div data-flow="bert,gpt,t5"></div>
+  <p class="hint">Simplified for learning. Adapted from: Vaswani et al. (2017); Devlin et al. (2019), BERT; Radford et al. (2018), GPT; Raffel et al. (2020), T5.</p>
 </section>
 
 <section id="arch" class="card hl">
@@ -184,6 +191,8 @@ print(tok.decode(out[<span class="s">0</span>]))
 <script src="../../../ml/assets/core.js"></script>
 <script src="../../../ml/assets/gloss.js"></script>
 <script src="../../../dl/assets/nlp.js"></script>
+<script src="../../../dl/assets/flow.js"></script>
+<script src="../../../dl/assets/flows_dl.js"></script>
 <script>
 (function(){
 const {$} = ML; const P0=()=>ML.palette();
