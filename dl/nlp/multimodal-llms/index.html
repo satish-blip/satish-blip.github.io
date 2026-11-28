@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head><meta name="robots" content="noai, noimageai"><meta name="copyright" content="(c) Satish Thuwal. All rights reserved.">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Multimodal LLMs</title>
+<meta name="description" content="How large language models learned to see: Frozen, Flamingo, BLIP, BLIP-2, LLaVA, MiniGPT-4, Video-LLaMA and mPLUG-Owl, each as an animated architecture workflow that shows which parts are frozen, which are trained, and how image features become tokens the language model can read.">
+<link rel="icon" href="../../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="../../../ml/assets/ml.css">
+</head>
+<body>
+<header class="top"><div class="wrap top-in"><a class="home" href="../../../learn/#ml-nlp">&larr; Learn</a><nav class="algnav" id="algnav" aria-label="Topics"></nav></div></header>
+<main class="wrap">
+<section class="hero">
+  <p class="kicker">Deep Learning &middot; NLP &middot; Multimodal (part 6)</p>
+  <h1>Multimodal LLMs: <span class="grad">teaching a language model to see</span></h1>
+  <p class="lede">CLIP (part 4) learned to <i>match</i> pictures and captions. It cannot <i>talk</i> about a picture. A large language model can talk, but it has never seen a pixel. From 2021 to 2023 a run of models joined the two, and almost all of them use the same trick: keep a strong vision encoder and a strong language model, freeze most of both, and train a small <b>bridge</b> that turns image features into something the language model can read as if it were words. This page walks through eight of them. Each diagram is animated: press Play to watch features and tokens move between the blocks.</p>
+  <div class="toc"><a href="#intro">0 · Start here</a><a href="#frozen">1 · Frozen</a><a href="#flamingo">2 · Flamingo</a><a href="#blip">3 · BLIP</a><a href="#blip2">4 · BLIP-2</a><a href="#llava">5 · LLaVA</a><a href="#minigpt4">6 · MiniGPT-4</a><a href="#videollama">7 · Video-LLaMA</a><a href="#mplug">8 · mPLUG-Owl</a><a href="#compare">9 · Side by side</a><a href="#py">10 · Python</a></div>
+</section>
+
+<section id="intro" class="card intro">
+  <p class="kick">Start here</p>
+  <h2>One recipe, three blocks</h2>
+  <div class="grid2 prose">
+    <div>
+      <h3>The three blocks</h3>
+      <p><b>1. A vision encoder.</b> Usually a <a class="term" data-t="vit">Vision Transformer</a> (ViT) taken from CLIP or a similar model. It cuts the image into patches and returns one feature vector per patch, for example 256 vectors of length 1024. It already knows a lot about what is in pictures, so it is usually <b>frozen</b>: its weights are not changed.</p>
+      <p><b>2. A bridge</b> (also called a connector, adapter or projector). The language model expects vectors of its own size and its own "meaning space", for example 4096 numbers per token. The bridge maps patch features into that space. It can be a single linear layer (LLaVA, MiniGPT-4), a small transformer with learned query vectors that pulls a fixed number of tokens out of the image (BLIP-2's Q-Former, Flamingo's Perceiver Resampler, mPLUG-Owl's visual abstractor), or new cross-attention layers inside the language model (Flamingo). The bridge is almost always <b>trained</b>.</p>
+      <p><b>3. A large language model</b> (LLM), such as LLaMA, Vicuna, OPT or Chinchilla. It reads the visual tokens followed by the text prompt and writes the answer one token at a time. It is often frozen too, or tuned lightly at the end.</p>
+    </div>
+    <div>
+      <h3>Why freeze so much?</h3>
+      <p>Training a 7-billion-parameter language model from scratch costs millions of dollars. Freezing it keeps its language skill and its knowledge intact, and the bridge has only a few million parameters, so it can be trained on a few million image–caption pairs in a day or two. The danger of tuning everything on a small image dataset is <b>catastrophic forgetting</b>: the model gets better at captions and worse at everything else.</p>
+      <h3>How to read the diagrams</h3>
+      <p>Blocks marked ❄ are frozen; blocks marked 🔥 are trained. The moving dots are coloured by kind (image features, visual tokens, text tokens); the legend under each diagram says which is which. Use Play, Step and Back, or drag the slider to a step. The diagrams are simplified on purpose: they show what goes where, not every layer.</p>
+    </div>
+  </div>
+</section>
+
+<section id="recipe" class="card">
+  <h2>The recipe, animated</h2>
+  <p class="sub">Every model below is a variation on this picture.</p>
+  <div data-flow="mm-recipe"></div>
+</section>
+
+<section id="frozen" class="card">
+  <h2><span class="num">1</span>Frozen (2021): the language model stays frozen, the image becomes a prompt</h2>
+  <p class="sub">Tsimpoukelli et al., DeepMind. The first to show that a frozen language model can read images if the image is turned into a few "word-like" vectors.</p>
+  <div class="grid2">
+    <div class="prose">
+      <p><b>Idea.</b> Take a pre-trained 7-billion-parameter language model and do not touch it. Train only a vision encoder (an NF-ResNet-50) whose output is reshaped into <b>two vectors of the language model's embedding size</b>. These two vectors are placed in front of the caption, like a prefix of two extra "words". The training task is captioning: predict the caption tokens.</p>
+      <p><b>The surprising part.</b> The gradient of the captioning loss flows <i>back through the frozen language model</i> into the vision encoder. So the vision encoder learns to speak the language model's internal language, without the language model changing at all.</p>
+      <p><b>Why it mattered.</b> Because the language model is untouched, it keeps its in-context learning. Show it two (image, word) examples, and it can name a new object in a third image: few-shot learning across modalities, from a model trained only on captions.</p>
+      <p><b>Trained:</b> vision encoder + prefix projection. <b>Frozen:</b> the whole LM.</p>
+    </div>
+    <div><div data-flow="mm-frozen"></div></div>
+  </div>
+</section>
+
+<section id="flamingo" class="card">
+  <h2><span class="num">2</span>Flamingo (2022): new cross-attention layers inside a frozen LLM</h2>
+  <p class="sub">Alayrac et al., DeepMind. Handles many images interleaved with text, and learns new tasks from a few examples in the prompt.</p>
+  <div class="grid2">
+    <div class="prose">
+      <p><b>Perceiver Resampler.</b> The frozen vision encoder (NFNet) returns a different number of features for each image or video. The resampler has <b>64 learned query vectors</b>; they cross-attend to all the features and come out as exactly 64 visual tokens per image. Fixed size in, whatever the input size.</p>
+      <p><b>Gated cross-attention.</b> Between the frozen blocks of the Chinchilla language model, Flamingo inserts new <b>GATED XATTN-DENSE</b> layers. In them, the text tokens are the queries and the 64 visual tokens are the keys and values: the text "looks at" the image. The result is multiplied by <b>tanh(α)</b>, with α starting at 0. At the start of training tanh(0) = 0, so the new layers add nothing and the LM behaves exactly as before; the gate opens slowly as training finds useful visual information. This keeps training stable.</p>
+      <p><b>Interleaving.</b> Each text token attends only to the image that came just before it, so a prompt like "&lt;img&gt; a cat. &lt;img&gt; a dog. &lt;img&gt;" works as a few-shot prompt.</p>
+      <p><b>Trained:</b> resampler + gated cross-attention layers. <b>Frozen:</b> vision encoder and LM.</p>
+    </div>
+    <div><div data-flow="mm-flamingo"></div></div>
+  </div>
+</section>
+
+<section id="blip" class="card">
+  <h2><span class="num">3</span>BLIP (2022): one model, three jobs, and cleaner data</h2>
+  <p class="sub">Li et al., Salesforce. Bootstrapping Language-Image Pre-training. Everything is trained here; the new ideas are the shared model and the data cleaning.</p>
+  <div class="grid2">
+    <div class="prose">
+      <p><b>Three jobs, three losses.</b> A ViT encodes the image. A BERT-like text model is used in three modes that share most weights:</p>
+      <p>• <b>ITC</b>, image–text contrastive: a plain text encoder; pull matching image and text vectors together, push others apart (like CLIP).<br>• <b>ITM</b>, image–text matching: the text encoder with cross-attention to the image patches, answering "does this caption match this image?" (yes/no).<br>• <b>LM</b>, language modelling: a text decoder with cross-attention and causal masking that writes the caption.</p>
+      <p><b>CapFilt.</b> Web captions are noisy ("IMG_2041.jpg", "best price!"). BLIP fine-tunes a <b>Captioner</b> to write a new caption for each web image and a <b>Filter</b> (the ITM head) to drop pairs that do not match. The cleaned dataset is used to pre-train again, and the model gets better: the model cleans its own data.</p>
+      <p><b>Trained:</b> everything (no frozen LLM; BLIP is a few hundred million parameters).</p>
+    </div>
+    <div><div data-flow="mm-blip"></div></div>
+  </div>
+</section>
+
+<section id="blip2" class="card">
+  <h2><span class="num">4</span>BLIP-2 (2023): the Q-Former bridges two frozen models</h2>
+  <p class="sub">Li et al., Salesforce. Uses about 54× fewer trainable parameters than Flamingo-80B and beats it on zero-shot visual question answering.</p>
+  <div class="grid2">
+    <div class="prose">
+      <p><b>Q-Former.</b> A small transformer (188 M parameters) with <b>32 learned query vectors</b>. The queries self-attend to each other, cross-attend to the frozen ViT's patch features, and come out as 32 vectors that hold the visual information most useful for language. A linear layer maps them to the LLM's embedding size, and they are put in front of the prompt as a <b>soft visual prompt</b>.</p>
+      <p><b>Stage 1, representation learning</b> (no LLM yet): the Q-Former is trained with BLIP's three jobs (ITC, ITM, and image-grounded text generation) against the frozen ViT. This forces the 32 queries to pick out what text can describe.</p>
+      <p><b>Stage 2, generative learning:</b> connect the Q-Former output to a frozen LLM (OPT or Flan-T5) through the linear layer, and train on captioning, so the LLM learns nothing new; only the bridge learns to speak to it.</p>
+      <p><b>Trained:</b> Q-Former + linear layer. <b>Frozen:</b> ViT and LLM.</p>
+    </div>
+    <div><div data-flow="mm-blip2"></div></div>
+  </div>
+</section>
+
+<section id="llava" class="card">
+  <h2><span class="num">5</span>LLaVA (2023): a linear layer and good instruction data</h2>
+  <p class="sub">Liu et al. Large Language and Vision Assistant: shows that a very simple bridge works if the training data teaches the model to follow instructions.</p>
+  <div class="grid2">
+    <div class="prose">
+      <p><b>Architecture.</b> A frozen CLIP ViT-L/14 gives 256 patch features. One trainable matrix <b>W</b> maps each to the LLM's word-embedding size: H<sub>v</sub> = W·Z<sub>v</sub>. All 256 visual tokens go in front of the instruction, and the Vicuna LLM writes the answer. (LLaVA-1.5 swaps W for a two-layer MLP.)</p>
+      <p><b>Data.</b> The new ingredient. Text-only GPT-4 was given the captions and object boxes of COCO images and asked to write conversations, detailed descriptions and reasoning questions about them: 158 K instruction-following examples.</p>
+      <p><b>Stage 1, feature alignment:</b> 595 K image–caption pairs; train only W (ViT and LLM frozen). <b>Stage 2, end-to-end fine-tuning:</b> the 158 K instruction data; train W <i>and</i> the LLM, ViT still frozen.</p>
+      <p><b>Trained:</b> W (stage 1), W + LLM (stage 2). <b>Frozen:</b> ViT.</p>
+    </div>
+    <div><div data-flow="mm-llava"></div></div>
+  </div>
+</section>
+
+<section id="minigpt4" class="card">
+  <h2><span class="num">6</span>MiniGPT-4 (2023): BLIP-2's eyes, Vicuna's voice, one linear layer</h2>
+  <p class="sub">Zhu et al., KAUST. Shows that aligning a frozen visual encoder to a strong chat LLM gives many GPT-4-like abilities, such as writing a story or a recipe from a photo.</p>
+  <div class="grid2">
+    <div class="prose">
+      <p><b>Architecture.</b> The frozen ViT and the frozen Q-Former are taken straight from BLIP-2, so the 32 query outputs already carry language-friendly visual information. A <b>single linear projection</b> maps them into Vicuna's embedding space. Vicuna is frozen. That linear layer is the <i>only</i> thing trained.</p>
+      <p><b>Stage 1:</b> about 5 M image–caption pairs. The model learns to describe images, but its answers are often repetitive or broken.</p>
+      <p><b>Stage 2:</b> just 3,500 high-quality, detailed image descriptions in a chat template ("###Human: &lt;Img&gt;…&lt;/Img&gt; Describe this image in detail. ###Assistant:"). A few minutes of training fixes the fluency: quality of data beats quantity.</p>
+      <p><b>Trained:</b> one linear layer. <b>Frozen:</b> ViT, Q-Former, Vicuna.</p>
+    </div>
+    <div><div data-flow="mm-minigpt4"></div></div>
+  </div>
+</section>
+
+<section id="videollama" class="card">
+  <h2><span class="num">7</span>Video-LLaMA (2023): frames over time, plus sound</h2>
+  <p class="sub">Zhang et al., Alibaba DAMO. Extends the BLIP-2 recipe to video and audio with two parallel branches.</p>
+  <div class="grid2">
+    <div class="prose">
+      <p><b>Vision branch.</b> Each sampled frame goes through BLIP-2's frozen ViT + Q-Former, giving 32 vectors per frame. A learned <b>frame position embedding</b> is added so the model knows the order of the frames. A <b>Video Q-Former</b> (trained) then mixes information across frames and outputs a fixed set of video tokens, and a linear layer maps them into the LLM.</p>
+      <p><b>Audio branch.</b> The sound track is cut into short clips and encoded by the frozen <b>ImageBind</b> audio encoder, whose features already live in a space shared with images and text. An <b>Audio Q-Former</b> (trained) with position embeddings summarises them, and a linear layer maps them into the LLM.</p>
+      <p><b>Language.</b> Video tokens, audio tokens and the question are concatenated and the frozen LLaMA/Vicuna answers. Training: video–caption data, then instruction data; the audio branch is trained with image/video–text data, relying on ImageBind's shared space.</p>
+      <p><b>Trained:</b> both Q-Formers, position embeddings, linear layers. <b>Frozen:</b> encoders and LLM.</p>
+    </div>
+    <div><div data-flow="mm-videollama"></div></div>
+  </div>
+</section>
+
+<section id="mplug" class="card">
+  <h2><span class="num">8</span>mPLUG-Owl (2023): train the eyes first, then tune the LLM with LoRA</h2>
+  <p class="sub">Ye et al., Alibaba DAMO. Builds on mPLUG (2022), which used cross-modal skip-connections so that the long visual sequence skips most text layers to save compute.</p>
+  <div class="grid2">
+    <div class="prose">
+      <p><b>Visual abstractor.</b> Like Flamingo's resampler and BLIP-2's Q-Former: 64 learnable queries cross-attend to the ViT patch features and return 64 visual tokens. Fewer tokens means a cheaper LLM pass.</p>
+      <p><b>Stage 1, multimodal pre-training:</b> unlike BLIP-2 and MiniGPT-4, the <b>vision encoder is trained too</b>, together with the abstractor, on image–caption pairs, while LLaMA stays frozen. The argument: a frozen CLIP-style encoder was trained on matching, not on the fine detail that language generation needs.</p>
+      <p><b>Stage 2, joint instruction tuning:</b> freeze the vision side and tune the LLM through <a class="term" data-t="lora">LoRA</a> adapters (small low-rank weight updates), on a mix of text-only and multimodal instruction data, so it keeps its pure-text skills.</p>
+      <p><b>Trained:</b> ViT + abstractor (stage 1), LoRA on LLM (stage 2). <b>Frozen:</b> LLM in stage 1, vision in stage 2.</p>
+    </div>
+    <div><div data-flow="mm-mplug"></div></div>
+  </div>
+</section>
+
+<section id="compare" class="card">
+  <h2><span class="num">9</span>Side by side</h2>
+  <p class="sub">The bridge is where the models differ most. Numbers are from the papers (main reported configuration).</p>
+  <div class="tblwrap"><table class="tbl txt">
+    <tr><th>Model (year)</th><th>Vision encoder</th><th>Bridge</th><th>Visual tokens per image</th><th>LLM</th><th>What is trained</th></tr>
+    <tr><td>Frozen (2021)</td><td>NF-ResNet-50</td><td>linear → prefix</td><td>2</td><td>7 B decoder</td><td>vision encoder</td></tr>
+    <tr><td>Flamingo (2022)</td><td>NFNet-F6 ❄</td><td>Perceiver Resampler + gated cross-attention</td><td>64 (via cross-attention)</td><td>Chinchilla 70 B ❄</td><td>resampler, xattn layers</td></tr>
+    <tr><td>BLIP (2022)</td><td>ViT-B/L</td><td>cross-attention in text model</td><td>all patches</td><td>BERT-size encoder/decoder</td><td>everything</td></tr>
+    <tr><td>BLIP-2 (2023)</td><td>EVA ViT-g ❄</td><td>Q-Former + linear</td><td>32</td><td>OPT / Flan-T5 ❄</td><td>Q-Former, linear</td></tr>
+    <tr><td>LLaVA (2023)</td><td>CLIP ViT-L/14 ❄</td><td>linear (MLP in 1.5)</td><td>256 (576 in 1.5)</td><td>Vicuna 13 B</td><td>linear, then LLM</td></tr>
+    <tr><td>MiniGPT-4 (2023)</td><td>BLIP-2 ViT + Q-Former ❄</td><td>linear</td><td>32</td><td>Vicuna ❄</td><td>linear only</td></tr>
+    <tr><td>Video-LLaMA (2023)</td><td>BLIP-2 ViT ❄, ImageBind ❄</td><td>video and audio Q-Formers + linear</td><td>32 per stream</td><td>LLaMA / Vicuna ❄</td><td>Q-Formers, linear</td></tr>
+    <tr><td>mPLUG-Owl (2023)</td><td>ViT-L/14</td><td>visual abstractor</td><td>64</td><td>LLaMA-7B</td><td>ViT + abstractor, then LoRA</td></tr>
+  </table></div>
+  <div class="grid2 prose" style="margin-top:12px">
+    <div><h3>Linear projection or learned queries?</h3><p>A linear layer keeps every patch (256 or more tokens), so the LLM sees fine detail but each image costs many tokens of context. Learned queries (Q-Former, resampler, abstractor) squeeze the image into 32–64 tokens: cheaper, and the number does not grow with resolution, but small details can be lost. Later models (LLaVA-1.5, Qwen-VL, InternVL) mostly went back to MLP projectors with more patches.</p></div>
+    <div><h3>Prefix tokens or cross-attention?</h3><p>Frozen, BLIP-2, LLaVA, MiniGPT-4, Video-LLaMA and mPLUG-Owl put visual tokens <i>in the input sequence</i> (a prefix), so the LLM is unchanged. Flamingo adds <i>new layers</i> that cross-attend to the image, so the sequence stays short and many images fit, at the cost of changing the LLM's architecture.</p></div>
+  </div>
+</section>
+
+<section id="py" class="card">
+  <h2><span class="num">10</span>Python: asking BLIP-2 and LLaVA about a picture</h2>
+  <p class="sub">With the Hugging Face <code>transformers</code> library. Each model downloads several gigabytes the first time; a GPU is needed for reasonable speed.</p>
+<pre class="code"><span class="k">from</span> transformers <span class="k">import</span> Blip2Processor, Blip2ForConditionalGeneration, AutoProcessor, LlavaForConditionalGeneration
+<span class="k">from</span> PIL <span class="k">import</span> Image
+img = Image.open(<span class="s">"cat.jpg"</span>)
+
+<span class="c"># BLIP-2: frozen ViT + Q-Former (32 queries) + frozen OPT-2.7B</span>
+proc = Blip2Processor.from_pretrained(<span class="s">"Salesforce/blip2-opt-2.7b"</span>)
+model = Blip2ForConditionalGeneration.from_pretrained(<span class="s">"Salesforce/blip2-opt-2.7b"</span>)
+x = proc(images=img, text=<span class="s">"Question: what is the cat doing? Answer:"</span>, return_tensors=<span class="s">"pt"</span>)
+print(proc.decode(model.generate(**x, max_new_tokens=20)[0], skip_special_tokens=<span class="k">True</span>))
+
+<span class="c"># LLaVA-1.5: CLIP ViT-L/14 + 2-layer MLP projector + Vicuna-7B</span>
+proc = AutoProcessor.from_pretrained(<span class="s">"llava-hf/llava-1.5-7b-hf"</span>)
+model = LlavaForConditionalGeneration.from_pretrained(<span class="s">"llava-hf/llava-1.5-7b-hf"</span>)
+prompt = <span class="s">"USER: &lt;image&gt;\nDescribe this picture in one sentence. ASSISTANT:"</span>
+x = proc(images=img, text=prompt, return_tensors=<span class="s">"pt"</span>)
+print(proc.decode(model.generate(**x, max_new_tokens=40)[0], skip_special_tokens=<span class="k">True</span>))</pre>
+  <p class="hint">Adapted from: the Hugging Face model cards for <code>Salesforce/blip2-opt-2.7b</code> and <code>llava-hf/llava-1.5-7b-hf</code>.</p>
+</section>
+
+<section id="credits" class="card">
+  <h2>Sources</h2>
+  <p class="sub">The diagrams are simplified redrawings of the architecture figures in these papers.</p>
+  <div class="prose"><p>Tsimpoukelli et al. (2021), <i>Multimodal Few-Shot Learning with Frozen Language Models</i>. Alayrac et al. (2022), <i>Flamingo: a Visual Language Model for Few-Shot Learning</i>. Li et al. (2022), <i>BLIP: Bootstrapping Language-Image Pre-training</i>. Li et al. (2023), <i>BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models</i>. Liu et al. (2023), <i>Visual Instruction Tuning</i> (LLaVA). Zhu et al. (2023), <i>MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models</i>. Zhang et al. (2023), <i>Video-LLaMA: An Instruction-tuned Audio-Visual Language Model for Video Understanding</i>. Li et al. (2022), <i>mPLUG: Effective and Efficient Vision-Language Learning by Cross-modal Skip-connections</i>. Ye et al. (2023), <i>mPLUG-Owl: Modularization Empowers Large Language Models with Multimodality</i>.</p></div>
+</section>
+</main>
+<script src="../../../ml/assets/core.js"></script>
+<script src="../../../ml/assets/gloss.js"></script>
+<script src="../../../dl/assets/nlp.js"></script>
+<script src="../../assets/flow.js"></script>
+<script src="../../assets/flows_mm.js"></script>
+<script>NLP.nav('nlp','multimodal-llms'); ML.renderMath(document.body);</script>
+</body>
+</html>
