@@ -275,7 +275,7 @@ print(model.wv.most_similar(positive=[<span class="s">"1"</span>, <span class="s
       <p class="hint" id="rgBuildInfo">Not built yet. The first dense model or generator you pick downloads once from Hugging Face and is cached by your browser.</p>
     </div>
   </div>
-  <div class="pg2">
+  <div class="pg2 rg-stack">
     <div class="tool">
       <div class="tool-h"><div class="grow"><h3>4 · Generator</h3><p>The model that reads the retrieved chunks and writes the answer.</p></div></div>
       <div class="ctl"><label for="rgGen"><span>Answer model</span></label><select id="rgGen"></select></div>
@@ -294,6 +294,18 @@ print(model.wv.most_similar(positive=[<span class="s">"1"</span>, <span class="s
       <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap"><div class="ctl" style="min-width:150px"><label for="rgEvalN"><span>Questions</span></label><select id="rgEvalN"><option>25</option><option selected>100</option><option>300</option><option>1000</option></select></div><label class="small" style="margin-bottom:12px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="rgEvalGen"> also score the generator (slower)</label><button type="button" class="btn primary" id="rgEvalBtn" style="margin-bottom:8px">Run the test set</button></div>
       <div id="rgEval"><p class="hint">Change one setting at a time (chunking, embedding model, index, k) and run again: every run is kept in a table so you can compare.</p></div>
     </div>
+  </div>
+  <div class="tool" id="rgCmpTool">
+    <div class="tool-h"><div class="grow"><h3>7 · Compare strategies</h3><p>Line up several RAG set-ups and score them on the same test questions. What happens if you chunk differently, pass the top 2 chunks instead of the top 1, or swap the embedding model or the index?</p></div></div>
+    <div class="rg-cmpctl">
+      <div class="ctl"><label for="rgVary"><span>Vary one setting</span></label><select id="rgVary"><option value="k">Top-k: 1, 2, 3, 5, 10 chunks</option><option value="chunk">Chunking: paragraphs, sentences, word windows</option><option value="emb">Embedding: BM25, TF-IDF, word2vec</option><option value="idx">Index: Flat, IVF, HNSW, PQ</option></select></div>
+      <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center"><button type="button" class="btn sm primary" id="rgVaryAdd">Add these variants</button><button type="button" class="btn sm" id="rgCmpAdd">Add my current settings</button><button type="button" class="btn sm" id="rgCmpClear">Clear</button></div>
+    </div>
+    <label class="small rg-chk"><input type="checkbox" id="rgCmpDense"> include the downloadable embedding models (MiniLM, BGE, GTE: 23–34 MB each)</label>
+    <p class="hint">Variants start from your current settings in steps 2 to 4 and change one thing. To compare any mix, change the settings above and press “Add my current settings” each time.</p>
+    <div id="rgCmpList" class="rg-cmp-list"></div>
+    <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:6px"><div class="ctl" style="min-width:150px"><label for="rgCmpN"><span>Questions</span></label><select id="rgCmpN"><option>50</option><option selected>100</option><option>200</option><option>500</option></select></div><label class="small rg-chk" style="margin-bottom:12px"><input type="checkbox" id="rgCmpGen"> also score the generator (slower)</label><button type="button" class="btn primary" id="rgCmpRun" style="margin-bottom:8px">Compare strategies</button></div>
+    <div id="rgCmpOut"></div>
   </div>
   <div class="tool">
     <div class="tool-h"><div class="grow"><h3>The same pipeline in Python</h3><p>Updates with your settings: Hugging Face datasets, sentence-transformers, faiss-cpu and transformers.</p></div></div>

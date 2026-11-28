@@ -1647,7 +1647,7 @@ addEventListener('resize', drawWires);
 document.getElementById('expandAll').onclick = ()=>['A','B','C','D'].forEach(k=>toggleCat(k,false));
 document.getElementById('collapseAll').onclick = ()=>['A','B','C','D'].forEach(k=>toggleCat(k,true));
 document.getElementById('animBtn').onclick = e=>{ const off = document.body.classList.toggle('noanim'); e.currentTarget.classList.toggle('on',!off); e.currentTarget.textContent = off?'⏸ Animation off':'▶ Animation on'; };
-document.getElementById('themeBtn').onclick = ()=>{
+document.getElementById('themeBtn').onclick = ()=>{ if(window.SITECTL) return SITECTL.toggle();
   const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme==='dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   r.dataset.theme = dark ? 'light' : 'dark';
 };
